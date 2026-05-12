@@ -6,5 +6,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 环境变量（编剧室）
 
-本地开发：在 `web/` 目录下使用 `.env.local`（Next.js 默认加载）。  
+本地开发：在仓库根目录下使用 `.env.local`（Next.js 默认加载）。  
 英语 Locale 简报等能力使用你在界面「设置」里填写的大模型 API Key，不依赖单独的搜索类环境变量。

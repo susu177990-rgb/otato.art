@@ -40,7 +40,7 @@ python-multipart>=0.0.9,<1
 
 ## 4. Next 环境变量
 
-`web/.env.local`：
+`.env.local`：
 
 ```
 WATTPAD_API_URL=http://127.0.0.1:8765
@@ -49,10 +49,10 @@ WATTPAD_API_URL=http://127.0.0.1:8765
 
 ## 5. Next Route Handlers
 
-- `web/app/api/wattpad/search/route.ts`：`POST` body JSON → 转发 `POST {WATTPAD_API_URL}/v1/search`
-- `web/app/api/wattpad/export-batch/route.ts`：`POST` multipart（与 Python 一致）→ 转发并流式返回 zip
+- `app/api/wattpad/search/route.ts`：`POST` body JSON → 转发 `POST {WATTPAD_API_URL}/v1/search`
+- `app/api/wattpad/export-batch/route.ts`：`POST` multipart（与 Python 一致）→ 转发并流式返回 zip
 
-## 6. UI `web/app/wattpad/page.tsx`
+## 6. UI `app/wattpad/page.tsx`
 
 复刻原 Tk 布局（单页）：
 
@@ -63,7 +63,7 @@ WATTPAD_API_URL=http://127.0.0.1:8765
 - 导出弹窗：数量、列表、中文勾选、若有付费行则显示 Cookie 文件上传
 - 底栏：状态条 + 日志区（等宽字体）+ 清空；「打开输出」在 Web 上改为 zip 下载完成后提示「已下载」
 
-首页 `web/app/page.tsx`：「扒网文」卡片 `onClick` → `router.push('/wattpad')`，去掉 disabled。
+首页 `app/page.tsx`：「扒网文」卡片 `onClick` → `router.push('/wattpad')`，去掉 disabled。
 
 ## 7. 启动命令
 
@@ -73,7 +73,7 @@ WATTPAD_API_URL=http://127.0.0.1:8765
 cd services/wattpad-api && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && uvicorn main:app --host 127.0.0.1 --port 8765
 ```
 
-终端 2：`cd web && npm run dev`
+终端 2：在仓库根目录执行 `npm run dev`
 
 ---
 

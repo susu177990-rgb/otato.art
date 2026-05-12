@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "项目不存在" }, { status: 404 });
   }
 
-  let project: Project =
+  const project: Project =
     body.adaptationMessages && body.adaptationMessages.length > 0
       ? { ...existing, adaptationMessages: body.adaptationMessages }
       : existing;

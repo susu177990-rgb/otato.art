@@ -100,13 +100,16 @@ function StudioInner() {
   const seriesBibleSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const englishLocaleBriefSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const artifactsRef = useRef(artifacts);
-  artifactsRef.current = artifacts;
   const pipelineAbortRef = useRef(false);
   const pipelineStageOverrideRef = useRef(0);
 
   const [fullAutoEnabled, setFullAutoEnabled] = useState(false);
   const [fullAutoStage, setFullAutoStage] = useState(0);
   const fullAutoAbortRef = useRef(false);
+
+  useEffect(() => {
+    artifactsRef.current = artifacts;
+  }, [artifacts]);
 
   const studioAutoKickoffMessage = useMemo(() => {
     if (!initialLoadComplete) return null;

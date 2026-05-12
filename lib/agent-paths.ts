@@ -4,12 +4,12 @@ import path from "path";
 export function resolveAgentRoot(): string {
   const env = process.env.SCRIPT_AGENT_ROOT?.trim();
   if (env) return path.resolve(env);
-  return path.resolve(process.cwd(), "..");
+  return process.cwd();
 }
 
 /** 项目 JSON 目录。可通过 SCRIPT_AGENT_DATA_DIR 指向持久化卷。 */
 export function resolveDataProjectsDir(): string {
   const env = process.env.SCRIPT_AGENT_DATA_DIR?.trim();
   if (env) return path.resolve(env);
-  return path.resolve(process.cwd(), "..", "data", "projects");
+  return path.join(process.cwd(), "data", "projects");
 }

@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 /**
  * Next standalone 不会自动带上通过 fs 读取的仓库资源；构建后复制到 .next/standalone/，
- * 与 resolveAgentRoot()（cwd 为 standalone/web 时指向上一级）一致。
+ * 与 resolveAgentRoot()（根目录运行时指向仓库根）一致。
  */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const webDir = path.join(__dirname, "..");
-const repoRoot = path.join(webDir, "..");
-const standaloneRoot = path.join(webDir, ".next", "standalone");
+const repoRoot = path.join(__dirname, "..");
+const standaloneRoot = path.join(repoRoot, ".next", "standalone");
 
 const DIRS = ["agent", "knowledge", "skills"];
 

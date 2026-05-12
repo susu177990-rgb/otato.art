@@ -6,6 +6,21 @@
 out/
 **/node_modules/
 **/.next/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+/coverage
+/build
+*.pem
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vercel
+*.tsbuildinfo
 
 # env
 .env

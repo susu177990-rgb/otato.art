@@ -53,7 +53,6 @@ export interface BibleAuditIssue {
 export function auditBibleVsCast(seriesBible: string, artifacts: Artifact[]): BibleAuditIssue[] {
   const candidates = extractNameCandidatesFromBible(seriesBible);
   const labels = characterLabelsFromArtifacts(artifacts);
-  const lower = labels.map((l) => l.toLowerCase());
   const issues: BibleAuditIssue[] = [];
   for (const name of candidates) {
     const hit = labels.some(
