@@ -533,19 +533,80 @@
   align-items: center;
   gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px;
+  padding: 10px 12px;
 }
 
 .composerSelect {
+  box-sizing: border-box;
+  flex: 0 0 auto;
   height: 34px;
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.035);
-  padding: 0 12px;
+  border-radius: 15px;
+  background-color: rgba(255, 255, 255, 0.035);
+  padding: 0 24px 0 10px;
   color: #e4e4e7;
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  /* 自定义箭头：避免系统三角贴边；位置距右缘留白 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 9px 9px;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.composerSelect:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.composerSelect:focus-visible {
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* 比例 / 清晰度：padding 与箭头留白见上；实际宽度由 page 内 measuredWidthForNativeSelect 按当前选中项收紧（规避「按最宽 option 撑满」） */
+.composerSelectRatio {
+  width: auto;
+  min-width: 2.25rem;
+  max-width: 9rem;
+  padding: 0 20px 0 9px;
+  background-position: right 7px center;
+  field-sizing: content;
+}
+
+@supports not (field-sizing: content) {
+  .composerSelectRatio {
+    width: 5.125rem;
+    min-width: 5.125rem;
+    max-width: none;
+  }
+}
+
+/* 清晰度：1K / 2K / 4K，保持紧凑 */
+.composerSelectSize {
+  width: auto;
+  min-width: 2.25rem;
+  max-width: 5rem;
+  padding: 0 20px 0 9px;
+  background-position: right 7px center;
+  field-sizing: content;
+}
+
+@supports not (field-sizing: content) {
+  .composerSelectSize {
+    width: 3.75rem;
+    min-width: 3.75rem;
+    max-width: none;
+  }
 }
 
 .warning {
@@ -555,14 +616,16 @@
 
 .generate {
   margin-left: auto;
+  box-sizing: border-box;
   height: 34px;
-  min-width: 74px;
+  min-width: 76px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  border-radius: 15px;
   background: #fafafa;
   color: #09090b;
   font-weight: 700;
   font-size: 12px;
+  line-height: 1.2;
   box-shadow: 0 12px 38px rgba(255, 255, 255, 0.14);
   cursor: pointer;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   buildImagePrompt,
   IMAGE_MODEL_ORDER,
@@ -28,6 +28,37 @@ function normalizeRefSlots(images: Array<string | null>): Array<string | null> {
   return Array.from({ length: REF_IMAGE_SLOT_COUNT }, (_, index) => images[index] ?? null);
 }
 
+/** 原生 select 的固有宽度往往按「最宽的 option」计算，短文案也会显得很空；按当前选中项测宽收紧 pill。 */
+function measuredWidthForNativeSelect(select: HTMLSelectElement): number {
+  const opt = select.options[select.selectedIndex];
+  const text = opt?.text ?? "";
+  const cs = getComputedStyle(select);
+  const span = document.createElement("span");
+  span.setAttribute("aria-hidden", "true");
+  span.style.position = "absolute";
+  span.style.left = "-9999px";
+  span.style.top = "0";
+  span.style.visibility = "hidden";
+  span.style.whiteSpace = "nowrap";
+  span.style.font = cs.font;
+  span.style.letterSpacing = cs.letterSpacing;
+  span.textContent = text;
+  document.body.appendChild(span);
+  const textWidth = span.getBoundingClientRect().width;
+  document.body.removeChild(span);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padR = parseFloat(cs.paddingRight) || 0;
+  const borderL = parseFloat(cs.borderLeftWidth) || 0;
+  const borderR = parseFloat(cs.borderRightWidth) || 0;
+  const minWidthPx = parseFloat(cs.minWidth) || 0;
+  const maxWidthPx = parseFloat(cs.maxWidth);
+  let widthPx = Math.max(minWidthPx, Math.ceil(textWidth + padL + padR + borderL + borderR));
+  if (Number.isFinite(maxWidthPx) && maxWidthPx > 0) {
+    widthPx = Math.min(widthPx, Math.ceil(maxWidthPx));
+  }
+  return widthPx;
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -50,6 +81,21 @@ export default function ImagePage() {
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement>(null);
+  const ratioSelectRef = useRef<HTMLSelectElement>(null);
+  const sizeSelectRef = useRef<HTMLSelectElement>(null);
+
+  useLayoutEffect(() => {
+    function applyComposerSelectWidths() {
+      const ratioEl = ratioSelectRef.current;
+      const sizeEl = sizeSelectRef.current;
+      if (ratioEl) ratioEl.style.width = `${measuredWidthForNativeSelect(ratioEl)}px`;
+      if (sizeEl) sizeEl.style.width = `${measuredWidthForNativeSelect(sizeEl)}px`;
+    }
+    applyComposerSelectWidths();
+    window.addEventListener("resize", applyComposerSelectWidths);
+    void document.fonts?.ready.then(applyComposerSelectWidths);
+    return () => window.removeEventListener("resize", applyComposerSelectWidths);
+  }, [aspectRatio, imageSize]);
 
   useEffect(() => {
     setSettings(loadImageSettings());
@@ -368,7 +414,7 @@ export default function ImagePage() {
               className={styles.promptInput}
             />
             <div className={styles.toolbar}>
-              <div className={shellStyles.segmented}>
+              <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
                 {IMAGE_MODEL_ORDER.map((id) => {
                   const model = settings.models[id];
                   const active = selectedModelId === id;
@@ -385,7 +431,13 @@ export default function ImagePage() {
                 })}
               </div>
 
-              <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as ImageAspectRatio)} className={styles.composerSelect}>
+              <select
+                ref={ratioSelectRef}
+                value={aspectRatio}
+                onChange={(e) => setAspectRatio(e.target.value as ImageAspectRatio)}
+                className={[styles.composerSelect, styles.composerSelectRatio].join(" ")}
+                aria-label="比例"
+              >
                 {ASPECT_RATIOS.map((ratio) => (
                   <option key={ratio} value={ratio}>
                     {ratio === "auto" ? "自适应" : ratio}
@@ -393,7 +445,13 @@ export default function ImagePage() {
                 ))}
               </select>
 
-              <select value={imageSize} onChange={(e) => setImageSize(e.target.value as ImageSizeTier)} className={styles.composerSelect}>
+              <select
+                ref={sizeSelectRef}
+                value={imageSize}
+                onChange={(e) => setImageSize(e.target.value as ImageSizeTier)}
+                className={[styles.composerSelect, styles.composerSelectSize].join(" ")}
+                aria-label="清晰度"
+              >
                 {IMAGE_SIZES.map((size) => (
                   <option key={size} value={size}>
                     {size}

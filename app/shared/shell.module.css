@@ -223,6 +223,26 @@
   color: #09090b;
 }
 
+/* 作图页 composer：与旁侧 select /「生成」按钮统一外框高度（须与 .segmented 同时置于同一元素） */
+.segmented.segmentedComposer {
+  box-sizing: border-box;
+  height: 34px;
+  /* 略大于内层按钮高度，让选中态白块上下不贴外框，呈「槽内 pill」 */
+  padding: 3px;
+  align-items: center;
+  border-radius: 15px;
+}
+
+.segmented.segmentedComposer .segmentedItem {
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
 /* ---------- Card / Section ---------- */
 
 .card {
