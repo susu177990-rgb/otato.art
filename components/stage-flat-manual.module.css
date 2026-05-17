@@ -1,0 +1,53 @@
+/* StageFlatManual / EpisodeTreeEditor 共用的列表 + 添加按钮风格。
+ * 槽位编辑器自身用 ArtifactSlotEditor + shell tokens；本文件只控外壳。 */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.charButtonRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (min-width: 640px) {
+  .charButtonRow {
+    flex-direction: row;
+  }
+}
+
+.addButton {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.addButton:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.subList {
+  margin-top: 6px;
+  margin-left: 16px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

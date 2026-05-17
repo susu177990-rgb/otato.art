@@ -57,6 +57,9 @@ export function listProjects(): ProjectSummary[] {
         currentStage: p.currentStage,
         onboardingStatus: p.onboardingStatus,
         originMode: p.originMode,
+        maxApprovedStage: p.maxApprovedStage ?? 0,
+        episodeCount: p.meta?.episodeCount ?? "",
+        seriesBibleFilled: Boolean((p.seriesBible ?? "").trim()),
       });
     } catch {
       // skip corrupt files

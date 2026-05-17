@@ -13,6 +13,9 @@ import { stripThinkingForDisplay } from "@/lib/strip-thinking";
 import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import MessageBubble from "./MessageBubble";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
+import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
+import shellStyles from "@/app/shared/shell.module.css";
+import styles from "./chat-window.module.css";
 
 export type ChatWindowHandle = {
   /** 以当前对话为上下文代发一条 user 并请求助手回复；返回助手回复文本（空字符串表示失败） */
@@ -64,12 +67,8 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
   }, [isLoading, onLoadingChange]);
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        Math.min(textareaRef.current.scrollHeight, 160) + "px";
-    }
-  }, [input]);
+    syncComposerTextareaHeight(textareaRef.current, input);
+  }, [input, projectId]);
 
   useEffect(() => {
     autoKickoffOnceRef.current = false;
@@ -229,33 +228,33 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
         : "请先选择一个项目";
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Messages */}
-      <div ref={messagesScrollRef} className="flex-1 overflow-y-auto px-3 py-3">
+    <div className={styles.shell}>
+      <div ref={messagesScrollRef} className={styles.messages}>
         {showEmptyHint && (
-          <div className="flex h-full items-center justify-center">
-            <div className="text-center">
-              <h2 className="mb-1.5 text-base font-semibold text-zinc-300">BL 短剧编剧室</h2>
-              <p className="text-xs text-zinc-500">{emptySub}</p>
+          <div className={styles.empty}>
+            <div>
+              <h2 className={styles.emptyTitle}>BL 短剧编剧室</h2>
+              <p className={shellStyles.helpText}>{emptySub}</p>
             </div>
           </div>
         )}
-        <div className="space-y-3">
+        <div className={styles.messageList}>
           {messages.map((msg, i) => (
             <MessageBubble key={i} message={msg} />
           ))}
         </div>
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-zinc-800 px-3 py-2.5">
-        <div className="flex items-end gap-1.5">
+      <div className={styles.inputBar}>
+        <div className={styles.inputRow}>
           <button
+            type="button"
             onClick={handleClear}
-            className="mb-1 shrink-0 rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className={shellStyles.iconBtn}
             title="清空对话"
+            aria-label="清空对话"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -270,24 +269,24 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
             onKeyDown={handleKeyDown}
             rows={1}
             disabled={!projectId}
-            placeholder={
-              projectId ? "输入灵感、大纲或网文原文…" : "请先选择项目"
-            }
-            className="flex-1 resize-none rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-500 disabled:opacity-50"
+            placeholder={projectId ? "输入灵感、大纲或网文原文…" : "请先选择项目"}
+            className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={isLoading || !input.trim() || !projectId}
-            className="mb-1 shrink-0 rounded-xl bg-indigo-600 p-2.5 text-white transition hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600"
+            className={styles.sendBtn}
+            aria-label="发送"
+            title="发送"
           >
             {isLoading ? (
-              <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className={styles.spin}>
+                <circle opacity="0.25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path opacity="0.75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             ) : (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
               </svg>
             )}

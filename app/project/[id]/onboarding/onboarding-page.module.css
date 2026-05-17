@@ -1,0 +1,224 @@
+/* /project/[id]/onboarding：复用 shell.module.css 的 page / topbar / card / field / button / segmented / banner。
+ * 这里只放本页特有的：4-tabs 主体布局、素材区域、立项确认 grid、sticky CTA 等。 */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.shell {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+}
+
+.modeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.modeRowLabel {
+  font-size: 11px;
+  color: #71717a;
+}
+
+.adaptHint {
+  font-size: 10px;
+  color: #71717a;
+}
+
+/* tab next-step indicator dot */
+.tabBadge {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #fafafa;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* shared section wrapper used inside each tab */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* materials list */
+.materialsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #71717a;
+}
+
+.materialsActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.materialsHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #71717a;
+}
+
+.pasteRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pasteLabelInput {
+  flex: 1;
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.materialList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+.materialItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.materialItem button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #fca5a5;
+  cursor: pointer;
+  font: inherit;
+}
+
+.materialItem button:hover {
+  color: #fecaca;
+}
+
+/* planning section */
+.planningPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.planningActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* analysis read-only card body */
+.analysisPre {
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.32);
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #d4d4d8;
+}
+
+/* finalize tab */
+.finalizeBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.finalizeChecklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.finalizeBigTextarea {
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.finalizeMidTextarea {
+  min-height: 240px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.helpInline {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+  color: #71717a;
+}
+
+/* generating overlay (改编 plan 生成期间) */
+.generatingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fafafa;
+  backdrop-filter: blur(8px);
+}
+
+.generatingTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.generatingHint {
+  margin: 0;
+  font-size: 12px;
+  color: #a1a1aa;
+}

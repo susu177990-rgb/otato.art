@@ -1,9 +1,9 @@
-
 "use client";
 
 import Link from "next/link";
-import ApiSettingsToolbarButton from "@/components/ApiSettingsToolbarButton";
 import { useCallback, useEffect, useMemo, useState, useRef, type ChangeEvent } from "react";
+import shellStyles from "../shared/shell.module.css";
+import styles from "./wattpad-page.module.css";
 
 type Story = {
   id?: string | number | null;
@@ -29,7 +29,6 @@ type SearchPayload = {
   stories: Story[];
 };
 
-/** 与 Wattpad 搜索 API 分页请求条数一致，固定即可 */
 const WATTPAD_SEARCH_PAGE_SIZE = 50;
 
 function shorten(text: string, maxLen: number) {
@@ -106,7 +105,6 @@ export default function WattpadPage() {
   const [statusLine, setStatusLine] = useState("");
 
   const [exportOpen, setExportOpen] = useState(false);
-  /** 预览区「中文简介」：仅译简介，与导出勾选无关 */
   const [zhIntro, setZhIntro] = useState("");
   const [zhIntroBusy, setZhIntroBusy] = useState(false);
   const [zhIntroErr, setZhIntroErr] = useState<string | null>(null);
@@ -361,54 +359,45 @@ export default function WattpadPage() {
   const clearLog = () => setLogLines([]);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-zinc-950 text-zinc-200">
-      <header className="shrink-0 border-b border-zinc-800 bg-indigo-950/40 px-4 py-3 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-50">扒网文</h1>
-            <p className="text-[11px] text-zinc-400">Wattpad 搜索与批量导出（请遵守版权与平台条款）</p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <ApiSettingsToolbarButton />
-            <Link
-              href="/"
-              className="rounded-lg border border-zinc-600/80 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-900/60"
-            >
-              ← 模式选择
-            </Link>
+    <main className={shellStyles.page}>
+      <header className={shellStyles.topbar}>
+        <div className={shellStyles.topbarLeft}>
+          <Link href="/" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+            返回首页
+          </Link>
+          <div className={shellStyles.topbarTagline}>
+            <p className={shellStyles.plainDockText}>扒网文 · Wattpad 搜索与导出</p>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-3 overflow-hidden px-4 py-4 sm:px-6">
-        <div className="shrink-0 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 sm:p-4">
-          <form
-            className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!busy) void runSearch();
-            }}
+      <div className={styles.body}>
+        <form
+          className={[shellStyles.card, styles.searchCard].join(" ")}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!busy) void runSearch();
+          }}
+        >
+          <label className={shellStyles.field}>
+            <span className={shellStyles.fieldLabel}>关键词</span>
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className={shellStyles.input}
+              placeholder="输入英文或中文关键词"
+              enterKeyHint="search"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy}
+            className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
           >
-            <label className="block text-xs text-zinc-500">
-              关键词
-              <input
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-                placeholder="输入英文或中文关键词"
-                enterKeyHint="search"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {busy ? "搜索中…" : "搜索"}
-            </button>
-          </form>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
-            <label className="inline-flex items-center gap-1">
+            {busy ? "搜索中…" : "搜索"}
+          </button>
+          <div className={styles.searchOptions}>
+            <label className={styles.optionRow}>
               最多
               <input
                 type="number"
@@ -416,72 +405,72 @@ export default function WattpadPage() {
                 max={200}
                 value={maxResults}
                 onChange={(e) => setMaxResults(Number(e.target.value) || 20)}
-                className="w-16 rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5 text-zinc-200"
+                className={[shellStyles.input, shellStyles.inputCompact, styles.numField].join(" ")}
               />
             </label>
-            <label className="inline-flex items-center gap-1.5">
+            <label className={shellStyles.checkboxRow}>
               <input type="checkbox" checked={includeMature} onChange={(e) => setIncludeMature(e.target.checked)} />
               成熟
             </label>
-            <label className="inline-flex items-center gap-1.5">
+            <label className={shellStyles.checkboxRow}>
               <input type="checkbox" checked={includePaywalled} onChange={(e) => setIncludePaywalled(e.target.checked)} />
               付费
             </label>
           </div>
-        </div>
+        </form>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-          <div className="grid min-h-0 flex-[3] gap-3 overflow-hidden lg:grid-cols-[3fr_2fr]">
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/30">
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-              <table className="w-full min-w-0 table-fixed border-collapse text-left text-xs">
-                <thead className="sticky top-0 z-10 bg-zinc-800/95 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+        <div className={styles.split}>
+          <div className={[shellStyles.card, styles.tableCard].join(" ")}>
+            <div className={styles.tableScroll}>
+              <table className={styles.table}>
+                <thead>
                   <tr>
-                    <th className="w-10 px-1 py-2 text-center font-normal normal-case text-zinc-500">选</th>
-                    <th className="w-10 px-1 py-2">#</th>
-                    <th className="min-w-0 px-2 py-2">标题</th>
-                    <th className="min-w-0 px-2 py-2">作者</th>
-                    <th className="w-24 px-2 py-2 text-right">阅读</th>
-                    <th className="w-20 px-2 py-2 text-right">票</th>
-                    <th className="w-14 px-2 py-2 text-center">章</th>
-                    <th className="w-14 px-2 py-2 text-center">类</th>
+                    <th className={styles.tdCheck}>选</th>
+                    <th className={styles.tdIdx}>#</th>
+                    <th>标题</th>
+                    <th>作者</th>
+                    <th className={styles.tdNum}>阅读</th>
+                    <th className={styles.tdNum}>票</th>
+                    <th className={styles.tdNumNarrow}>章</th>
+                    <th className={styles.tdNumNarrow}>类</th>
                   </tr>
                 </thead>
-                <tbody className="text-zinc-200">
+                <tbody>
                   {stories.map((story, i) => (
                     <tr
                       key={`${story.id ?? i}-${i}`}
-                      className={`border-t border-zinc-800/80 ${selected.has(i) ? "bg-indigo-950/35" : "hover:bg-zinc-800/40"} cursor-pointer`}
+                      className={selected.has(i) ? styles.rowActive : ""}
                       onClick={() => handleTableRowClick(i)}
                     >
-                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                      <td className={styles.tdCheck} onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selected.has(i)} onChange={(e) => toggleRow(i, e)} />
                       </td>
-                      <td className="px-1 py-2 text-center text-zinc-500">{i + 1}</td>
-                      <td className="min-w-0 truncate px-2 py-2 font-medium text-zinc-100" title={story.title}>
+                      <td className={styles.tdIdx}>{i + 1}</td>
+                      <td className={styles.tdMain} title={story.title}>
                         {shorten(story.title, 42)}
                       </td>
-                      <td className="min-w-0 truncate px-2 py-2 text-zinc-400" title={story.author}>
+                      <td className={styles.tdSub} title={story.author}>
                         {shorten(story.author, 18)}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-400">{formatNumber(story.readCount)}</td>
-                      <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-zinc-400">{formatNumber(story.voteCount)}</td>
-                      <td className="whitespace-nowrap px-2 py-2 text-center tabular-nums text-zinc-400">{formatNumber(story.numParts)}</td>
-                      <td className="whitespace-nowrap px-2 py-2 text-center text-zinc-400">{typeText(story)}</td>
+                      <td className={styles.tdNum}>{formatNumber(story.readCount)}</td>
+                      <td className={styles.tdNum}>{formatNumber(story.voteCount)}</td>
+                      <td className={styles.tdNumNarrow}>{formatNumber(story.numParts)}</td>
+                      <td className={styles.tdNumNarrow}>{typeText(story)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {stories.length === 0 && (
-                <p className="p-6 text-center text-xs text-zinc-600">暂无结果，输入关键词后点击「搜索」</p>
+                <p className={styles.tableEmpty}>暂无结果，输入关键词后点击「搜索」</p>
               )}
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2 border-t border-zinc-800 p-2">
+            <div className={styles.tableActions}>
               <button
                 type="button"
                 disabled={exportBusy || busy || !stories.length || selected.size === 0}
                 onClick={() => openExport()}
-                className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+                style={{ flex: 1 }}
               >
                 导出
               </button>
@@ -489,115 +478,114 @@ export default function WattpadPage() {
                 type="button"
                 disabled={selected.size === 0}
                 onClick={() => void copyUrls()}
-                className="rounded-lg border border-zinc-600 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                className={shellStyles.button}
               >
                 复制链接
               </button>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/20 p-3">
-            <h2 className="shrink-0 text-xs font-semibold text-zinc-300">预览</h2>
-            <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain text-xs leading-relaxed text-zinc-400">
+          <div className={[shellStyles.card, styles.previewCard].join(" ")}>
+            <h2 className={shellStyles.cardTitle}>预览</h2>
+            <div className={styles.previewScroll}>
               {!previewStory ? (
-                <span className="text-zinc-600">—</span>
+                <span style={{ color: "#52525b" }}>—</span>
               ) : (
                 <>
-                  <p className="text-sm font-semibold text-zinc-100">{previewStory.title}</p>
-                  <p className="mt-1 text-zinc-500">作者：{previewStory.author}</p>
-                  <dl className="mt-3 space-y-1">
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#fafafa" }}>{previewStory.title}</p>
+                  <p style={{ margin: "4px 0 0", color: "#71717a" }}>作者：{previewStory.author}</p>
+                  <dl style={{ margin: "12px 0 0", display: "flex", flexDirection: "column", gap: 4 }}>
                     <div>
-                      <dt className="inline text-amber-700/90">阅读</dt>
-                      <dd className="inline text-zinc-300">：{formatNumber(previewStory.readCount)}</dd>
+                      <span className={styles.previewKey}>阅读</span>
+                      <span className={styles.previewVal}>：{formatNumber(previewStory.readCount)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">投票</dt>
-                      <dd className="inline text-zinc-300">：{formatNumber(previewStory.voteCount)}</dd>
+                      <span className={styles.previewKey}>投票</span>
+                      <span className={styles.previewVal}>：{formatNumber(previewStory.voteCount)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">评论</dt>
-                      <dd className="inline text-zinc-300">：{formatNumber(previewStory.commentCount)}</dd>
+                      <span className={styles.previewKey}>评论</span>
+                      <span className={styles.previewVal}>：{formatNumber(previewStory.commentCount)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">章节</dt>
-                      <dd className="inline text-zinc-300">：{formatNumber(previewStory.numParts)}</dd>
+                      <span className={styles.previewKey}>章节</span>
+                      <span className={styles.previewVal}>：{formatNumber(previewStory.numParts)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">状态</dt>
-                      <dd className="inline text-zinc-300">：{statusText(previewStory)}</dd>
+                      <span className={styles.previewKey}>状态</span>
+                      <span className={styles.previewVal}>：{statusText(previewStory)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">类型</dt>
-                      <dd className="inline text-zinc-300">：{typeText(previewStory)}</dd>
+                      <span className={styles.previewKey}>类型</span>
+                      <span className={styles.previewVal}>：{typeText(previewStory)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">级别</dt>
-                      <dd className="inline text-zinc-300">：{maturityText(previewStory)}</dd>
+                      <span className={styles.previewKey}>级别</span>
+                      <span className={styles.previewVal}>：{maturityText(previewStory)}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">更新</dt>
-                      <dd className="inline text-zinc-300">：{previewStory.lastPublishedPart || "—"}</dd>
+                      <span className={styles.previewKey}>更新</span>
+                      <span className={styles.previewVal}>：{previewStory.lastPublishedPart || "—"}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">链接</dt>
-                      <dd className="inline break-all text-indigo-400/90">{previewStory.url}</dd>
+                      <span className={styles.previewKey}>链接</span>
+                      <span className={styles.previewLink}>：{previewStory.url}</span>
                     </div>
                     <div>
-                      <dt className="inline text-amber-700/90">标签</dt>
-                      <dd className="inline text-zinc-300">：{previewStory.tags.length ? previewStory.tags.join("、") : "—"}</dd>
+                      <span className={styles.previewKey}>标签</span>
+                      <span className={styles.previewVal}>：{previewStory.tags.length ? previewStory.tags.join("、") : "—"}</span>
                     </div>
                   </dl>
-                  <p className="mt-3 text-amber-700/90">简介</p>
-                  <p className="text-zinc-300">{previewStory.description || "—"}</p>
-                  <p className="mt-4 text-amber-700/90">中文简介</p>
-                  <p className="text-[10px] text-zinc-600">机器翻译，仅供参考</p>
+                  <p className={styles.previewKey} style={{ marginTop: 14 }}>
+                    简介
+                  </p>
+                  <p className={styles.previewVal}>{previewStory.description || "—"}</p>
+                  <p className={styles.previewKey} style={{ marginTop: 14 }}>
+                    中文简介
+                  </p>
+                  <p className={shellStyles.helpText}>机器翻译，仅供参考</p>
                   {!previewStory.description?.trim() ? (
-                    <p className="mt-1 text-zinc-500">—</p>
+                    <p style={{ margin: "4px 0 0", color: "#71717a" }}>—</p>
                   ) : zhIntroBusy ? (
-                    <p className="mt-1 text-zinc-500">翻译中…</p>
+                    <p style={{ margin: "4px 0 0", color: "#71717a" }}>翻译中…</p>
                   ) : zhIntroErr ? (
-                    <p className="mt-1 text-rose-400/90">{zhIntroErr}</p>
+                    <p style={{ margin: "4px 0 0", color: "#fca5a5" }}>{zhIntroErr}</p>
                   ) : (
-                    <p className="mt-1 whitespace-pre-wrap text-zinc-300">{zhIntro || "—"}</p>
+                    <p className={styles.previewVal} style={{ margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                      {zhIntro || "—"}
+                    </p>
                   )}
                 </>
               )}
             </div>
           </div>
-          </div>
+        </div>
 
-          <div className="flex min-h-0 flex-[2] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2">
-              <div className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-400">
-                {statusLine || " "}
-              </div>
-              <button type="button" onClick={clearLog} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800">
-                清空
-              </button>
-            </div>
-            <div className="mx-3 mb-3 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg border border-zinc-800 bg-[#0c1219] px-3 py-2 font-mono text-[11px] leading-relaxed text-sky-100/90">
-              {logLines.length === 0 ? (
-                <span className="text-zinc-600">日志输出…</span>
-              ) : (
-                logLines.map((line, i) => (
-                  <div key={i} className="whitespace-pre-wrap break-all">
-                    {line}
-                  </div>
-                ))
-              )}
-            </div>
+        <div className={[shellStyles.card, styles.logCard].join(" ")}>
+          <div className={styles.logHead}>
+            <div className={styles.statusBadge}>{statusLine || " "}</div>
+            <button type="button" onClick={clearLog} className={shellStyles.buttonSubtle}>
+              清空
+            </button>
+          </div>
+          <div className={styles.logBody}>
+            {logLines.length === 0 ? (
+              <span style={{ color: "#52525b" }}>日志输出…</span>
+            ) : (
+              logLines.map((line, i) => <div key={i}>{line}</div>)
+            )}
           </div>
         </div>
       </div>
 
       {exportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog">
-          <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl">
-            <p className="text-lg font-semibold text-zinc-100">{[...selected].filter((i) => stories[i]).length}</p>
-            <p className="mt-1 text-xs text-zinc-500">
+        <div className={styles.modalBackdrop} role="dialog" onClick={() => setExportOpen(false)}>
+          <div className={[shellStyles.card, styles.modalCard].join(" ")} onClick={(e) => e.stopPropagation()}>
+            <p className={styles.modalCount}>{[...selected].filter((i) => stories[i]).length} 本</p>
+            <p className={shellStyles.helpText}>
               将逐本请求并下载为 .txt（正文与原先 Markdown 导出一致，仅扩展名与 MIME 为文本文件）
             </p>
-            <ul className="mt-3 max-h-40 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/80 p-2 text-xs text-zinc-300">
+            <ul className={styles.modalList}>
               {[...selected]
                 .sort((a, b) => a - b)
                 .map((i) => stories[i])
@@ -609,27 +597,30 @@ export default function WattpadPage() {
                 ))}
             </ul>
             {[...selected].some((i) => stories[i]?.isPaywalled) && (
-              <div className="mt-3">
-                <p className="text-[11px] text-amber-400/95">选中含付费作品：请上传作者本人账号导出的 Cookie 文件</p>
+              <div>
+                <p className={[shellStyles.banner, shellStyles.bannerWarn].join(" ")}>
+                  选中含付费作品：请上传作者本人账号导出的 Cookie 文件
+                </p>
                 <input
                   ref={cookieRef}
                   type="file"
                   accept=".txt,.json"
-                  className="mt-2 w-full text-xs text-zinc-400"
+                  className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                  style={{ marginTop: 8 }}
                   onChange={(e) => setCookieName(e.target.files?.[0]?.name ?? "")}
                 />
-                {cookieName ? <p className="mt-1 text-[10px] text-zinc-500">{cookieName}</p> : null}
+                {cookieName ? <p className={shellStyles.helpText}>{cookieName}</p> : null}
               </div>
             )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setExportOpen(false)} className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+            <div className={styles.modalActions}>
+              <button type="button" onClick={() => setExportOpen(false)} className={shellStyles.button}>
                 取消
               </button>
               <button
                 type="button"
                 disabled={exportBusy}
                 onClick={() => void runExport()}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
               >
                 确定
               </button>
@@ -637,6 +628,6 @@ export default function WattpadPage() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

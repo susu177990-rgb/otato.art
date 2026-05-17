@@ -1,0 +1,181 @@
+/* /studio/[id]：编剧室 shell + 顶栏。复用 shell.module.css 的 page / topbar / navLink / canvasStage /
+ * canvasCard / stageStrip 系列；这里只放编剧室特有的 auto pipeline 开关 + 警示横条等局部细节。 */
+
+.titleStack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.titleSub {
+  font-size: 11px;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autoCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  flex-shrink: 0;
+}
+
+.autoSwitch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 30px;
+  height: 16px;
+  border-radius: 999px;
+  border: 0;
+  padding: 0;
+  background: rgba(82, 82, 91, 0.7);
+  transition: background 200ms ease;
+  cursor: pointer;
+}
+
+.autoSwitchActive {
+  background: rgba(16, 185, 129, 0.9);
+}
+
+.autoSwitchError {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+.autoSwitch:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.autoSwitch span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: transform 200ms ease;
+}
+
+.autoSwitchActive span {
+  transform: translateX(14px);
+}
+
+.autoLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: #a1a1aa;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.autoLabelActive {
+  color: #6ee7b7;
+}
+
+.autoLabelError {
+  color: #fca5a5;
+}
+
+.autoDot {
+  position: relative;
+  display: inline-flex;
+  width: 6px;
+  height: 6px;
+}
+
+.autoDot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.7);
+  animation: autoDotPing 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.autoDot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+@keyframes autoDotPing {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.banner {
+  margin: 0 24px;
+  margin-top: -1px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 0;
+}
+
+.bannerInner {
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.22);
+  color: #fde68a;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.bannerInner a {
+  color: #fcd34d;
+  text-decoration: underline;
+  margin-left: 4px;
+}
+
+.bannerInner a:hover {
+  color: #fde68a;
+}
+
+/* 顶栏排版：左 cluster 紧凑、中段 stage strip 可滚动、右 cluster 紧凑。 */
+.topbarLeftCompact {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.topnavCompact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 流程条左侧：立项前置入口（圣经 / 简报）+ 竖分隔 + STAGE 1–7 strip */
+.stageStripCluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 28px;
+}
+
+.prePipelineNav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 10px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { REMARK_PLUGINS_GFM } from "@/lib/markdown-remark-plugins";
+import shellStyles from "@/app/shared/shell.module.css";
+import styles from "./artifact-slot-editor.module.css";
 
 interface Props {
   label: string;
@@ -87,24 +89,25 @@ export default function ArtifactSlotEditor({
     setEditing(false);
   }
 
-  const contentShell = `rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 ${textareaClassName ?? ""}`;
+  const shellCls = [styles.shell, compact ? styles.shellCompact : ""]
+    .filter(Boolean)
+    .join(" ");
+  const contentShellCls = [styles.contentShell, textareaClassName ?? ""]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div
-      className={`rounded-lg border border-zinc-800/60 bg-zinc-900/40 ${
-        compact ? "text-[11px]" : ""
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-        <span className={`min-w-0 font-medium text-zinc-300 ${compact ? "text-[11px]" : "text-xs"}`}>
+    <div className={shellCls}>
+      <div className={styles.head}>
+        <span className={[styles.label, compact ? styles.labelCompact : ""].join(" ")}>
           {label}
         </span>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {optional ? <span className="text-[9px] text-zinc-600">可选</span> : null}
+        <div className={styles.headActions}>
+          {optional ? <span className={styles.optionalTag}>可选</span> : null}
           <button
             type="button"
             onClick={() => (editing ? handleDone() : setEditing(true))}
-            className="rounded border border-zinc-600/80 px-1.5 py-0.5 text-[9px] font-medium text-zinc-400 transition hover:border-indigo-500/60 hover:bg-zinc-800/80 hover:text-zinc-100"
+            className={[shellStyles.button, shellStyles.buttonSubtle, styles.miniButton].join(" ")}
           >
             {editing ? "完成" : "编辑"}
           </button>
@@ -112,14 +115,14 @@ export default function ArtifactSlotEditor({
             <button
               type="button"
               onClick={onRemove}
-              className="rounded border border-rose-600/80 px-1.5 py-0.5 text-[9px] font-medium text-rose-400 transition hover:border-rose-500/60 hover:bg-rose-950/50 hover:text-rose-100"
+              className={[styles.miniButton, styles.removeButton].join(" ")}
             >
               {removeLabel}
             </button>
           ) : null}
         </div>
       </div>
-      <div className="border-t border-zinc-800/40 px-3 py-2">
+      <div className={styles.body}>
         {editing ? (
           <textarea
             ref={textareaRef}
@@ -132,18 +135,17 @@ export default function ArtifactSlotEditor({
             onBlur={flush}
             placeholder={placeholder ?? "（空）Markdown 正文；关闭「完成」前会自动保存"}
             rows={compact ? Math.min(rows, 5) : rows}
-            className={`w-full resize-y font-mono text-[11px] leading-relaxed text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-600/60 focus:outline-none focus:ring-1 focus:ring-indigo-600/40 ${contentShell}`}
+            className={[shellStyles.textarea, shellStyles.mono, contentShellCls].join(" ")}
+            style={{ width: "100%", resize: "vertical", fontSize: 11 }}
           />
         ) : (
-          <div className={`overflow-y-auto ${contentShell}`}>
+          <div className={[styles.preview, contentShellCls].join(" ")}>
             {draft.trim() ? (
-              <div className="max-w-full overflow-x-auto">
-                <div className={previewProse}>
-                  <ReactMarkdown remarkPlugins={REMARK_PLUGINS_GFM}>{draft}</ReactMarkdown>
-                </div>
+              <div className={previewProse}>
+                <ReactMarkdown remarkPlugins={REMARK_PLUGINS_GFM}>{draft}</ReactMarkdown>
               </div>
             ) : (
-              <p className="text-[11px] leading-relaxed text-zinc-600">
+              <p className={styles.emptyText}>
                 （空）点击「编辑」填写；正文为 Markdown，可从左侧复制助手输出后粘贴编辑
               </p>
             )}

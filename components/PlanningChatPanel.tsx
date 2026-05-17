@@ -6,6 +6,9 @@ import { stripThinkingForDisplay } from "@/lib/strip-thinking";
 import MessageBubble from "./MessageBubble";
 import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
+import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
+import shellStyles from "@/app/shared/shell.module.css";
+import styles from "./planning-chat-panel.module.css";
 
 interface Props {
   settings: Settings;
@@ -46,11 +49,7 @@ export default function PlanningChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        Math.min(textareaRef.current.scrollHeight, 160) + "px";
-    }
+    syncComposerTextareaHeight(textareaRef.current, input);
   }, [input]);
 
   async function handleSend() {
@@ -156,26 +155,26 @@ export default function PlanningChatPanel({
     void handleSend();
   }
 
-  const outerClass =
-    layout === "fixedScroll"
-      ? "flex h-[min(560px,64vh)] max-h-[64vh] w-full flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900/40"
-      : "flex min-h-[320px] flex-1 flex-col rounded-lg border border-zinc-700 bg-zinc-900/40";
+  const outerClass = [
+    styles.shell,
+    layout === "fixedScroll" ? styles.shellFixed : styles.shellFlow,
+  ].join(" ");
 
   return (
     <div className={outerClass}>
-      <div className="shrink-0 border-b border-zinc-800 px-3 py-2 text-xs text-zinc-500">{headerTitle}</div>
-      <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+      <div className={styles.head}>{headerTitle}</div>
+      <div ref={messagesScrollRef} className={styles.body}>
         {messages.length === 0 && (
-          <p className="py-8 text-center text-xs text-zinc-600">{emptyHint}</p>
+          <p className={[shellStyles.helpText, styles.emptyHint].join(" ")}>{emptyHint}</p>
         )}
-        <div className="space-y-2">
+        <div className={styles.messageList}>
           {messages.map((msg, i) => (
             <MessageBubble key={i} message={msg} />
           ))}
         </div>
       </div>
-      <div className="shrink-0 border-t border-zinc-800 px-3 py-2">
-        <div className="flex items-end gap-2">
+      <div className={styles.foot}>
+        <div className={styles.inputRow}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -183,15 +182,15 @@ export default function PlanningChatPanel({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={inputPlaceholder}
-            className="flex-1 resize-none rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-500"
+            className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={isLoading || !input.trim()}
-            className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-40"
+            className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
           >
-            发送
+            {isLoading ? "发送中…" : "发送"}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import {
 } from "@/lib/stage-slot-schema";
 import { compareStage6SubKeys, slugifyCharName } from "@/lib/artifact-mutations";
 import ArtifactSlotEditor from "./ArtifactSlotEditor";
+import styles from "./stage-flat-manual.module.css";
 
 interface Props {
   stageId: number;
@@ -47,7 +48,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
     const fixedKeys = new Set(STAGE1_SLOTS.map((s) => s.subKey));
     const extras = a.filter((x) => !fixedKeys.has(x.subKey));
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {STAGE1_SLOTS.map((slot) => {
           const art = a.find((x) => x.subKey === slot.subKey);
           const isOutline = slot.subKey === "outline";
@@ -101,7 +102,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
     );
     const nextSupportingIdx = nextSupportingPIndex(a);
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {STAGE2_FIXED_SLOTS.map((slot) => {
           const art = a.find((x) => x.subKey === slot.subKey);
           return (
@@ -137,7 +138,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
             removeLabel="移除"
           />
         ))}
-        <div className="flex flex-col gap-1.5 sm:flex-row">
+        <div className={styles.charButtonRow}>
           <button
             type="button"
             onClick={() => {
@@ -153,7 +154,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
                 content: "",
               });
             }}
-            className="w-full rounded-lg border border-dashed border-zinc-700 py-2 text-[11px] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+            className={styles.addButton}
           >
             + 添加主角小传
           </button>
@@ -168,7 +169,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
                 content: "",
               });
             }}
-            className="w-full rounded-lg border border-dashed border-zinc-700 py-2 text-[11px] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+            className={styles.addButton}
             title={`将创建 supporting_p${nextSupportingIdx}，与「## 配角一」解析键位一致时可对照编号`}
           >
             + 添加配角小传（下一格：配角{nextSupportingIdx}）
@@ -202,7 +203,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
 
   if (stageId === 3) {
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {STAGE3_SLOTS.map((slot) => {
           const art = a.find((x) => x.subKey === slot.subKey);
           return (
@@ -250,7 +251,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
     );
 
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {Array.from({ length: maxEv }, (_, i) => i + 1).map((n) => {
           const subKey = `event_${n}`;
           const art = a.find((x) => x.subKey === subKey);
@@ -281,7 +282,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
               content: "",
             });
           }}
-          className="w-full rounded-lg border border-dashed border-zinc-700 py-2 text-[11px] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+          className={styles.addButton}
         >
           + 添加核心事件 {maxEv + 1}
         </button>
@@ -327,7 +328,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
 
   if (stageId === 5) {
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {STAGE5_CATEGORY_SLOTS.map((slot) => {
           const art = a.find((x) => x.subKey === slot.subKey);
           return (
@@ -375,7 +376,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
     }
 
     return (
-      <div className="space-y-2">
+      <div className={styles.list}>
         {outlines.map((ep) => {
           const children = subItems
             .filter((x) => x.parentKey === ep.subKey)
@@ -398,7 +399,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
                 removeLabel="移除"
               />
               {children.length > 0 && (
-                <div className="ml-4 mt-1 space-y-1.5 border-l border-zinc-800 pl-3">
+                <div className={styles.subList}>
                   {children.map((sub) => (
                     <ArtifactSlotEditor
                       key={sub.subKey}
@@ -434,7 +435,7 @@ export default function StageFlatManual({ stageId, artifacts, onUpsert, onRemove
               content: "",
             });
           }}
-          className="w-full rounded-lg border border-dashed border-zinc-700 py-2 text-[11px] text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+          className={styles.addButton}
         >
           + 添加第{maxOutlineEpNum() + 1}集大纲
         </button>

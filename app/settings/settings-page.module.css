@@ -1,0 +1,21 @@
+/* /settings 页：通用 page / topbar / segmented / card / field / button 已抽到 shell.module.css。
+ * 这里只保留：tabBar 居中容器 + panel 节奏 + 默认提示词文本框尺寸。 */
+
+.tabBar {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 提示词的 textarea 在编辑场景下需要更高 */
+.promptArea {
+  min-height: 280px;
+  font-size: 12px;
+  line-height: 1.65;
+}

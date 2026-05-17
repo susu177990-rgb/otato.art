@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, type MouseEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import ApiSettingsToolbarButton from "@/components/ApiSettingsToolbarButton";
 import type { ProjectSummary } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
+import shellStyles from "../shared/shell.module.css";
+import styles from "./projects-page.module.css";
+
+type SortKey = "updated" | "stage" | "name";
 
 function formatUpdated(iso: string) {
   try {
@@ -21,24 +24,70 @@ function ProjectsHubInner() {
   const router = useRouter();
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch("/api/projects");
       if (res.ok) setProjects(await res.json());
-    } catch {}
+    } catch {
+      // ignore
+    } finally {
+      setLoaded(true);
+    }
   }, []);
 
   useEffect(() => {
     void fetchProjects();
   }, [fetchProjects]);
 
+  const visible = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    let list = projects;
+    if (trimmed) {
+      list = list.filter((p) => p.name.toLowerCase().includes(trimmed));
+    }
+    const sorted = [...list];
+    if (sortKey === "updated") {
+      sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    } else if (sortKey === "stage") {
+      sorted.sort((a, b) => {
+        const am = a.maxApprovedStage ?? 0;
+        const bm = b.maxApprovedStage ?? 0;
+        if (bm !== am) return bm - am;
+        return b.updatedAt.localeCompare(a.updatedAt);
+      });
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    }
+    return sorted;
+  }, [projects, query, sortKey]);
+
   function handleOpen(id: string) {
     router.push(`/studio/${id}`);
   }
 
-  function handleCreate() {
-    router.push("/project/new");
+  async function handleCreate() {
+    if (creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "新剧本项目" }),
+      });
+      if (!res.ok) throw new Error("创建失败");
+      const project = (await res.json()) as { id: string };
+      router.push(`/project/${project.id}/onboarding`);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "创建失败");
+      setCreating(false);
+    }
   }
 
   async function handleDelete(e: MouseEvent, id: string) {
@@ -47,94 +96,150 @@ function ProjectsHubInner() {
     try {
       await fetch(`/api/projects/${id}`, { method: "DELETE" });
       await fetchProjects();
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-zinc-950">
-      <header className="border-b border-zinc-800 px-4 py-4 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-3">
-          <div>
-            <Link
-              href="/"
-              className="text-[11px] text-zinc-500 transition hover:text-zinc-300"
-            >
-              ← 模式选择
-            </Link>
-            <h1 className="mt-1 text-base font-semibold text-zinc-100">创作剧本 · 项目</h1>
-            <p className="mt-0.5 text-[12px] text-zinc-500">点击卡片进入编剧室；新建将先走立项与策划</p>
+    <main className={shellStyles.page}>
+      <header className={shellStyles.topbar}>
+        <div className={shellStyles.topbarLeft}>
+          <Link href="/" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+            返回首页
+          </Link>
+          <div className={shellStyles.topbarTagline}>
+            <p className={shellStyles.plainDockText}>创作剧本 · 项目列表</p>
           </div>
-          <ApiSettingsToolbarButton />
         </div>
-      </header>
-
-      <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <div className="mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <nav className={shellStyles.topnav}>
           <button
             type="button"
-            onClick={handleCreate}
-            className="group flex min-h-[120px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-900/30 px-4 py-6 text-center transition hover:border-indigo-500/50 hover:bg-zinc-900/60"
+            onClick={() => void handleCreate()}
+            disabled={creating}
+            className={[shellStyles.navLink, shellStyles.navLinkPrimary].join(" ")}
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-indigo-400 transition group-hover:bg-indigo-950/50 group-hover:text-indigo-300">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </span>
-            <span className="mt-3 text-sm font-medium text-zinc-300">新建项目</span>
-            <span className="mt-1 text-[11px] text-zinc-600">立项 · 素材 · 策划对齐</span>
+            {creating ? "创建中…" : "新建项目"}
           </button>
+        </nav>
+      </header>
 
-          {projects.map((p) => (
-            <div
-              key={p.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleOpen(p.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleOpen(p.id);
-                }
-              }}
-              className="group relative flex min-h-[120px] cursor-pointer flex-col rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-left transition hover:border-indigo-500/35 hover:bg-zinc-900/70"
-            >
-              <div className="pr-8">
-                <h2 className="line-clamp-2 text-sm font-semibold text-zinc-100">{p.name}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-500">
-                  <span>
-                    {p.currentStage > 0 ? STAGE_LABELS[p.currentStage] || `STAGE ${p.currentStage}` : "未开始"}
-                  </span>
-                  {p.onboardingStatus && p.onboardingStatus !== "ready" ? (
-                    <span className="rounded bg-amber-950/60 px-1.5 py-0.5 text-amber-400/95">
-                      {p.onboardingStatus === "pending_setup" ? "待立项" : "策划中"}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="mt-auto pt-3 text-[10px] text-zinc-600">
-                {formatUpdated(p.updatedAt) ? `更新 ${formatUpdated(p.updatedAt)}` : "\u00a0"}
-              </div>
-              <button
-                type="button"
-                onClick={(e) => void handleDelete(e, p.id)}
-                className="absolute right-2 top-2 rounded p-1.5 text-zinc-600 opacity-0 transition hover:bg-zinc-800 hover:text-red-400 group-hover:opacity-100"
-                title="删除项目"
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      <div className={shellStyles.body}>
+        <div className={[shellStyles.shell, shellStyles.shellWide].join(" ")}>
+          {createError ? (
+            <div className={[shellStyles.banner, shellStyles.bannerError].join(" ")}>
+              {createError}
             </div>
-          ))}
-        </div>
+          ) : null}
 
-        {projects.length === 0 && (
-          <p className="mx-auto mt-8 max-w-md text-center text-xs text-zinc-600">
-            暂无项目，点击上方「新建项目」开始。
-          </p>
-        )}
-      </main>
-    </div>
+          <div className={styles.toolbar}>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索项目名称…"
+              className={[shellStyles.input, styles.search].join(" ")}
+            />
+            <label className={styles.sortField}>
+              <span className={shellStyles.fieldLabel}>排序</span>
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className={[shellStyles.select, shellStyles.inputCompact].join(" ")}
+              >
+                <option value="updated">按更新时间</option>
+                <option value="stage">按已验阶段</option>
+                <option value="name">按名称</option>
+              </select>
+            </label>
+            <span className={shellStyles.helpText}>共 {visible.length} 个项目</span>
+          </div>
+
+          {visible.length > 0 ? (
+            <div className={styles.grid}>
+              {visible.map((p) => {
+                const stageLabel = p.currentStage > 0
+                  ? STAGE_LABELS[p.currentStage] || `STAGE ${p.currentStage}`
+                  : "未开始";
+                const approved = p.maxApprovedStage ?? 0;
+                const seriesBibleOk = Boolean(p.seriesBibleFilled);
+                const onboardingPending = p.onboardingStatus && p.onboardingStatus !== "ready";
+                return (
+                  <article
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleOpen(p.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleOpen(p.id);
+                      }
+                    }}
+                    className={styles.projectCard}
+                  >
+                    <div className={styles.projectBody}>
+                      <h2 className={styles.projectTitle}>{p.name}</h2>
+                      <p className={styles.projectStage}>{stageLabel}</p>
+                      <div className={styles.projectMeta}>
+                        <span
+                          className={[
+                            shellStyles.metaPill,
+                            approved > 0 ? shellStyles.metaPillOk : shellStyles.metaPillMute,
+                          ].join(" ")}
+                          title="工程已验收的最高阶段"
+                        >
+                          已验至 {approved > 0 ? `S${approved}` : "—"}
+                        </span>
+                        {p.episodeCount ? (
+                          <span className={shellStyles.metaPill} title="目标集数">
+                            {p.episodeCount.includes("集") ? p.episodeCount : `${p.episodeCount} 集`}
+                          </span>
+                        ) : null}
+                        <span
+                          className={[
+                            shellStyles.metaPill,
+                            seriesBibleOk ? shellStyles.metaPillOk : shellStyles.metaPillMute,
+                          ].join(" ")}
+                          title="是否已生成系列圣经"
+                        >
+                          圣经 {seriesBibleOk ? "✓" : "·"}
+                        </span>
+                        {onboardingPending ? (
+                          <span className={[shellStyles.metaPill, styles.metaPillPending].join(" ")}>
+                            {p.onboardingStatus === "pending_setup" ? "待立项" : "策划中"}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className={styles.projectFoot}>
+                      {formatUpdated(p.updatedAt) ? `更新 ${formatUpdated(p.updatedAt)}` : "\u00a0"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => void handleDelete(e, p.id)}
+                      className={styles.removeBtn}
+                      title="删除项目"
+                      aria-label="删除项目"
+                    >
+                      ×
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p className={shellStyles.helpText} style={{ textAlign: "center", marginTop: 24 }}>
+              {!loaded
+                ? "加载中…"
+                : query.trim()
+                  ? "没有匹配的项目，换个关键词试试。"
+                  : "暂无项目，点击右上「新建项目」开始。"}
+            </p>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }
 

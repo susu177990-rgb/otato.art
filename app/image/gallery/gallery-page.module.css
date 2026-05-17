@@ -1,0 +1,328 @@
+/* 画廊页：复用 app/shared/shell.module.css 的 page / topbar / topbarLeft /
+   topbarTagline / topnav / plainDockText / dockTextLink / navLink / navLinkDanger，
+   只在此处声明画廊专属容器、瀑布流瓦片与灯箱。 */
+
+.galleryBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 32px;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  color: #52525b;
+  font-size: 13px;
+}
+
+/* CSS 列瀑布流：默认四列；按视口收敛到 3 / 2 / 1。 */
+.masonry {
+  column-count: 4;
+  column-gap: 12px;
+}
+
+@media (max-width: 1400px) {
+  .masonry {
+    column-count: 4;
+  }
+}
+
+@media (max-width: 1100px) {
+  .masonry {
+    column-count: 3;
+  }
+}
+
+@media (max-width: 760px) {
+  .masonry {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 480px) {
+  .masonry {
+    column-count: 1;
+  }
+}
+
+/* 瓦片包裹（即按钮本体）：重置浏览器默认 button 样式，仅作为列项 */
+.masonryItem {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+}
+
+.masonryItem:focus-visible {
+  outline: none;
+}
+
+.masonryItem:focus-visible .tile {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+/* 瓦片视觉框：与 historyItem 同系（仅尺寸不固定） */
+.tile {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+
+.masonryItem:hover .tile {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+/* 图片以原生宽高显示；inline style 上的 aspect-ratio 仅作 placeholder */
+.tileImg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #050506;
+}
+
+.tileFail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 16px;
+  text-align: center;
+  color: #fca5a5;
+  font-size: 12px;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.tileMeta {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0));
+  color: #e4e4e7;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+  pointer-events: none;
+}
+
+.masonryItem:hover .tileMeta {
+  opacity: 1;
+}
+
+.tileMetaName {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileMetaInfo {
+  flex-shrink: 0;
+  color: #d4d4d8;
+}
+
+/* 灯箱：覆盖整个视口 */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 5, 6, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.modal {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  width: min(1180px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  background: rgba(8, 8, 9, 0.94);
+  box-shadow: 0 60px 200px rgba(0, 0, 0, 0.6);
+}
+
+@media (max-width: 900px) {
+  .modal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr);
+    max-height: calc(100vh - 32px);
+  }
+}
+
+.modalClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #e4e4e7;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.modalClose:hover {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+.modalImageWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #050506;
+  padding: 16px;
+  min-height: 280px;
+  min-width: 0;
+}
+
+.modalImage {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 88px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.modalFail {
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.modalSide {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px 22px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-y: auto;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .modalSide {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.modalSubtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #71717a;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.metaCell {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px 12px;
+}
+
+.metaCell dt {
+  margin: 0;
+  color: #71717a;
+  font-size: 10px;
+}
+
+.metaCell dd {
+  margin: 4px 0 0;
+  color: #e4e4e7;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.statusOk {
+  color: #6ee7b7;
+}
+
+.statusFail {
+  color: #fca5a5;
+}
+
+.section h3 {
+  margin: 0 0 6px;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.proseBlock {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.32);
+  padding: 10px 12px;
+  color: #d4d4d8;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.modalAction {
+  flex: 1;
+  justify-content: center;
+}

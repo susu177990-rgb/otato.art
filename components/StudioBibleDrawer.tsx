@@ -1,25 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { Artifact, Settings } from "@/lib/types";
 import { auditBibleVsCast } from "@/lib/bible-audit";
-import { downloadSeriesBibleMarkdownFile } from "@/lib/export-artifacts";
+import { downloadSeriesBibleMarkdownFile, downloadCreativeBriefMarkdownFile } from "@/lib/export-artifacts";
 import ArtifactSlotEditor from "./ArtifactSlotEditor";
+import shellStyles from "@/app/shared/shell.module.css";
 
-export type BibleDrawerTab = "bible" | "locale";
+export type BibleDrawerTab = "brief" | "bible" | "locale";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** 当前标签（与顶栏「系列圣经」「英语简报」按钮联动） */
+  /** 当前标签（与顶栏「思路书」「圣经」「简报」按钮联动） */
   drawerTab: BibleDrawerTab;
   onDrawerTabChange: (tab: BibleDrawerTab) => void;
   hasProject: boolean;
   projectId: string;
   projectName: string;
+  /** 《创作思路确认书》立项正文；思路书 tab 可编辑 */
+  creativeBrief: string;
+  onCreativeBriefChange: (next: string) => void;
   seriesBible: string;
-  /** 有则侧栏可触发 LLM 补写圣经 */
-  creativeBrief?: string;
   settings: Settings;
   /** 编剧室是否已有对话或产物（须传 allowWithProgress 才能生成） */
   hasStudioProgress?: boolean;
@@ -41,7 +44,8 @@ export default function StudioBibleDrawer({
   hasProject,
   projectId,
   projectName,
-  creativeBrief = "",
+  creativeBrief,
+  onCreativeBriefChange,
   settings,
   hasStudioProgress = false,
   onOpenSettings,
@@ -146,65 +150,130 @@ export default function StudioBibleDrawer({
 
   if (!open) return null;
 
-  const tabBtn = (id: BibleDrawerTab, label: string) => (
-    <button
-      type="button"
-      onClick={() => onDrawerTabChange(id)}
-      className={[
-        "rounded-md px-2.5 py-1 text-[11px] font-medium transition",
-        drawerTab === id
-          ? "bg-zinc-800 text-zinc-100"
-          : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300",
-      ].join(" ")}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <>
+      <div className={shellStyles.drawerScrim} onClick={onClose} aria-hidden />
       <div
-        className="fixed inset-0 z-[45] bg-black/50 backdrop-blur-[1px]"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl"
+        className={shellStyles.drawerCard}
         role="dialog"
-        aria-label="系列圣经与英语 Locale 简报"
+        aria-label="创作思路确认书、系列圣经与英语简报"
       >
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2.5">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {tabBtn("bible", "系列圣经")}
-            {tabBtn("locale", "英语 Locale")}
+        <div className={shellStyles.drawerHead}>
+          <div className={shellStyles.segmented} aria-label="抽屉视图">
+            <button
+              type="button"
+              onClick={() => onDrawerTabChange("brief")}
+              className={[
+                shellStyles.segmentedItem,
+                drawerTab === "brief" ? shellStyles.segmentedItemActive : "",
+              ].join(" ")}
+            >
+              思路书
+            </button>
+            <button
+              type="button"
+              onClick={() => onDrawerTabChange("bible")}
+              className={[
+                shellStyles.segmentedItem,
+                drawerTab === "bible" ? shellStyles.segmentedItemActive : "",
+              ].join(" ")}
+            >
+              系列圣经
+            </button>
+            <button
+              type="button"
+              onClick={() => onDrawerTabChange("locale")}
+              className={[
+                shellStyles.segmentedItem,
+                drawerTab === "locale" ? shellStyles.segmentedItemActive : "",
+              ].join(" ")}
+            >
+              英语简报
+            </button>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
+            className={shellStyles.iconBtn}
             title="关闭"
+            aria-label="关闭抽屉"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {drawerTab === "bible" ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-            <h2 className="mb-2 shrink-0 text-xs font-semibold text-zinc-400">系列圣经（SSOT）</h2>
-            <p className="mb-3 shrink-0 text-[10px] leading-relaxed text-zinc-500">
-              项目内设定真源；对话与圣经冲突时以本正文为准。默认 Markdown 预览，与产物记录槽位相同，点「编辑」修改。
-            </p>
+        {drawerTab === "brief" ? (
+          <div className={shellStyles.drawerBody}>
+            <div>
+              <h2 className={shellStyles.cardTitle} style={{ fontSize: 13 }}>
+                《创作思路确认书》
+              </h2>
+              <p className={shellStyles.cardSubtitle}>
+                立项对齐后的方向与体量摘要（Markdown）。对话上下文会引用节选；修改后自动写入工程。
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              {projectId ? (
+                <Link
+                  href={`/project/${projectId}/onboarding`}
+                  className={shellStyles.navLink}
+                  onClick={onClose}
+                >
+                  立项页完整编辑…
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                disabled={!hasProject || !creativeBrief.trim()}
+                onClick={() =>
+                  downloadCreativeBriefMarkdownFile(projectName || "未命名项目", creativeBrief)
+                }
+                className={[shellStyles.button, shellStyles.buttonSubtle].join(" ")}
+                title="导出为与 ZIP 内 00-创作思路确认书.txt 一致的 Markdown"
+              >
+                导出 .txt
+              </button>
+            </div>
+
+            <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>
+              <ArtifactSlotEditor
+                label="创作思路确认书正文"
+                value={creativeBrief}
+                onCommit={onCreativeBriefChange}
+                rows={28}
+                textareaClassName="min-h-[min(22rem,42vh)]"
+                placeholder="粘贴或撰写 Markdown…立项策划产出也可整理到此。"
+              />
+            </div>
+          </div>
+        ) : drawerTab === "bible" ? (
+          <div className={shellStyles.drawerBody}>
+            <div>
+              <h2 className={shellStyles.cardTitle} style={{ fontSize: 13 }}>
+                系列圣经（SSOT）
+              </h2>
+              <p className={shellStyles.cardSubtitle}>
+                项目内设定真源；对话与圣经冲突时以本正文为准。默认 Markdown 预览，与产物记录槽位相同，点「编辑」修改。
+              </p>
+            </div>
+
             {bibleEmpty ? (
-              <div className="mb-3 shrink-0 rounded-lg border border-indigo-900/50 bg-indigo-950/30 px-2.5 py-2 text-[10px] leading-relaxed text-indigo-100/90">
-                <p className="mb-1.5 text-indigo-200/80">当前尚无系列圣经正文。</p>
-                <div className="flex flex-wrap items-center gap-2">
+              <div
+                className={[shellStyles.banner, shellStyles.bannerWarn].join(" ")}
+                style={{ padding: "10px 12px" }}
+              >
+                <p style={{ margin: "0 0 8px", fontSize: 11, lineHeight: 1.6 }}>
+                  当前尚无系列圣经正文。
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                   <button
                     type="button"
                     disabled={!canLlmFillBible || llmBibleLoading}
                     onClick={() => void handleLlmGenerateBible()}
-                    className="rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
                   >
                     {llmBibleLoading ? "生成中…" : "用 LLM 生成系列圣经"}
                   </button>
@@ -212,24 +281,25 @@ export default function StudioBibleDrawer({
                     <button
                       type="button"
                       onClick={() => onOpenSettings?.()}
-                      className="text-[11px] text-indigo-300 underline hover:text-indigo-200"
+                      className={shellStyles.navLink}
                     >
                       去填写 API Key
                     </button>
                   ) : null}
                   {!creativeBrief.trim() ? (
-                    <span className="text-zinc-500">需项目已有《创作思路确认书》。</span>
+                    <span className={shellStyles.helpText}>需项目已有《创作思路确认书》。</span>
                   ) : null}
                 </div>
               </div>
             ) : null}
-            <div className="mb-3 flex shrink-0 flex-wrap gap-2">
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {canLlmRewriteBible ? (
                 <button
                   type="button"
                   disabled={llmBibleLoading}
                   onClick={() => void handleLlmRewriteBible()}
-                  className="rounded bg-indigo-700 px-2 py-1 text-[11px] font-medium text-white transition hover:bg-indigo-600 disabled:opacity-50"
+                  className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
                   title="覆盖当前正文，按确认书重新生成完整圣经"
                 >
                   {llmBibleLoading ? "生成中…" : "用 LLM 重新生成系列圣经"}
@@ -241,13 +311,14 @@ export default function StudioBibleDrawer({
                 onClick={() =>
                   downloadSeriesBibleMarkdownFile(projectName || "未命名项目", seriesBible)
                 }
-                className="rounded border border-zinc-600 px-2 py-1 text-[11px] text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                className={[shellStyles.button, shellStyles.buttonSubtle].join(" ")}
                 title="仅导出为 .txt；侧栏编辑仍为 Markdown，内容一致"
               >
                 导出 .txt
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+
+            <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>
               <ArtifactSlotEditor
                 label="系列圣经正文"
                 value={seriesBible}
@@ -257,30 +328,43 @@ export default function StudioBibleDrawer({
                 placeholder="（空）点击「编辑」填写；Markdown。也可用上方「用 LLM 生成 / 重新生成」。"
               />
             </div>
+
             {auditIssues.length > 0 ? (
-              <div className="mt-3 shrink-0 rounded border border-amber-900/60 bg-amber-950/20 px-2 py-1.5 text-[10px] text-amber-100/90">
-                <span className="font-medium">人物名粗检：</span>
+              <div
+                className={[shellStyles.banner, shellStyles.bannerWarn].join(" ")}
+                style={{ padding: "8px 10px" }}
+              >
+                <span style={{ fontWeight: 500 }}>人物名粗检：</span>
                 圣经候选名未在人物产物中找到：{auditIssues.map((x) => x.name).join("、")}
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-            <h2 className="mb-2 shrink-0 text-xs font-semibold text-zinc-400">英语 Locale 简报（STAGE 7 语体）</h2>
-            <p className="mb-3 shrink-0 text-[10px] leading-relaxed text-zinc-500">
-              全剧一份，与系列圣经并列存于工程；用当前设置中的大模型根据立项与设定集摘录起草（与对话同一 API Key）。可手动改后再保存。
-            </p>
+          <div className={shellStyles.drawerBody}>
+            <div>
+              <h2 className={shellStyles.cardTitle} style={{ fontSize: 13 }}>
+                英语 Locale 简报（STAGE 7 语体）
+              </h2>
+              <p className={shellStyles.cardSubtitle}>
+                全剧一份，与系列圣经并列存于工程；用当前设置中的大模型根据立项与设定集摘录起草（与对话同一 API Key）。可手动改后再保存。
+              </p>
+            </div>
+
             {!localeBriefGenerateEnabled ? (
-              <div className="mb-3 shrink-0 rounded-lg border border-amber-900/50 bg-amber-950/25 px-2.5 py-2 text-[10px] text-amber-100/90">
+              <div
+                className={[shellStyles.banner, shellStyles.bannerWarn].join(" ")}
+                style={{ padding: "8px 10px" }}
+              >
                 进入 STAGE 6 大纲阶段后（当前查看阶段 ≥6 或工程已验至 ≥6）可使用下方「生成 / 更新」。在此之前仍可粘贴或编辑正文。
               </div>
             ) : null}
-            <div className="mb-3 flex shrink-0 flex-wrap gap-2">
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <button
                 type="button"
                 disabled={localeGenLoading || !hasApiKey || !localeBriefGenerateEnabled}
                 onClick={() => void handleGenerateLocaleBrief()}
-                className="rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
               >
                 {localeGenLoading ? "生成中…" : "生成 / 更新简报"}
               </button>
@@ -288,13 +372,14 @@ export default function StudioBibleDrawer({
                 <button
                   type="button"
                   onClick={() => onOpenSettings?.()}
-                  className="text-[11px] text-indigo-300 underline hover:text-indigo-200"
+                  className={shellStyles.navLink}
                 >
                   去填写 API Key
                 </button>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+
+            <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>
               <ArtifactSlotEditor
                 label="英语 Locale 简报正文"
                 value={englishLocaleBrief}

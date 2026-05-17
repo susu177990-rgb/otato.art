@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import ApiSettingsToolbarButton from "@/components/ApiSettingsToolbarButton";
+import shellStyles from "./shared/shell.module.css";
 
 function ModeHomeInner() {
   const router = useRouter();
@@ -12,39 +13,41 @@ function ModeHomeInner() {
   useEffect(() => {
     if (!projectParam) return;
     router.replace(`/studio/${projectParam}`);
-    // 与 /project/new 相同：不把 router 放进依赖，避免其引用变化时重复 replace 造成「一直刷新」
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectParam]);
 
   if (projectParam) {
-    return (
-      <div className="flex h-full min-h-[200px] items-center justify-center bg-zinc-950 text-zinc-500">
-        正在跳转…
-      </div>
-    );
+    return <div className={shellStyles.empty}>正在跳转…</div>;
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-zinc-950">
-      <header className="border-b border-zinc-800 px-4 py-6 sm:px-6">
-        <div className="mx-auto flex max-w-lg items-start justify-between gap-4">
-          <div className="min-w-0 flex-1 text-center sm:text-left">
-            <h1 className="text-lg font-semibold tracking-tight text-zinc-100">BL 短剧工作台</h1>
-            <p className="mt-1 text-[12px] text-zinc-500">选择工作模式</p>
+    <main className={shellStyles.page}>
+      <header className={shellStyles.topbar}>
+        <div className={shellStyles.topbarLeft}>
+          <div className={shellStyles.topbarTagline}>
+            <p className={shellStyles.plainDockText}>BL 短剧工作台</p>
           </div>
-          <ApiSettingsToolbarButton className="self-start" />
         </div>
+        <nav className={shellStyles.topnav}>
+          <Link href="/settings" className={shellStyles.navLink}>
+            设置
+          </Link>
+        </nav>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6">
-        <div className="grid w-full max-w-lg gap-4 sm:grid-cols-2 sm:gap-5">
-          <button
-            type="button"
-            onClick={() => router.push("/wattpad")}
-            className="group flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-zinc-600/40 bg-zinc-900/50 p-6 text-center transition hover:border-amber-600/35 hover:bg-zinc-900/80"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-800 text-amber-500/90 transition group-hover:bg-amber-950/40 group-hover:text-amber-400">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <div className={shellStyles.heroWrap}>
+        <div style={{ maxWidth: 720, width: "100%", textAlign: "center" }}>
+          <h1 className={shellStyles.heroTitle}>选择工作模式</h1>
+          <p className={shellStyles.heroSubtitle}>剧本立项 · 网文素材 · 模式化生图</p>
+        </div>
+
+        <div
+          className={shellStyles.tileGrid}
+          style={{ marginTop: 32, maxWidth: 720 }}
+        >
+          <button type="button" onClick={() => router.push("/wattpad")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -52,17 +55,13 @@ function ModeHomeInner() {
                 />
               </svg>
             </span>
-            <span className="mt-4 text-sm font-semibold text-zinc-100">扒网文</span>
-            <span className="mt-1 text-[11px] text-zinc-500">Wattpad 搜索与导出</span>
+            <p className={shellStyles.tileTitle}>扒网文</p>
+            <p className={shellStyles.tileMeta}>Wattpad 搜索与导出</p>
           </button>
 
-          <button
-            type="button"
-            onClick={() => router.push("/projects")}
-            className="group flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-indigo-500/25 bg-zinc-900/50 p-6 text-center shadow-lg shadow-indigo-950/20 transition hover:border-indigo-400/40 hover:bg-zinc-900/80"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600/90 text-white transition group-hover:bg-indigo-500">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <button type="button" onClick={() => router.push("/projects")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -70,24 +69,32 @@ function ModeHomeInner() {
                 />
               </svg>
             </span>
-            <span className="mt-4 text-sm font-semibold text-zinc-100">创作剧本</span>
-            <span className="mt-1 text-[11px] text-zinc-500">项目列表 · 新建后进入立项</span>
+            <p className={shellStyles.tileTitle}>创作剧本</p>
+            <p className={shellStyles.tileMeta}>项目列表 · 立项 · 编剧室</p>
+          </button>
+
+          <button type="button" onClick={() => router.push("/image")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>作图</p>
+            <p className={shellStyles.tileMeta}>模式化生图 · 画廊</p>
           </button>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
 
 export default function Home() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full min-h-[200px] items-center justify-center bg-zinc-950 text-zinc-500">
-          加载中…
-        </div>
-      }
-    >
+    <Suspense fallback={<div className={shellStyles.empty}>加载中…</div>}>
       <ModeHomeInner />
     </Suspense>
   );

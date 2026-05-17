@@ -1,0 +1,76 @@
+/* PlanningChatPanel — 立项 / 改编讨论侧的聊天面板。chrome 由本模块定义；
+ * 输入控件、按钮、消息泡均使用 shell tokens。 */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 8, 0.5);
+  overflow: hidden;
+}
+
+.shellFixed {
+  height: min(560px, 64vh);
+  max-height: 64vh;
+}
+
+.shellFlow {
+  flex: 1;
+  min-height: 320px;
+}
+
+.head {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #71717a;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.emptyHint {
+  padding: 32px 8px;
+  text-align: center;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.foot {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inputArea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  max-height: 66px;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  border-radius: 12px;
+}

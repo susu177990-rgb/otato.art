@@ -1,0 +1,102 @@
+/* ChatWindow — 编剧室左侧并排玻璃卡内部。
+ * 外层 .sideCard（shell tokens）已提供 glass + 圆角 + 阴影；本组件不再画自己的底色，
+ * 只控内部消息流、空态居中、输入条与圆形发送键。 */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: transparent;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 14px 12px;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inputBar {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 14px;
+  background: transparent;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inputArea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  max-height: 66px;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  border-radius: 16px;
+}
+
+.sendBtn {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  border: 0;
+  background: #fafafa;
+  color: #09090b;
+  cursor: pointer;
+  box-shadow: 0 1px 8px rgba(255, 255, 255, 0.18);
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.sendBtn:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.sendBtn:disabled {
+  cursor: not-allowed;
+  background: rgba(63, 63, 70, 0.6);
+  color: #71717a;
+  box-shadow: none;
+}
+
+.spin {
+  animation: chatSpin 800ms linear infinite;
+}
+
+@keyframes chatSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

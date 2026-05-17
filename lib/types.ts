@@ -96,6 +96,12 @@ export interface ProjectSummary {
   currentStage: number;
   onboardingStatus?: OnboardingStatus;
   originMode?: OriginMode;
+  /** 已验收的最高 STAGE，用于列表卡 metaPill */
+  maxApprovedStage?: number;
+  /** ProjectMeta.episodeCount 直接透传，列表卡用 */
+  episodeCount?: string;
+  /** 是否已有非空系列圣经 */
+  seriesBibleFilled?: boolean;
 }
 
 /** 公司内部默认网关与 Key；模型可被用户改为快捷列表中的其它项并存入 localStorage。 */

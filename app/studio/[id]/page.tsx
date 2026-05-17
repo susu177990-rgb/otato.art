@@ -20,6 +20,7 @@ import {
 import { detectStage, detectStageFromContent } from "@/lib/stage-detect";
 import { evaluateStageGate } from "@/lib/stage-gate";
 import { buildProjectContext } from "@/lib/project-context";
+import { downloadArtifactsZip } from "@/lib/export-artifacts";
 import { SOURCE_ANALYSIS_CONTEXT_CHARS } from "@/lib/source-materials";
 import { getStudioAutoStageUserMessage, STUDIO_AUTO_STAGE1_USER_MESSAGE } from "@/lib/studio-auto-kickoff";
 import {
@@ -46,10 +47,11 @@ import {
 } from "@/lib/artifact-extract";
 import ChatWindow, { type ChatWindowHandle } from "@/components/ChatWindow";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import ApiSettingsToolbarButton from "@/components/ApiSettingsToolbarButton";
 import ArtifactPanel from "@/components/ArtifactPanel";
-import StudioProcessRail from "@/components/StudioProcessRail";
+import StudioStageStrip from "@/components/StudioStageStrip";
 import StudioBibleDrawer, { type BibleDrawerTab } from "@/components/StudioBibleDrawer";
+import shellStyles from "../../shared/shell.module.css";
+import styles from "./studio-page.module.css";
 
 function normalizeMeta(p: Project): ProjectMeta {
   const m = p.meta;
@@ -86,7 +88,6 @@ function StudioInner() {
   const [projectOriginMode, setProjectOriginMode] = useState<OriginMode>("original");
   const [projectSourceAnalysis, setProjectSourceAnalysis] = useState("");
 
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [bibleDrawerOpen, setBibleDrawerOpen] = useState(false);
   const [bibleDrawerTab, setBibleDrawerTab] = useState<BibleDrawerTab>("bible");
   const [chatLoading, setChatLoading] = useState(false);
@@ -99,6 +100,7 @@ function StudioInner() {
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const seriesBibleSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const englishLocaleBriefSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const creativeBriefSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const artifactsRef = useRef(artifacts);
   const pipelineAbortRef = useRef(false);
   const pipelineStageOverrideRef = useRef(0);
@@ -106,6 +108,12 @@ function StudioInner() {
   const [fullAutoEnabled, setFullAutoEnabled] = useState(false);
   const [fullAutoStage, setFullAutoStage] = useState(0);
   const fullAutoAbortRef = useRef(false);
+
+  // 顶栏「分集体检」+「导出 ZIP」相关 state（原 ArtifactPanel 内部，已上提）
+  const [exportingZip, setExportingZip] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsResult, setStatsResult] = useState<string | null>(null);
 
   useEffect(() => {
     artifactsRef.current = artifacts;
@@ -259,6 +267,24 @@ function StudioInner() {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ englishLocaleBrief: next }),
+          });
+        } catch {}
+      }, 600);
+    },
+    [projectId]
+  );
+
+  const handleCreativeBriefChange = useCallback(
+    (next: string) => {
+      setCreativeBrief(next);
+      if (!projectId) return;
+      if (creativeBriefSaveTimerRef.current) clearTimeout(creativeBriefSaveTimerRef.current);
+      creativeBriefSaveTimerRef.current = setTimeout(async () => {
+        try {
+          await fetch(`/api/projects/${projectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ creativeBrief: next }),
           });
         } catch {}
       }, 600);
@@ -773,6 +799,57 @@ function StudioInner() {
     [handleStartPipeline, handleStartOutlinePipeline]
   );
 
+  // ----- 顶栏「分集体检」+「导出 ZIP」 -----
+  const stage7Artifacts = useMemo(
+    () => artifacts.filter((a) => a.stage === 7),
+    [artifacts]
+  );
+  const canEpisodeCheck = Boolean(projectId) && stage7Artifacts.length > 0;
+  const hasBriefForExport = Boolean(creativeBrief.trim());
+  const hasBibleForExport = Boolean(seriesBible.trim());
+  const canExport =
+    Boolean(projectId) &&
+    !exportingZip &&
+    (artifacts.length > 0 || hasBriefForExport || hasBibleForExport);
+
+  const handleExportZip = useCallback(async () => {
+    if (!canExport) return;
+    setExportingZip(true);
+    try {
+      await downloadArtifactsZip(projectName || "未命名项目", artifacts, {
+        creativeBrief: creativeBrief.trim() || undefined,
+        seriesBible: seriesBible.trim() || undefined,
+      });
+    } catch (e) {
+      console.error(e);
+      alert("导出失败，请稍后重试。");
+    } finally {
+      setExportingZip(false);
+    }
+  }, [canExport, projectName, artifacts, creativeBrief, seriesBible]);
+
+  const handleEpisodeCheck = useCallback(async () => {
+    if (!canEpisodeCheck) return;
+    const text = stage7Artifacts.map((a) => `## ${a.label}\n\n${a.content}`).join("\n\n---\n\n");
+    setStatsLoading(true);
+    setStatsResult(null);
+    setStatsOpen(true);
+    try {
+      const res = await fetch("/api/episode-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setStatsResult(JSON.stringify(data, null, 2));
+    } catch (e) {
+      setStatsResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [canEpisodeCheck, stage7Artifacts]);
+
   function handleMessagesChange(newMessages: Message[]) {
     setMessages(newMessages);
     const stage = detectStage(newMessages);
@@ -916,122 +993,86 @@ function StudioInner() {
 
   if (!projectId) {
     return (
-      <div className="flex h-full flex-col bg-zinc-950 text-zinc-500">
-        <header className="flex justify-end border-b border-zinc-800 px-4 py-2">
-          <ApiSettingsToolbarButton />
-        </header>
-        <div className="flex flex-1 items-center justify-center">无效的项目 ID</div>
-      </div>
+      <main className={shellStyles.page}>
+        <div className={shellStyles.empty}>无效的项目 ID</div>
+      </main>
     );
   }
 
   if (loadError) {
     return (
-      <div className="flex h-full flex-col bg-zinc-950 text-zinc-400">
-        <header className="flex items-center justify-end gap-2 border-b border-zinc-800 px-4 py-2">
-          <ApiSettingsToolbarButton />
-        </header>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4">
-          <p>{loadError}</p>
-          <Link href="/projects" className="text-indigo-400 hover:underline">
-            返回项目页
-          </Link>
+      <main className={shellStyles.page}>
+        <div className={shellStyles.empty}>
+          <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <span>{loadError}</span>
+            <Link href="/projects" className={shellStyles.navLink}>
+              返回项目页
+            </Link>
+          </span>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!initialLoadComplete) {
     return (
-      <div className="flex h-full flex-col bg-zinc-950">
-        <header className="flex items-center justify-between gap-2 border-b border-zinc-800 px-4 py-2.5">
-          <Link
-            href="/projects"
-            className="inline-block rounded-lg border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-          >
-            返回项目页
-          </Link>
-          <ApiSettingsToolbarButton />
+      <main className={shellStyles.page}>
+        <header className={shellStyles.topbar}>
+          <div className={shellStyles.topbarLeft}>
+            <Link href="/projects" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+              返回项目页
+            </Link>
+          </div>
         </header>
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">加载项目…</div>
-      </div>
+        <div className={shellStyles.empty}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span className={shellStyles.spinner} aria-hidden /> 加载项目…
+          </span>
+        </div>
+      </main>
     );
   }
 
+  const switchDisabled = !projectId || !settings.apiKey || (onboardingStatus != null && onboardingStatus !== "ready");
+  const isAutoError = !fullAutoEnabled && pipelineProgress?.status === "error" && fullAutoStage > 0;
+  const autoSwitchClass = fullAutoEnabled
+    ? [styles.autoSwitch, styles.autoSwitchActive].join(" ")
+    : isAutoError
+      ? [styles.autoSwitch, styles.autoSwitchError].join(" ")
+      : styles.autoSwitch;
+  const autoLabelClass = fullAutoEnabled
+    ? [styles.autoLabel, styles.autoLabelActive].join(" ")
+    : isAutoError
+      ? [styles.autoLabel, styles.autoLabelError].join(" ")
+      : styles.autoLabel;
+
   return (
-    <div className="flex h-full flex-col">
-      <header className="border-b border-zinc-800">
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <Link
-              href="/projects"
-              className="shrink-0 rounded-lg border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-            >
-              返回项目页
-            </Link>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-              BL
-            </div>
-            <h1 className="truncate text-sm font-semibold text-zinc-200">短剧编剧室</h1>
-            <span className="truncate text-xs text-zinc-500">· {projectName || "…"}</span>
+    <main className={shellStyles.page}>
+      <header className={shellStyles.topbar}>
+        <div className={[shellStyles.topbarLeft, styles.topbarLeftCompact].join(" ")}>
+          <Link href="/projects" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+            返回
+          </Link>
+          <div className={styles.titleStack}>
+            <span className={styles.titleSub}>{projectName || "…"}</span>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {(() => {
-              const switchDisabled = !projectId || !settings.apiKey || (onboardingStatus != null && onboardingStatus !== "ready");
-              const isError = !fullAutoEnabled && pipelineProgress?.status === "error" && fullAutoStage > 0;
-              return (
-                <div className="flex items-center gap-1.5" title={
-                  switchDisabled
-                    ? "请先完成立项并配置 API Key"
-                    : fullAutoEnabled
-                      ? "关闭：暂停全自动流水线"
-                      : "开启：STAGE 1~7 全自动流水线（Gate 通过即自动验收并推进）"
-                }>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={fullAutoEnabled}
-                    disabled={switchDisabled}
-                    onClick={handleToggleFullAuto}
-                    className={[
-                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40",
-                      fullAutoEnabled
-                        ? "bg-emerald-600"
-                        : isError
-                          ? "bg-red-700"
-                          : "bg-zinc-700",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform duration-200",
-                        fullAutoEnabled ? "translate-x-4" : "translate-x-0.5",
-                      ].join(" ")}
-                    />
-                  </button>
-                  <span className={[
-                    "text-[11px] font-medium select-none",
-                    fullAutoEnabled
-                      ? "text-emerald-300"
-                      : isError
-                        ? "text-red-300"
-                        : "text-zinc-400",
-                  ].join(" ")}>
-                    {fullAutoEnabled
-                      ? <>
-                          <span className="relative mr-1 inline-flex h-1.5 w-1.5 align-middle">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          </span>
-                          自动 S{fullAutoStage || "…"}
-                        </>
-                      : isError
-                        ? `S${fullAutoStage} 出错`
-                        : "全自动"}
-                  </span>
-                </div>
-              );
-            })()}
+        </div>
+
+        <div className={styles.stageStripCluster}>
+          <div className={styles.prePipelineNav} aria-label="立项前置资料">
+            <button
+              type="button"
+              onClick={() => {
+                setBibleDrawerTab("brief");
+                setBibleDrawerOpen(true);
+              }}
+              disabled={!projectId}
+              className={shellStyles.stageStripTile}
+              title="《创作思路确认书》：立项方向与体量（Markdown）"
+            >
+              <span>思路书</span>
+              <span className={shellStyles.stageStripDot} aria-hidden />
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -1039,10 +1080,11 @@ function StudioInner() {
                 setBibleDrawerOpen(true);
               }}
               disabled={!projectId}
-              className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className={shellStyles.stageStripTile}
               title="项目设定真源（SSOT）"
             >
-              系列圣经
+              <span>圣经</span>
+              <span className={shellStyles.stageStripDot} aria-hidden />
             </button>
             <button
               type="button"
@@ -1051,46 +1093,113 @@ function StudioInner() {
                 setBibleDrawerOpen(true);
               }}
               disabled={!projectId}
-              className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className={shellStyles.stageStripTile}
               title="全剧英语对白语体简报（与系列圣经同抽屉）"
             >
-              英语简报
+              <span>简报</span>
+              <span className={shellStyles.stageStripDot} aria-hidden />
             </button>
-            <ApiSettingsToolbarButton />
           </div>
+          <StudioStageStrip
+            key={projectId || "none"}
+            artifacts={artifacts}
+            currentStage={currentStage}
+            viewStage={viewStage}
+            onViewStageChange={setViewStage}
+            maxApprovedStage={maxApprovedStage}
+            gateOverrideNote={gateOverrideNote}
+            onGateOverrideMark={handleGateOverrideMark}
+            episodeCount={projectMeta?.episodeCount ? parseTargetEpisodeCount(projectMeta.episodeCount) ?? undefined : undefined}
+          />
         </div>
-        {onboardingStatus && onboardingStatus !== "ready" && (
-          <div className="border-t border-zinc-800/80 px-4 py-2">
-            <div className="rounded border border-amber-800/60 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/90">
-              立项未完成（{onboardingStatus === "pending_setup" ? "待填写" : "策划中"}）。
-              <Link
-                href={`/project/${projectId}/onboarding`}
-                className="ml-1 underline text-indigo-300 hover:text-indigo-200"
-              >
-                去立项页
-              </Link>
-            </div>
+
+        <nav className={[shellStyles.topnav, styles.topnavCompact].join(" ")}>
+          <div
+            className={styles.autoCluster}
+            title={
+              switchDisabled
+                ? "请先完成立项并配置 API Key"
+                : fullAutoEnabled
+                  ? "关闭：暂停全自动流水线"
+                  : "开启：STAGE 1~7 全自动流水线（Gate 通过即自动验收并推进）"
+            }
+          >
+            <button
+              type="button"
+              role="switch"
+              aria-checked={fullAutoEnabled}
+              disabled={switchDisabled}
+              onClick={handleToggleFullAuto}
+              className={autoSwitchClass}
+            >
+              <span aria-hidden />
+            </button>
+            <span className={autoLabelClass}>
+              {fullAutoEnabled ? (
+                <>
+                  <span className={styles.autoDot} aria-hidden />
+                  自动 S{fullAutoStage || "…"}
+                </>
+              ) : isAutoError ? (
+                `S${fullAutoStage} 出错`
+              ) : (
+                "全自动"
+              )}
+            </span>
           </div>
-        )}
-        {creativeBrief.trim() &&
-        !seriesBible.trim() &&
-        (messages.length > 0 || artifacts.length > 0) ? (
-          <div className="border-t border-zinc-800/80 px-4 py-2">
-            <div className="rounded border border-amber-800/60 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-100/90">
-              检测到已有对话或产物但系列圣经仍为空。请到立项页补生成系列圣经，或在顶栏「系列圣经」抽屉中用 LLM 生成。
-              <Link
-                href={`/project/${projectId}/onboarding`}
-                className="ml-1 underline text-indigo-300 hover:text-indigo-200"
-              >
-                去立项页
-              </Link>
-            </div>
-          </div>
-        ) : null}
+          <button
+            type="button"
+            onClick={() => void handleEpisodeCheck()}
+            disabled={!canEpisodeCheck}
+            className={shellStyles.navLink}
+            title={
+              !projectId
+                ? "请先选择项目"
+                : stage7Artifacts.length === 0
+                  ? "暂无分集产物，无法体检"
+                  : "分集体检：汉字量、估时等（启发式，对齐 tools/episode-stats）"
+            }
+          >
+            体检
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportZip()}
+            disabled={!canExport}
+            className={shellStyles.navLink}
+            title={
+              !projectId
+                ? "请先选择项目"
+                : !hasBriefForExport && !hasBibleForExport && artifacts.length === 0
+                  ? "暂无产物、圣经或确认书可导出"
+                  : "打包下载 ZIP（含立项文档与各阶段产物，正文为 Markdown）"
+            }
+          >
+            {exportingZip ? "打包中…" : "ZIP"}
+          </button>
+        </nav>
       </header>
 
-      <main className="flex flex-1 overflow-hidden">
-        <div className="w-[380px] shrink-0 overflow-hidden border-r border-zinc-800">
+      {onboardingStatus && onboardingStatus !== "ready" ? (
+        <div className={styles.banner}>
+          <div className={styles.bannerInner}>
+            立项未完成（{onboardingStatus === "pending_setup" ? "待填写" : "策划中"}）。
+            <Link href={`/project/${projectId}/onboarding`}>去立项页</Link>
+          </div>
+        </div>
+      ) : null}
+
+      {creativeBrief.trim() && !seriesBible.trim() && (messages.length > 0 || artifacts.length > 0) ? (
+        <div className={styles.banner}>
+          <div className={styles.bannerInner}>
+            检测到已有对话或产物但系列圣经仍为空。请到立项页补生成系列圣经，或在顶栏「系列圣经」抽屉中用 LLM 生成。
+            <Link href={`/project/${projectId}/onboarding`}>去立项页</Link>
+          </div>
+        </div>
+      ) : null}
+
+      <section className={shellStyles.canvasStage}>
+        <aside className={shellStyles.sideCard}>
           <ChatWindow
             ref={chatRef}
             settings={settings}
@@ -1103,17 +1212,14 @@ function StudioInner() {
             autoKickoffUserMessage={studioAutoKickoffMessage}
             onLoadingChange={setChatLoading}
           />
-        </div>
+        </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-1">
+        <div className={shellStyles.canvasCard}>
           <ArtifactPanel
-            projectName={projectName || "未命名项目"}
             hasProject={!!projectId}
             artifacts={artifacts}
             currentStage={currentStage}
             viewStage={viewStage}
-            collapsed={panelCollapsed}
-            onToggle={() => setPanelCollapsed(!panelCollapsed)}
             onReExtractStage={handleReExtractStage}
             onArtifactUpsert={handleArtifactUpsert}
             onArtifactRemove={handleArtifactRemove}
@@ -1124,22 +1230,57 @@ function StudioInner() {
             pipelineProgress={viewStage === 6 || viewStage === 7 ? pipelineProgress : null}
             onPausePipeline={handlePausePipeline}
             onResumePipeline={handleResumePipeline}
-            creativeBrief={creativeBrief}
-            seriesBible={seriesBible}
-          />
-          <StudioProcessRail
-            key={projectId || "none"}
-            artifacts={artifacts}
-            currentStage={currentStage}
-            viewStage={viewStage}
-            onViewStageChange={setViewStage}
-            maxApprovedStage={maxApprovedStage}
-            gateOverrideNote={gateOverrideNote}
-            onGateOverrideMark={handleGateOverrideMark}
-            episodeCount={projectMeta?.episodeCount ? parseTargetEpisodeCount(projectMeta.episodeCount) ?? undefined : undefined}
           />
         </div>
-      </main>
+      </section>
+
+      {statsOpen && (
+        <div
+          className={shellStyles.modalScrim}
+          onClick={() => setStatsOpen(false)}
+          role="presentation"
+        >
+          <div
+            className={shellStyles.modalCard}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="分集体检结果"
+          >
+            <div className={shellStyles.modalHead}>
+              <h2 className={shellStyles.modalTitle}>分集体检</h2>
+              <button
+                type="button"
+                onClick={() => setStatsOpen(false)}
+                className={[shellStyles.button, shellStyles.buttonSubtle].join(" ")}
+              >
+                关闭
+              </button>
+            </div>
+            {statsLoading ? (
+              <p className={shellStyles.helpText}>计算中…</p>
+            ) : (
+              <pre
+                className={shellStyles.mono}
+                style={{
+                  margin: 0,
+                  maxHeight: "60vh",
+                  overflow: "auto",
+                  whiteSpace: "pre-wrap",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  background: "rgba(0, 0, 0, 0.32)",
+                  padding: 12,
+                  fontSize: 11,
+                  lineHeight: 1.6,
+                  color: "#d4d4d8",
+                }}
+              >
+                {statsResult}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
 
       <StudioBibleDrawer
         open={bibleDrawerOpen}
@@ -1150,6 +1291,7 @@ function StudioInner() {
         projectId={projectId}
         projectName={projectName || "未命名项目"}
         creativeBrief={creativeBrief}
+        onCreativeBriefChange={handleCreativeBriefChange}
         settings={settings}
         hasStudioProgress={messages.length > 0 || artifacts.length > 0}
         onOpenSettings={openSettings}
@@ -1160,20 +1302,13 @@ function StudioInner() {
         onEnglishLocaleBriefChange={handleEnglishLocaleBriefChange}
         localeBriefGenerateEnabled={viewStage >= 6 || maxApprovedStage >= 6}
       />
-
-    </div>
+    </main>
   );
 }
 
 export default function StudioPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full min-h-[200px] items-center justify-center bg-zinc-950 text-zinc-500">
-          加载中…
-        </div>
-      }
-    >
+    <Suspense fallback={<div className={shellStyles.empty}>加载中…</div>}>
       <StudioInner />
     </Suspense>
   );

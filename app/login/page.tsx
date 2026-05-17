@@ -2,6 +2,7 @@
 
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import shellStyles from "../shared/shell.module.css";
 
 function LoginInner() {
   const searchParams = useSearchParams();
@@ -32,53 +33,60 @@ function LoginInner() {
   }
 
   return (
-    <main className="flex min-h-full items-center justify-center bg-zinc-950 px-4 py-10 text-zinc-100">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl shadow-black/30"
-      >
-        <div className="mb-5">
-          <h1 className="text-lg font-semibold tracking-tight">剧本工作台</h1>
-          <p className="mt-1 text-xs text-zinc-500">请输入访问密码</p>
+    <main className={shellStyles.page}>
+      <header className={shellStyles.topbar}>
+        <div className={shellStyles.topbarLeft}>
+          <div className={shellStyles.topbarTagline}>
+            <p className={shellStyles.plainDockText}>剧本工作台 · 登录</p>
+          </div>
         </div>
+      </header>
 
-        <label className="block text-xs font-medium text-zinc-400" htmlFor="site-password">
-          密码
-        </label>
-        <input
-          id="site-password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoFocus
-          className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500"
-          placeholder="输入密码"
-        />
-        {error ? <p className="mt-3 text-xs text-red-400">{error}</p> : null}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-5 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+      <div className={shellStyles.heroWrap}>
+        <form
+          onSubmit={handleSubmit}
+          className={shellStyles.card}
+          style={{ width: "min(380px, 100%)" }}
         >
-          {submitting ? "验证中..." : "进入"}
-        </button>
-      </form>
+          <div className={shellStyles.cardHead}>
+            <div>
+              <h1 className={shellStyles.cardTitle}>请输入访问密码</h1>
+              <p className={shellStyles.cardSubtitle}>密码由站点管理员设置</p>
+            </div>
+          </div>
+
+          <label className={shellStyles.field}>
+            <span className={shellStyles.fieldLabel}>密码</span>
+            <input
+              id="site-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              placeholder="输入密码"
+              className={shellStyles.input}
+            />
+          </label>
+
+          {error ? <p className={shellStyles.banner + " " + shellStyles.bannerError}>{error}</p> : null}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+          >
+            {submitting ? "验证中…" : "进入"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-full items-center justify-center bg-zinc-950 text-zinc-500">
-          加载中...
-        </main>
-      }
-    >
+    <Suspense fallback={<div className={shellStyles.empty}>加载中…</div>}>
       <LoginInner />
     </Suspense>
   );
 }
-

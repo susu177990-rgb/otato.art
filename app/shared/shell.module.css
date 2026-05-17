@@ -1,0 +1,1265 @@
+/* Shared App Shell — primitives 复用语言
+ * 所有路由 (`/`, `/login`, `/projects`, `/project/new`, `/project/[id]/onboarding`,
+ * `/studio/[id]`, `/wattpad`, `/image`, `/image/gallery`, `/settings`) 都基于这里定义的
+ * page / topbar / navLink / plainDockText / dockTextLink / segmented / card / field / button 体系。
+ * 详见 DESIGN.md：Visual language + Components。 */
+
+/* ---------- Page shell ---------- */
+
+.page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(39, 39, 42, 0.52), rgba(5, 5, 6, 0) 34%),
+    linear-gradient(180deg, #070708 0%, #030304 100%);
+  color: #f4f4f5;
+}
+
+/* `.body` 是 flex column 的可滚动子容器，跟 `.page` 配合时由它独占滚动条，
+   topbar 自然「钉」在最顶。 */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 24px 40px;
+}
+
+.bodyTight {
+  padding: 16px 20px 28px;
+}
+
+/* `.shell` 居中布局，最大 1180px；卡片型表单/列表用它收窄阅读宽度。 */
+.shell {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.shellWide {
+  max-width: 1180px;
+}
+
+.shellNarrow {
+  max-width: 720px;
+}
+
+@media (max-width: 1100px) {
+  .body {
+    padding: 16px 16px 32px;
+  }
+}
+
+/* ---------- Topbar ---------- */
+
+.topbar {
+  position: relative;
+  z-index: 40;
+  flex-shrink: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(5, 5, 6, 0.82);
+  backdrop-filter: blur(20px);
+}
+
+.topbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.topbarLeft > a.plainDockText {
+  flex-shrink: 0;
+}
+
+.topbarTagline {
+  min-width: 0;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- Text-only nav links（顶栏左侧文本族） ---------- */
+
+.plainDockText {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.dockTextLink {
+  display: inline-block;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.dockTextLink:hover {
+  color: #fafafa;
+}
+
+.dockTextLink:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------- Pills (navLink + 变体) ---------- */
+
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d4d4d8;
+  font-family: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.navLink:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.navLink:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.navLink:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 主操作（白底深字）；用于「保存 / 进入 / 确定」 */
+.navLinkPrimary {
+  background: #fafafa;
+  color: #09090b;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 8px rgba(255, 255, 255, 0.14);
+}
+
+.navLinkPrimary:hover:not(:disabled) {
+  background: #ffffff;
+  color: #09090b;
+}
+
+/* 危险操作（红边红字、红半透明底） */
+.navLinkDanger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.navLinkDanger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+/* ---------- Segmented control（替代旧 modelTabs） ---------- */
+
+.segmented {
+  display: inline-flex;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.segmentedItem {
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  padding: 7px 14px;
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.segmentedItem:hover {
+  color: #e4e4e7;
+}
+
+.segmentedItemActive {
+  background: #fafafa;
+  color: #09090b;
+  box-shadow: 0 1px 8px rgba(255, 255, 255, 0.14);
+}
+
+.segmentedItemActive:hover {
+  color: #09090b;
+}
+
+/* ---------- Card / Section ---------- */
+
+.card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardCompact {
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.cardSubtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #71717a;
+}
+
+/* ---------- Form fields ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px 12px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: #52525b;
+}
+
+.inputCompact {
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.55;
+  min-height: 120px;
+}
+
+/* 编剧室 / 策划对话底部 composer：不占表单大块 textarea 的 min-height。
+ * 垂直尺寸与 lib/composer-autosize.ts（单行～三行上限）保持同步：padding 5+5、边框 1+1、13px/1.35 行高。 */
+.textareaComposer {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 5px 10px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  outline: none;
+  transition: border-color 140ms ease, background 140ms ease;
+  resize: none;
+}
+
+.textareaComposer:focus {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.textareaComposer::placeholder {
+  color: #52525b;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.rowFull {
+  grid-column: 1 / -1;
+}
+
+.checkboxRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #d4d4d8;
+}
+
+.checkboxRow input[type="checkbox"] {
+  accent-color: #fafafa;
+}
+
+/* ---------- Buttons (form submit / inline action) ---------- */
+
+.button {
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.28);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.button:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: #fafafa;
+  color: #09090b;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 38px rgba(255, 255, 255, 0.14);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: #ffffff;
+  color: #09090b;
+}
+
+.buttonDanger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.buttonDanger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+.buttonSubtle {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 11px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.buttonSubtle:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.045);
+  color: #fafafa;
+}
+
+/* ---------- Banners (info/success/warn/error) ---------- */
+
+.banner {
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: #d4d4d8;
+}
+
+.bannerInfo {
+  border-color: rgba(99, 102, 241, 0.32);
+  background: rgba(49, 46, 129, 0.18);
+  color: #c7d2fe;
+}
+
+.bannerSuccess {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(6, 78, 59, 0.22);
+  color: #a7f3d0;
+}
+
+.bannerWarn {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.22);
+  color: #fde68a;
+}
+
+.bannerError {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+/* ---------- Misc ---------- */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  color: #52525b;
+  font-size: 13px;
+}
+
+.savedHint {
+  color: #6ee7b7;
+  font-size: 11px;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 11px;
+  color: #71717a;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.statusDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #71717a;
+}
+
+.statusDotOk {
+  background: #34d399;
+}
+
+.statusDotWarn {
+  background: #f59e0b;
+}
+
+.statusDotErr {
+  background: #f87171;
+}
+
+/* 小型加载圈，可贴在按钮 / 文字旁 */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fafafa;
+  animation: shellSpin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes shellSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Hero block (home / login) ---------- */
+
+.heroWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px 48px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fafafa;
+  text-align: center;
+}
+
+.heroSubtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #71717a;
+  text-align: center;
+}
+
+/* ---------- Tile (mode-select / list cards) ---------- */
+
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  padding: 22px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
+  color: #e4e4e7;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.tile:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tile:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.tileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+
+.tileTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.tileMeta {
+  margin: 0;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+/* ---------- Bigger spinner（覆盖在 stage 上的「加载」） ---------- */
+
+.bigSpinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fafafa;
+  animation: shellSpin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ---------- Chat bubble（替代 indigo MessageBubble） ---------- */
+
+.bubbleRow {
+  display: flex;
+  width: 100%;
+}
+
+.bubbleRowUser {
+  justify-content: flex-end;
+}
+
+.bubbleRowAssistant {
+  justify-content: flex-start;
+}
+
+.bubbleUser {
+  max-width: 92%;
+  border-radius: 16px;
+  background: #fafafa;
+  color: #18181b;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+.bubbleAssistant {
+  max-width: 92%;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e4e4e7;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  backdrop-filter: blur(8px);
+}
+
+.bubbleAssistant .markdown {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ---------- Thin process rail (44px) ---------- */
+
+.thinRail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 44px;
+  flex-shrink: 0;
+  height: 100%;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 8, 0.55);
+  backdrop-filter: blur(20px);
+  padding: 8px 4px;
+  overflow: hidden;
+}
+
+.thinRailHeader {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.thinRailHeaderLabel {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.thinRailHeaderValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.thinRailBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 6px;
+}
+
+.thinRailItem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.thinRailItem:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+}
+
+.thinRailItemActive {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: #fafafa;
+  color: #09090b;
+}
+
+.thinRailItemActive:hover {
+  background: #ffffff;
+  color: #09090b;
+}
+
+.thinRailItemInferred {
+  color: #fafafa;
+}
+
+.thinRailItemDot {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #52525b;
+}
+
+.thinRailFootHint {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 9px;
+  color: #f59e0b;
+  padding: 4px 2px 0;
+  line-height: 1.3;
+}
+
+/* ---------- Canvas backdrop + floating glass cards (studio main) ---------- */
+
+/* 整张主区背景，不画边框，所有玻璃卡片作为 flex 子项并排漂在其上。 */
+.canvasStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  padding: 16px 24px 24px;
+}
+
+/* 侧栏卡（编剧室聊天等）：固定宽度，玻璃外壳。 */
+.sideCard {
+  flex-shrink: 0;
+  width: 380px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 8, 0.55);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+/* 主产物卡：占满剩余空间，玻璃外壳，与 sideCard 同视觉权重。 */
+.canvasCard {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 8, 0.55);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+/* ---------- Stage strip (single-row, top-bar) ---------- */
+
+/* 顶栏内嵌的 7 阶段段控；与 navLink 同一行使用，不带边框。 */
+.stageStrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+  overflow-x: auto;
+}
+
+.stageStripTile {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  white-space: nowrap;
+}
+
+.stageStripTile:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+}
+
+.stageStripTile:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.stageStripTile:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stageStripTileActive {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: #fafafa;
+  color: #09090b;
+}
+
+.stageStripTileActive:hover:not(:disabled) {
+  background: #ffffff;
+  color: #09090b;
+}
+
+.stageStripTileInferred {
+  color: #fafafa;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.stageStripIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.stageStripTileActive .stageStripIndex {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.stageStripCount {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.stageStripDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #52525b;
+  flex-shrink: 0;
+}
+
+/* 顶栏 Stage popover：从 stage tile 下方滑出。 */
+.stagePopover {
+  position: absolute;
+  z-index: 50;
+  min-width: 280px;
+  max-width: 320px;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 9, 0.96);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.55);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #e4e4e7;
+}
+
+/* ---------- Floater / Popover ---------- */
+
+.floater {
+  position: fixed;
+  z-index: 60;
+  width: 280px;
+  max-height: 70vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 9, 0.94);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #e4e4e7;
+}
+
+.floaterTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.floaterSubtitle {
+  margin: 0;
+  font-size: 10px;
+  color: #71717a;
+  line-height: 1.5;
+}
+
+.floaterList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.floaterListItem {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #d4d4d8;
+}
+
+.floaterListItem code {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------- Pipeline strip (artifact panel top) ---------- */
+
+.pipelineStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(49, 46, 129, 0.18);
+  color: #c7d2fe;
+  font-size: 11px;
+}
+
+.pipelineStripPaused {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.22);
+  color: #fde68a;
+}
+
+.pipelineStripDone {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(6, 78, 59, 0.22);
+  color: #a7f3d0;
+}
+
+.pipelineStripError {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+.pipelineStripText {
+  flex: 1;
+  min-width: 0;
+}
+
+.pipelineStripBar {
+  position: relative;
+  width: 90px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pipelineStripBarFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: currentColor;
+  border-radius: 999px;
+  transition: width 320ms ease;
+}
+
+/* ---------- Modal (shared backdrop + card) ---------- */
+
+.modalScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.modalCard {
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 9, 0.94);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 60px 200px rgba(0, 0, 0, 0.6);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #e4e4e7;
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+/* ---------- Drawer (右侧抽屉，给 Bible / Locale 共用) ---------- */
+
+.drawerScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.drawerCard {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 66;
+  width: 100%;
+  max-width: 720px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 8, 9, 0.92);
+  box-shadow: 0 0 120px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.drawerBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- Sticky CTA (onboarding 等右下常驻按钮) ---------- */
+
+.stickyCta {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 0 4px;
+  margin-top: 8px;
+  background: linear-gradient(180deg, rgba(7, 7, 8, 0) 0%, rgba(7, 7, 8, 0.7) 60%, rgba(7, 7, 8, 0.94) 100%);
+  z-index: 10;
+}
+
+/* ---------- Onboarding tabs row ---------- */
+
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+
+.finalizeGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 1100px) {
+  .finalizeGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .finalizeGridFull {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Meta pills (project list cards 等) ---------- */
+
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+}
+
+.metaPillOk {
+  color: #a7f3d0;
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(6, 78, 59, 0.18);
+}
+
+.metaPillMute {
+  color: #71717a;
+}
+
+/* ---------- Toolbar 工具按钮（小图标按钮，artifact panel header 等） ---------- */
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.iconBtn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+
+.iconBtn:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

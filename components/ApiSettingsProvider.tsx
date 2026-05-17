@@ -9,12 +9,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import SettingsDialog, { loadSettings, SETTINGS_STORAGE_KEY } from "@/components/SettingsDialog";
+import { useRouter } from "next/navigation";
+import { loadSettings, SETTINGS_STORAGE_KEY } from "@/components/SettingsDialog";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 type ApiSettingsContextValue = {
   settings: Settings;
+  /**
+   * 现已不再弹出局部 Dialog，全局设置统一在项目首页入口下的 `/settings` 页面。
+   * 调用本方法等价于跳转 `/settings`，保留方法签名以便旧调用点平滑迁移。
+   */
   openSettings: () => void;
 };
 
@@ -29,9 +34,8 @@ export function useApiSettings(): ApiSettingsContextValue {
 }
 
 export function ApiSettingsProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
 
   const refresh = useCallback(() => {
     setSettings(loadSettings());
@@ -39,7 +43,6 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    setHydrated(true);
   }, [refresh]);
 
   useEffect(() => {
@@ -50,27 +53,11 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, [refresh]);
 
-  useEffect(() => {
-    if (hydrated && !settings.apiKey) setDialogOpen(true);
-  }, [hydrated, settings.apiKey]);
-
-  const openSettings = useCallback(() => setDialogOpen(true), []);
+  const openSettings = useCallback(() => {
+    router.push("/settings");
+  }, [router]);
 
   const value = useMemo(() => ({ settings, openSettings }), [settings, openSettings]);
 
-  function handleSave(next: Settings) {
-    setSettings(next);
-  }
-
-  return (
-    <ApiSettingsContext.Provider value={value}>
-      {children}
-      <SettingsDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        settings={settings}
-        onSave={handleSave}
-      />
-    </ApiSettingsContext.Provider>
-  );
+  return <ApiSettingsContext.Provider value={value}>{children}</ApiSettingsContext.Provider>;
 }
