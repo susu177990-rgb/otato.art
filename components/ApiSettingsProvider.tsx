@@ -17,8 +17,7 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
 type ApiSettingsContextValue = {
   settings: Settings;
   /**
-   * 现已不再弹出局部 Dialog，全局设置统一在项目首页入口下的 `/settings` 页面。
-   * 调用本方法等价于跳转 `/settings`，保留方法签名以便旧调用点平滑迁移。
+   * 全局 LLM 网关配置（`/settings` → LLM API）；调用本方法等价于跳转设置页。
    */
   openSettings: () => void;
 };

@@ -1118,7 +1118,7 @@ function StudioInner() {
             className={styles.autoCluster}
             title={
               switchDisabled
-                ? "请先完成立项并配置 API Key"
+                ? "请先完成立项并在设置 → LLM API 中配置 API Key"
                 : fullAutoEnabled
                   ? "关闭：暂停全自动流水线"
                   : "开启：STAGE 1~7 全自动流水线（Gate 通过即自动验收并推进）"

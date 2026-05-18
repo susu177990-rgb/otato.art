@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   if (!settings?.apiKey) {
     return new Response(
-      JSON.stringify({ error: "请先在设置中填写 API Key" }),
+      JSON.stringify({ error: "请先在设置 → LLM API 中填写 API Key。" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }

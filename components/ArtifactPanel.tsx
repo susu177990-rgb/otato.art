@@ -136,7 +136,7 @@ export default function ArtifactPanel({
         ? "连续大纲"
         : "开始本阶段";
   const startTitle = !hasApiKey
-    ? "请先配置 API Key"
+    ? "请先配置 LLM API（设置 → LLM API）"
     : chatLoading
       ? "对话生成中，请稍候"
       : !kickoffReady

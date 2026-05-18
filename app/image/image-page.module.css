@@ -19,15 +19,57 @@
   min-width: 0;
   min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 0;
+  /* 顶部多留一点，避免圆角框贴着画布上沿 */
+  padding-top: clamp(22px, 4vh, 48px);
+  padding-bottom: clamp(14px, 2.6vh, 32px);
+  padding-inline: 0;
+  container-type: inline-size;
+  container-name: imageCanvas;
 }
 
 .canvasInner {
   position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* 为左右浮层侧栏留出对称净空；略小于模式列上限以加宽可用横向区域 */
+.resultSafeFrame {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  padding-inline: calc(min(196px, calc(100vw - 56px)) + 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@supports (container-type: inline-size) {
+  .resultSafeFrame {
+    padding-inline: calc(min(196px, calc(100cqw - 12px)) + 6px);
+  }
+}
+
+/* 外层仅裁切与占位：完全透明、无边框、无阴影；圆角只作用于生成图轮廓 */
+.resultClip {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  border: none;
+  border-radius: 30px;
+  background: transparent;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,6 +82,177 @@
   width: auto;
   height: auto;
   object-fit: contain;
+  border-radius: 30px;
+}
+
+/* 结果图叠层：容器紧贴图片边缘；下载按钮绝对定位叠在图内底部居中，避免 grid stretch 把按钮挤出画幅 */
+.resultMedia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.resultImageStack {
+  position: relative;
+  display: inline-block;
+  width: fit-content;
+  height: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.resultPreviewHit {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 30px;
+  color: inherit;
+  line-height: 0;
+}
+
+.resultPreviewHit:focus-visible {
+  outline: 2px solid rgba(250, 250, 250, 0.45);
+  outline-offset: 3px;
+}
+
+.resultPreviewHit .resultImage {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 30px;
+}
+
+.resultDownloadBtn {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 2;
+  margin: 0;
+  padding: 7px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #f4f4f5;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, background-color 160ms ease, border-color 160ms ease;
+  backdrop-filter: blur(10px);
+}
+
+.resultDownloadBtn:hover {
+  background: rgba(0, 0, 0, 0.42);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.resultDownloadBtn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: 2px solid rgba(250, 250, 250, 0.45);
+  outline-offset: 2px;
+}
+
+.resultImageStack:hover .resultDownloadBtn,
+.resultDownloadBtn:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.resultImageStack:focus-within .resultDownloadBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 全屏预览层（Portal → body） */
+.imagePreviewRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+}
+
+.imagePreviewBackdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  cursor: zoom-out;
+  background: rgba(4, 4, 6, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.imagePreviewFrame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.imagePreviewImg {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  pointer-events: auto;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+}
+
+.imagePreviewClose {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  z-index: 2;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fafafa;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.imagePreviewClose:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.imagePreviewClose:focus-visible {
+  outline: 2px solid rgba(250, 250, 250, 0.55);
+  outline-offset: 2px;
 }
 
 .loadingOverlay {
@@ -98,6 +311,12 @@
 .modeColumn {
   --history-thumb: 80px;
   --history-gap: 12px;
+  /* 与右侧 history 一致：可视 7 条 + 间距；行高与按钮 min-height 对齐 */
+  --mode-visible: 7;
+  --mode-gap: 10px;
+  --mode-row-height: 44px;
+  /* 与右侧 history 渐变遮罩同高 */
+  --history-fade: 22px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -113,6 +332,7 @@
   width: max-content;
   max-width: 100%;
   min-width: var(--history-thumb, 80px);
+  min-height: var(--mode-row-height, 44px);
   margin: 0;
   padding: 10px 12px;
   border-radius: 14px;
@@ -147,8 +367,45 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--mode-gap, 10px);
   width: 100%;
+}
+
+.modeScrollWrap {
+  position: relative;
+  flex: 0 0 auto;
+  max-height: calc(
+    var(--mode-visible) * var(--mode-row-height) + (var(--mode-visible) - 1) * var(--mode-gap)
+  );
+  min-height: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.modeScroll {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(
+    var(--mode-visible) * var(--mode-row-height) + (var(--mode-visible) - 1) * var(--mode-gap)
+  );
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.modeScroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .modeList .modeButton {
@@ -254,7 +511,9 @@
 }
 
 .historyScrollWrapFaded::before,
-.historyScrollWrapFaded::after {
+.historyScrollWrapFaded::after,
+.modeScrollWrapFaded::before,
+.modeScrollWrapFaded::after {
   content: "";
   position: absolute;
   left: 0;
@@ -264,12 +523,14 @@
   z-index: 2;
 }
 
-.historyScrollWrapFaded::before {
+.historyScrollWrapFaded::before,
+.modeScrollWrapFaded::before {
   top: 0;
   background: linear-gradient(to bottom, rgba(7, 7, 8, 0.96), rgba(7, 7, 8, 0));
 }
 
-.historyScrollWrapFaded::after {
+.historyScrollWrapFaded::after,
+.modeScrollWrapFaded::after {
   bottom: 0;
   background: linear-gradient(to top, rgba(7, 7, 8, 0.96), rgba(7, 7, 8, 0));
 }
@@ -310,7 +571,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .historyScroll {
+  .historyScroll,
+  .modeScroll {
     scroll-behavior: auto;
   }
 }
@@ -502,7 +764,8 @@
 }
 
 .composer {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 30px;
   background: rgba(8, 8, 9, 0.94);
@@ -510,9 +773,25 @@
   backdrop-filter: blur(26px);
 }
 
-.promptInput {
+/* 固定作曲家输入区总高度，防止 textarea 随内容/浏览器默认行数伸缩 */
+.promptInputShell {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 112px;
+  min-height: 112px;
+  max-height: 112px;
+}
+
+.promptInput {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
   resize: none;
   border: 0;
   outline: none;
@@ -528,10 +807,39 @@
   color: #52525b;
 }
 
+.promptDualGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 112px;
+  gap: 0;
+  height: 112px;
+  min-height: 112px;
+  max-height: 112px;
+}
+
+.promptDualPane {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 112px;
+  min-height: 112px;
+  max-height: 112px;
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.promptDualPane:last-child {
+  border-right: none;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  min-height: 34px;
+  flex-shrink: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding: 10px 12px;
 }
@@ -609,9 +917,32 @@
   }
 }
 
+/* GPT Image：选项文案为「细节程度：自动/低/中/高」，宽度随文案测量 */
+.composerSelectQuality {
+  width: auto;
+  min-width: 2.25rem;
+  max-width: 12rem;
+  padding: 0 20px 0 9px;
+  background-position: right 7px center;
+  field-sizing: content;
+}
+
+@supports not (field-sizing: content) {
+  .composerSelectQuality {
+    width: 9.5rem;
+    min-width: 9.5rem;
+    max-width: none;
+  }
+}
+
 .warning {
+  flex-shrink: 0;
+  align-self: center;
+  white-space: nowrap;
+  line-height: 1.35;
   color: #fbbf24;
   font-size: 11px;
+  font-weight: 500;
 }
 
 .generate {
@@ -639,6 +970,21 @@
 @media (max-width: 1100px) {
   .stage {
     padding: 12px 16px 20px;
+  }
+
+  .canvas {
+    padding-top: clamp(18px, 3.5vh, 40px);
+    padding-bottom: clamp(12px, 2.2vh, 28px);
+  }
+
+  .resultSafeFrame {
+    padding-inline: calc(min(196px, calc(100vw - 48px)) + 6px);
+  }
+
+  @supports (container-type: inline-size) {
+    .resultSafeFrame {
+      padding-inline: calc(min(196px, calc(100cqw - 8px)) + 6px);
+    }
   }
 
   .historyPanel {

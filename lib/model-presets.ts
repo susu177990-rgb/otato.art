@@ -1,4 +1,6 @@
-/** 设置弹窗内快捷可选的模型 id（默认 gpt-5.4-mini） */
+import { DEFAULT_SETTINGS } from "@/lib/types";
+
+/** 常见模型 id 示例（仅供参考；设置里可填写任意网关支持的模型名） */
 export const MODEL_QUICK_OPTIONS = [
   { value: "gpt-5.4", label: "gpt-5.4" },
   { value: "gpt-5.4-mini", label: "gpt-5.4-mini（默认）" },
@@ -14,7 +16,8 @@ export function isQuickModel(v: string): v is ModelQuickValue {
   return QUICK_SET.has(v);
 }
 
-/** 不在快捷列表中的历史值回落为默认 mini */
-export function normalizeModel(v: string): ModelQuickValue {
-  return isQuickModel(v) ? v : "gpt-5.4-mini";
+/** 裁剪空白；空字符串时回落到全局默认模型（保留用户自定义模型 id） */
+export function normalizeModel(v: unknown): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s || DEFAULT_SETTINGS.model;
 }

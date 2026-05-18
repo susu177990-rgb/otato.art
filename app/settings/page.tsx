@@ -6,25 +6,25 @@ import shellStyles from "../shared/shell.module.css";
 import styles from "./settings-page.module.css";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
-import { MODEL_QUICK_OPTIONS, normalizeModel } from "@/lib/model-presets";
-import { SETTINGS_STORAGE_KEY, loadSettings as loadScriptSettings } from "@/components/SettingsDialog";
+import { normalizeModel } from "@/lib/model-presets";
+import { SETTINGS_STORAGE_KEY, loadSettings as loadLlmSettings } from "@/components/SettingsDialog";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
-  REAL_CHARACTER_ASSET_PROMPT,
+  IMAGE_MODES,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
 import { loadImageSettings, saveImageSettings } from "@/lib/image-storage";
 
-type Tab = "scriptApi" | "imagePrompts" | "imageApi";
+type Tab = "llmApi" | "imagePrompts" | "imageApi";
 
 const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
-  { id: "scriptApi", label: "编剧 API" },
+  { id: "llmApi", label: "LLM API" },
   { id: "imagePrompts", label: "生图 提示词" },
   { id: "imageApi", label: "生图 API" },
 ];
 
-function saveScriptSettings(s: Settings) {
+function persistLlmSettings(s: Settings) {
   const next = { ...s, model: normalizeModel(s.model) };
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
@@ -33,18 +33,18 @@ function saveScriptSettings(s: Settings) {
 }
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>("scriptApi");
-  const [scriptSettings, setScriptSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [tab, setTab] = useState<Tab>("llmApi");
+  const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
-    setScriptSettings(loadScriptSettings());
+    setLlmSettings(loadLlmSettings());
     setImageSettings(loadImageSettings());
   }, []);
 
   function saveAll() {
-    saveScriptSettings(scriptSettings);
+    persistLlmSettings(llmSettings);
     saveImageSettings(imageSettings);
     setSavedMessage("已保存");
     window.setTimeout(() => setSavedMessage(""), 1400);
@@ -93,8 +93,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {tab === "scriptApi" ? (
-            <ScriptApiPanel value={scriptSettings} onChange={setScriptSettings} />
+          {tab === "llmApi" ? (
+            <LlmApiPanel value={llmSettings} onChange={setLlmSettings} />
           ) : null}
 
           {tab === "imagePrompts" ? (
@@ -110,7 +110,7 @@ export default function SettingsPage() {
   );
 }
 
-function ScriptApiPanel({
+function LlmApiPanel({
   value,
   onChange,
 }: {
@@ -122,21 +122,11 @@ function ScriptApiPanel({
       <div className={shellStyles.card}>
         <div className={shellStyles.cardHead}>
           <div>
-            <h2 className={shellStyles.cardTitle}>编剧 API（剧本 Agent）</h2>
-            <p className={shellStyles.cardSubtitle}>对应原「API 设置」弹窗。空着保存即恢复默认网关。</p>
+            <h2 className={shellStyles.cardTitle}>LLM API</h2>
+            <p className={shellStyles.cardSubtitle}>
+              所有文本大模型（编剧室、策划对话、英语简报等）共用这一套 OpenAI 兼容网关；修改后点击顶部「保存」写入本机。
+            </p>
           </div>
-          <button
-            type="button"
-            className={shellStyles.buttonSubtle}
-            onClick={() =>
-              onChange({
-                ...DEFAULT_SETTINGS,
-                model: normalizeModel(DEFAULT_SETTINGS.model),
-              })
-            }
-          >
-            恢复默认
-          </button>
         </div>
 
         <div className={shellStyles.row}>
@@ -163,17 +153,14 @@ function ScriptApiPanel({
 
           <label className={shellStyles.field}>
             <span className={shellStyles.fieldLabel}>模型</span>
-            <select
-              className={shellStyles.select}
-              value={normalizeModel(value.model)}
+            <input
+              className={[shellStyles.input, shellStyles.mono].join(" ")}
+              value={value.model}
               onChange={(e) => onChange({ ...value, model: e.target.value })}
-            >
-              {MODEL_QUICK_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              placeholder="例如 gpt-5.4-mini、gemini-3.1-pro-preview（任意网关支持的模型 id）"
+              spellCheck={false}
+              autoComplete="off"
+            />
           </label>
         </div>
       </div>
@@ -188,42 +175,48 @@ function ImagePromptsPanel({
   value: ImageWorkspaceSettings;
   onChange: (next: ImageWorkspaceSettings) => void;
 }) {
+  const templateModes = IMAGE_MODES.filter((m) => m.id !== "free");
+
   return (
     <section className={styles.panel}>
       <div className={shellStyles.card}>
         <div className={shellStyles.cardHead}>
           <div>
-            <h2 className={shellStyles.cardTitle}>真实角色资产 · 固定提示词</h2>
+            <h2 className={shellStyles.cardTitle}>生图模式 · 固定提示词</h2>
             <p className={shellStyles.cardSubtitle}>
-              保留 <code className={shellStyles.mono}>{"{{用户输入}}"}</code> 占位符；生成时会替换为输入框中的角色设定。
-              「自由模式」不走该模版，仅发送输入框全文。
+              下列每种模版对应作图页左侧的一个模式。请保留占位符（如{" "}
+              <code className={shellStyles.mono}>{"{{用户输入}}"}</code>、
+              <code className={shellStyles.mono}>{"{{用户输入分镜脚本}}"}</code>、
+              <code className={shellStyles.mono}>{"{{用户输入绘画风格}}"}</code>
+              与
+              <code className={shellStyles.mono}>{"{{用户输入分镜剧本}}"}</code>
+              ）；双占位符模式（如动漫分镜）在作图页为左右两个框，说明写在框内灰色提示文字里。「自由模式」不使用模版，此处无可编辑项。
             </p>
           </div>
-          <button
-            type="button"
-            className={shellStyles.buttonSubtle}
-            onClick={() =>
+        </div>
+      </div>
+
+      {templateModes.map((mode) => (
+        <div key={mode.id} className={shellStyles.card}>
+          <div className={shellStyles.cardHead}>
+            <div>
+              <h2 className={shellStyles.cardTitle}>{mode.label}</h2>
+              <p className={shellStyles.cardSubtitle}>保存后对作图页该模式生效。</p>
+            </div>
+          </div>
+
+          <textarea
+            className={[shellStyles.textarea, shellStyles.mono, styles.promptArea].join(" ")}
+            value={value.prompts[mode.id] ?? ""}
+            onChange={(e) =>
               onChange({
                 ...value,
-                prompts: { ...value.prompts, "real-character-asset": REAL_CHARACTER_ASSET_PROMPT },
+                prompts: { ...value.prompts, [mode.id]: e.target.value },
               })
             }
-          >
-            恢复默认提示词
-          </button>
+          />
         </div>
-
-        <textarea
-          className={[shellStyles.textarea, shellStyles.mono, styles.promptArea].join(" ")}
-          value={value.prompts["real-character-asset"]}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              prompts: { ...value.prompts, "real-character-asset": e.target.value },
-            })
-          }
-        />
-      </div>
+      ))}
     </section>
   );
 }

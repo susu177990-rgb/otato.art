@@ -1,3 +1,10 @@
+import { BAKED_LLM_SETTINGS } from "./baked-api-defaults";
+
+/**
+ * 全局 LLM 网关（OpenAI 兼容 `chat/completions`）。
+ * 用于编剧室对话、策划对齐、英语 Locale 简报等所有文本大模型能力；默认值见 {@link BAKED_LLM_SETTINGS}，
+ * localStorage 为空字段时回落到源码内置配置。
+ */
 export interface Settings {
   apiUrl: string;
   apiKey: string;
@@ -104,11 +111,11 @@ export interface ProjectSummary {
   seriesBibleFilled?: boolean;
 }
 
-/** 公司内部默认网关与 Key；模型可被用户改为快捷列表中的其它项并存入 localStorage。 */
+/** LLM 默认值：见 {@link BAKED_LLM_SETTINGS} */
 export const DEFAULT_SETTINGS: Settings = {
-  apiUrl: "https://api.bltcy.ai/v1/chat/completions",
-  apiKey: "sk-jxPGXe4BdXYbsYbweWRUHTkNMiS6fm3OTTOgfssStrLKiN6S",
-  model: "gpt-5.4-mini",
+  apiUrl: BAKED_LLM_SETTINGS.apiUrl,
+  apiKey: BAKED_LLM_SETTINGS.apiKey,
+  model: BAKED_LLM_SETTINGS.model,
 };
 
 export const STAGES = [

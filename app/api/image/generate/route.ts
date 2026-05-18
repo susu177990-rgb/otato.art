@@ -1,16 +1,103 @@
 import { NextRequest } from "next/server";
 import { extractImageFromUpstreamResponse } from "@/lib/image-generation-response";
-import type { ImageAspectRatio, ImageModelSettings, ImageSizeTier } from "@/lib/image-workspace";
+import {
+  normalizeIncomingImageModel,
+  type GptImageQuality,
+  type ImageAspectRatio,
+  type ImageModelSettings,
+  type ImageSizeTier,
+} from "@/lib/image-workspace";
 
 type GenerateBody = {
   prompt?: string;
   model?: ImageModelSettings;
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
+  /** gpt-image-* 专用：auto | low | medium | high；缺省时按清晰度档位映射 */
+  gptImageQuality?: GptImageQuality;
   refImages?: string[];
 };
 
-const GPT_IMAGE_MODERATION = "low";
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const buf = Buffer.from(await blob.arrayBuffer());
+  const mime = blob.type || "application/octet-stream";
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
+async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; response: Response } | { ok: true; body: GenerateBody }> {
+  const ct = req.headers.get("content-type") ?? "";
+  if (ct.includes("multipart/form-data")) {
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return {
+        ok: false,
+        response: Response.json(
+          { error: "无法解析 multipart 请求（体积过大或传输中断）。", code: "FORM_PARSE_FAILED" },
+          { status: 400 },
+        ),
+      };
+    }
+    const metaField = form.get("meta");
+    if (typeof metaField !== "string" || !metaField.trim()) {
+      return {
+        ok: false,
+        response: Response.json({ error: "multipart 请求缺少 meta JSON。", code: "META_MISSING" }, { status: 400 }),
+      };
+    }
+    let metaObj: unknown;
+    try {
+      metaObj = JSON.parse(metaField);
+    } catch {
+      return {
+        ok: false,
+        response: Response.json({ error: "meta 字段不是合法 JSON。", code: "META_JSON_INVALID" }, { status: 400 }),
+      };
+    }
+    const meta = metaObj && typeof metaObj === "object" ? (metaObj as Record<string, unknown>) : {};
+    const refImages: string[] = [];
+    for (const part of form.getAll("ref")) {
+      if (part instanceof Blob && part.size > 0) {
+        refImages.push(await blobToDataUrl(part));
+      }
+    }
+    const gq = meta.gptImageQuality;
+    const body: GenerateBody = {
+      prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
+      model: meta.model as ImageModelSettings | undefined,
+      aspectRatio: meta.aspectRatio as ImageAspectRatio | undefined,
+      imageSize: meta.imageSize as ImageSizeTier | undefined,
+      gptImageQuality:
+        gq === "auto" || gq === "low" || gq === "medium" || gq === "high" ? (gq as GptImageQuality) : undefined,
+      refImages,
+    };
+    return { ok: true, body };
+  }
+
+  const raw = (await req.json().catch(() => null)) as GenerateBody | null;
+  if (!raw || typeof raw !== "object") {
+    return {
+      ok: false,
+      response: Response.json(
+        {
+          error:
+            "请求正文无法解析为 JSON。若包含多张高清参考图，请使用本站作图页的默认提交（multipart 原图）；仍失败时请减少参考图数量或检查反向代理的 client_max_body_size。",
+          code: "BODY_PARSE_FAILED",
+        },
+        { status: 400 },
+      ),
+    };
+  }
+  const refImages = Array.isArray(raw.refImages)
+    ? raw.refImages.filter((x): x is string => typeof x === "string" && x.length > 0)
+    : [];
+  return { ok: true, body: { ...raw, refImages } };
+}
+
+/** OpenAI GPT Image：moderation 省略（默认 auto），避免劣质中转把枚举误解析成数字。 */
+/** Grsai `/draw/completions`（gpt-image）仍传 moderation，与常见中转示例一致 */
+const GRSAI_GPT_IMAGE_MODERATION = "low";
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_TRIES = 120; // ~3 分钟
 
@@ -88,57 +175,127 @@ type Route =
   | { kind: "openai-images"; baseUrl: string }
   | { kind: "chat-completions"; url: string };
 
-function inferRoute(endpointUrl: string, modelName: string, providerHint: string | undefined): Route {
+/**
+ * 文档：异步绘画提交为 POST `/v1/draw/{nano-banana|completions|...}`，
+ * 单独取结果：POST `/v1/draw/result`，Body `{ "id": "<任务 id>" }`，
+ * 响应 `{ code, msg, data }`，其中 `data` 内含 `status`、`progress`、`results[].url`（code 0 成功，-22 任务不存在）。
+ */
+function grsaiDrawResultUrl(submitUrl: string): string {
+  const raw = submitUrl.trim();
+  try {
+    const parsed = new URL(raw);
+    const path = parsed.pathname.replace(/\/+$/, "") || "/";
+    if (/\/draw\/result$/i.test(path)) return parsed.toString();
+    const replaced = path.replace(/\/draw\/[^/]+$/i, "/draw/result");
+    if (replaced !== path) {
+      parsed.pathname = replaced;
+      return parsed.toString();
+    }
+  } catch {
+    // 非绝对 URL 时退回字符串替换
+  }
+  return raw.replace(/\/draw\/[^/?#]+(\?.*)?$/i, "/draw/result$1");
+}
+
+function inferRoute(endpointUrl: string, provider: ImageModelSettings["provider"]): Route {
   const url = endpointUrl.trim();
   const lower = url.toLowerCase();
-  const replaceDrawTail = (u: string) => u.replace(/\/draw\/[^/?#]+(\?.*)?$/, "/draw/result");
 
+  /**
+   * 路由优先看「你填的 URL」路径；不向用户规定必须填哪条地址。
+   * `provider` 仅在路径无法区分异步 draw 的两种 JSON 体时使用（用户选的预设槽位）。
+   */
   if (/\/draw\/nano-banana(\?|$)/i.test(url)) {
-    return { kind: "grsai-nano-banana", submitUrl: url, resultUrl: replaceDrawTail(url) };
+    return { kind: "grsai-nano-banana", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) };
   }
   if (/\/draw\/completions(\?|$)/i.test(url)) {
-    return isGptImageModel(modelName)
-      ? { kind: "grsai-gpt-image", submitUrl: url, resultUrl: replaceDrawTail(url) }
-      : { kind: "grsai-nano-banana", submitUrl: url, resultUrl: replaceDrawTail(url) };
-  }
-  if (/(grsai|dakka)/i.test(lower)) {
-    return isGptImageModel(modelName)
-      ? { kind: "grsai-gpt-image", submitUrl: url, resultUrl: replaceDrawTail(url) }
-      : { kind: "grsai-nano-banana", submitUrl: url, resultUrl: replaceDrawTail(url) };
+    return provider === "gpt-image"
+      ? { kind: "grsai-gpt-image", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) }
+      : { kind: "grsai-nano-banana", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) };
   }
   if (/\/chat(\/|$)/i.test(url)) {
     return { kind: "chat-completions", url };
   }
-  if (/\/images\//i.test(url) || providerHint === "gpt-image") {
+  if (/\/images\//i.test(url)) {
     return { kind: "openai-images", baseUrl: url };
+  }
+  if (/(grsai|dakka)/i.test(lower)) {
+    return provider === "gpt-image"
+      ? { kind: "grsai-gpt-image", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) }
+      : { kind: "grsai-nano-banana", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) };
   }
   return { kind: "chat-completions", url };
 }
 
 // ---------- Grsai 异步出图 ----------
 
+/** 中转返回的成功状态多样，不能只认 succeeded */
+function grsaiTerminalSuccessStatus(status: unknown): boolean {
+  if (status === undefined || status === null || status === "") return false;
+  const s = String(status).trim().toLowerCase();
+  return s === "succeeded" || s === "success" || s === "completed" || s === "complete" || s === "done" || s === "finished";
+}
+
+/** code：官方示例为 0；不少中转用 200 表示成功 */
+function grsaiResponseOk(code: unknown): boolean {
+  if (code === undefined || code === null) return true;
+  if (typeof code !== "number") return true;
+  return code === 0 || code === 200;
+}
+
+function pickNonEmptyUrl(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t.length > 0 ? t : undefined;
+}
+
 function parseGrsaiImageUrl(data: unknown): string | undefined {
   if (!data || typeof data !== "object") return undefined;
   const o = data as Record<string, unknown>;
-  if (typeof o.url === "string") return o.url;
+  /** 顶层常有 `"url": ""` 占位；必须先跳过空串再查 results */
+  const topUrl = pickNonEmptyUrl(o.url);
+  if (topUrl) return topUrl;
+  const iu = pickNonEmptyUrl(o.image_url) ?? pickNonEmptyUrl(o.imageUrl);
+  if (iu) return iu;
+  if (typeof o.output === "string" && (o.output.startsWith("http") || o.output.startsWith("data:"))) return o.output.trim();
+  if (typeof o.result === "string" && (o.result.startsWith("http") || o.result.startsWith("data:"))) return o.result.trim();
+  if (o.result && typeof o.result === "object") {
+    const nested = parseGrsaiImageUrl(o.result);
+    if (nested) return nested;
+  }
   if (typeof o.b64_json === "string") return `data:image/png;base64,${o.b64_json}`;
   if (Array.isArray(o.results) && o.results.length > 0) {
     const first = o.results[0];
-    if (typeof first === "string") return first;
+    if (typeof first === "string") return pickNonEmptyUrl(first);
     if (first && typeof first === "object") {
       const f = first as Record<string, unknown>;
-      if (typeof f.url === "string") return f.url;
+      const u = pickNonEmptyUrl(f.url) ?? pickNonEmptyUrl(f.image_url);
+      if (u) return u;
       if (typeof f.b64_json === "string") return `data:image/png;base64,${f.b64_json}`;
     }
   }
   if (Array.isArray(o.data) && o.data.length > 0) return parseGrsaiImageUrl(o.data[0]);
+  if (o.data && typeof o.data === "object") {
+    const inner = parseGrsaiImageUrl(o.data);
+    if (inner) return inner;
+  }
   return undefined;
 }
 
 async function readGrsaiBody(response: Response): Promise<Record<string, unknown> | null> {
   const text = await response.text();
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const payloads = lines.length ? lines : [text.trim()];
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  /** 优先整块解析：上游常返回 pretty-print 多行 JSON，按行 parse 会全部失败 */
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    // 再走 SSE / NDJSON 兜底
+  }
+
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const payloads = lines.length ? lines : [trimmed];
   let last: Record<string, unknown> | null = null;
   for (const line of payloads) {
     const norm = line.startsWith("data:") ? line.slice(5).trim() : line;
@@ -147,7 +304,8 @@ async function readGrsaiBody(response: Response): Promise<Record<string, unknown
       const parsed = JSON.parse(norm) as Record<string, unknown>;
       last = parsed;
       const dataObj = (parsed.data as Record<string, unknown> | undefined) || undefined;
-      if (parsed.progress === 100 || parsed.status === "succeeded" || dataObj?.status === "succeeded") {
+      const st = parsed.status ?? dataObj?.status;
+      if (parsed.progress === 100 || grsaiTerminalSuccessStatus(st)) {
         return parsed;
       }
     } catch {
@@ -164,9 +322,15 @@ async function generateViaGrsai(
   prompt: string,
   aspectRatio: ImageAspectRatio,
   imageSize: ImageSizeTier,
+  gptImageQuality: GptImageQuality | undefined,
   refImages: string[],
 ): Promise<string> {
   const urls = refImages.filter((r) => r && (r.startsWith("http") || r.startsWith("data:")));
+
+  const grsaiGptQuality: "low" | "medium" | "high" =
+    gptImageQuality === "auto"
+      ? gptImageQualityFromTier(imageSize)
+      : gptImageQuality ?? gptImageQualityFromTier(imageSize);
 
   const body: Record<string, unknown> =
     route.kind === "grsai-gpt-image"
@@ -174,17 +338,14 @@ async function generateViaGrsai(
           model: modelName,
           prompt,
           aspectRatio: resolveGrsaiGptImageAspectRatio(aspectRatio, imageSize, modelName),
-          quality: gptImageQualityFromTier(imageSize),
-          moderation: GPT_IMAGE_MODERATION,
-          webHook: "-1",
+          quality: grsaiGptQuality,
+          moderation: GRSAI_GPT_IMAGE_MODERATION,
         }
       : {
           model: modelName,
           prompt,
           aspectRatio,
           imageSize,
-          webHook: "-1",
-          shutProgress: true,
         };
   if (urls.length > 0) body.urls = urls;
 
@@ -203,17 +364,23 @@ async function generateViaGrsai(
   }
 
   const initData = await readGrsaiBody(submit);
-  const immediate = parseGrsaiImageUrl((initData?.data as unknown) ?? initData);
+  const immediate = parseGrsaiImageUrl(initData);
   if (immediate) return immediate;
 
-  if (initData && typeof initData.code === "number" && initData.code !== 0) {
+  if (initData && typeof initData.code === "number" && !grsaiResponseOk(initData.code)) {
     throw new Error((initData.msg as string) || `上游错误码 ${initData.code}`);
   }
 
   const dataObj = (initData?.data as Record<string, unknown> | undefined) || {};
-  const taskId = (dataObj.id as string) || (initData?.id as string) || (initData?.taskId as string);
+  const taskIdRaw =
+    (dataObj.id as string) ||
+    (initData?.id as string) ||
+    (initData?.taskId as string) ||
+    (typeof initData?.task_id === "string" ? initData.task_id : "");
+  const taskId = typeof taskIdRaw === "string" ? taskIdRaw.trim() : "";
   if (!taskId) throw new Error((initData?.msg as string) || "未返回任务 ID");
 
+  /** POST `route.resultUrl`（一般为 `/v1/draw/result`），与文档一致：`{ "id": taskId }` */
   for (let i = 0; i < POLL_MAX_TRIES; i += 1) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     const res = await fetch(route.resultUrl, {
@@ -231,17 +398,36 @@ async function generateViaGrsai(
     const r = await readGrsaiBody(res);
     if (!r) continue;
     if (r.code === -22) throw new Error("任务不存在");
-    if (typeof r.code === "number" && r.code !== 0) throw new Error((r.msg as string) || "获取结果失败");
+    if (typeof r.code === "number" && !grsaiResponseOk(r.code)) throw new Error((r.msg as string) || "获取结果失败");
 
     const data = (r.data as Record<string, unknown>) || r;
+    const statusStr = data.status ?? r.status;
+    if (
+      typeof statusStr === "string" &&
+      /^(failed|failure|error|canceled|cancelled)$/i.test(statusStr.trim()) &&
+      !grsaiTerminalSuccessStatus(statusStr)
+    ) {
+      const reason = (data.failure_reason as string) || (data.error as string) || statusStr || "未知错误";
+      if (reason.includes("output_moderation")) throw new Error("输出违规");
+      if (reason.includes("input_moderation")) throw new Error("输入违规");
+      throw new Error(reason);
+    }
     if (data.status === "failed") {
       const reason = (data.failure_reason as string) || (data.error as string) || "未知错误";
       if (reason === "output_moderation") throw new Error("输出违规");
       if (reason === "input_moderation") throw new Error("输入违规");
       throw new Error(reason);
     }
-    const imgUrl = parseGrsaiImageUrl(data);
-    if (imgUrl && (!data.status || data.status === "succeeded")) return imgUrl;
+
+    const imgUrl = parseGrsaiImageUrl(data) ?? parseGrsaiImageUrl(r);
+    /** progress 已为 100 且能解析出图址时直接返回，避免异常 status 文案卡住轮询 */
+    if (imgUrl && (Number(r.progress) === 100 || Number(data.progress) === 100)) return imgUrl;
+    const pending =
+      typeof statusStr === "string" &&
+      /pending|queued|processing|running|waiting|submitted|progress/i.test(statusStr) &&
+      !grsaiTerminalSuccessStatus(statusStr);
+    if (imgUrl && !pending) return imgUrl;
+    if (imgUrl && grsaiTerminalSuccessStatus(statusStr)) return imgUrl;
   }
 
   throw new Error("生成超时，请稍后重试");
@@ -256,18 +442,23 @@ async function generateViaOpenAIImages(
   prompt: string,
   aspectRatio: ImageAspectRatio,
   imageSize: ImageSizeTier,
+  gptImageQuality: GptImageQuality | undefined,
   refImages: string[],
 ): Promise<string> {
   const isGpt = isGptImageModel(modelName);
   const size = resolveOpenAiSize(aspectRatio, imageSize, modelName);
-  const quality = gptImageQualityFromTier(imageSize);
+  /** 中转常见 bug：无法处理 quality「auto」字符串；对外只发 low/medium/high */
+  const quality: "low" | "medium" | "high" =
+    gptImageQuality === undefined || gptImageQuality === "auto"
+      ? gptImageQualityFromTier(imageSize)
+      : gptImageQuality;
 
   if (refImages.length === 0) {
     const payload: Record<string, unknown> = { model: modelName, prompt, n: 1, size };
     if (isGpt) {
       payload.quality = quality;
       payload.output_format = "png";
-      payload.moderation = GPT_IMAGE_MODERATION;
+      /** 不传 moderation / response_format：减少与 OpenAI 子集不兼容的中转冲突 */
     } else {
       payload.image_size = imageSize;
     }
@@ -285,22 +476,50 @@ async function generateViaOpenAIImages(
 
   const editsUrl = endpointUrl.replace(/\/generations(?:\?.*)?$/, "/edits");
   const fd = new FormData();
+
+  /** OpenAI 官方 curl：model → image[] → prompt → …（参见 image-generation 指南 Edit Images） */
   fd.append("model", modelName);
+
+  let appended = 0;
+  let idx = 0;
+  for (const raw of refImages) {
+    const image = typeof raw === "string" ? raw.trim() : "";
+    if (!image) continue;
+    try {
+      if (image.startsWith("data:")) {
+        const blob = dataUrlToBlob(image);
+        fd.append("image[]", blob, `ref_${idx}.${imageExt(blob.type)}`);
+        idx += 1;
+        appended += 1;
+      } else if (/^https?:\/\//i.test(image)) {
+        const imgRes = await fetch(image, { signal: AbortSignal.timeout(45_000) });
+        if (!imgRes.ok) continue;
+        const blob = await imgRes.blob();
+        const mime = blob.type || "image/jpeg";
+        fd.append("image[]", blob, `ref_${idx}.${imageExt(mime)}`);
+        idx += 1;
+        appended += 1;
+      }
+    } catch {
+      // 单张失败则跳过，继续其余参考图
+    }
+  }
+  if (appended === 0) {
+    throw new Error(
+      "没有可用的参考图：请上传本地图片，或确保参考图为可直连下载的 http(s) 链接（本地图对应官方文档中的 Base64 data URL / 文件上传流程）。",
+    );
+  }
+
   fd.append("prompt", prompt);
   fd.append("n", "1");
   fd.append("size", size === "auto" ? "1024x1024" : size);
   if (isGpt) {
     fd.append("quality", quality);
     fd.append("output_format", "png");
-    fd.append("moderation", GPT_IMAGE_MODERATION);
   } else {
     fd.append("image_size", imageSize);
   }
-  refImages.forEach((image, idx) => {
-    if (!image.startsWith("data:")) return;
-    const blob = dataUrlToBlob(image);
-    fd.append("image[]", blob, `ref_${idx}.${imageExt(blob.type)}`);
-  });
+
   const r = await fetch(editsUrl, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: fd });
   if (!r.ok) {
     const err = await r.text();
@@ -391,26 +610,41 @@ async function readImageOrThrow(response: Response): Promise<string> {
 // ---------- 路由入口 ----------
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as GenerateBody | null;
+  const incoming = await parseGenerateRequest(req);
+  if (!incoming.ok) return incoming.response;
+  const body = incoming.body;
+
+  const parsedModel = normalizeIncomingImageModel(body.model);
+  if (!parsedModel.ok) {
+    return Response.json({ error: parsedModel.message, code: "MODEL_CONFIG_INCOMPLETE" }, { status: 400 });
+  }
+  const model = parsedModel.model;
+
   const prompt = body?.prompt?.trim() || "";
-  const model = body?.model;
   const aspectRatio = body?.aspectRatio || "4:3";
   const imageSize = body?.imageSize || "1K";
-  const refImages = Array.isArray(body?.refImages) ? body.refImages.filter(Boolean) : [];
-
-  if (!prompt) return Response.json({ error: "缺少提示词" }, { status: 400 });
-  if (!model?.endpointUrl?.trim() || !model.apiKey?.trim() || !model.modelName?.trim()) {
-    return Response.json({ error: "请先在生图设置里填写当前模型的 URL、API Key 和模型名" }, { status: 400 });
-  }
+  const rawQ = body?.gptImageQuality;
+  const gptImageQuality: GptImageQuality | undefined =
+    rawQ === "auto" || rawQ === "low" || rawQ === "medium" || rawQ === "high" ? rawQ : undefined;
+  const refImages = Array.isArray(body.refImages) ? body.refImages.filter(Boolean) : [];
 
   const endpointUrl = model.endpointUrl.trim();
   const modelName = model.modelName.trim();
 
   try {
-    const route = inferRoute(endpointUrl, modelName, model.provider);
+    const route = inferRoute(endpointUrl, model.provider);
     let imageUrl: string;
     if (route.kind === "grsai-nano-banana" || route.kind === "grsai-gpt-image") {
-      imageUrl = await generateViaGrsai(model.apiKey, route, modelName, prompt, aspectRatio, imageSize, refImages);
+      imageUrl = await generateViaGrsai(
+        model.apiKey,
+        route,
+        modelName,
+        prompt,
+        aspectRatio,
+        imageSize,
+        gptImageQuality,
+        refImages,
+      );
     } else if (route.kind === "openai-images") {
       imageUrl = await generateViaOpenAIImages(
         model.apiKey,
@@ -419,6 +653,7 @@ export async function POST(req: NextRequest) {
         prompt,
         aspectRatio,
         imageSize,
+        gptImageQuality,
         refImages,
       );
     } else {

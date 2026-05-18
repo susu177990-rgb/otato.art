@@ -128,7 +128,7 @@ export default function StudioBibleDrawer({
   async function handleGenerateLocaleBrief() {
     if (!projectId) return;
     if (!hasApiKey) {
-      alert("请先在设置中填写 API Key（与对话相同）。");
+      alert("请先在设置 → LLM API 中填写 API Key（与对话相同）。");
       return;
     }
     setLocaleGenLoading(true);
@@ -283,7 +283,7 @@ export default function StudioBibleDrawer({
                       onClick={() => onOpenSettings?.()}
                       className={shellStyles.navLink}
                     >
-                      去填写 API Key
+                      去配置 LLM API
                     </button>
                   ) : null}
                   {!creativeBrief.trim() ? (

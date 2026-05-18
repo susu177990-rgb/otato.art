@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
   if (!settings?.apiKey?.trim()) {
     return Response.json(
-      { error: "请先在编剧室设置中填写 API Key，与对话使用同一套模型配置。" },
+      { error: "请先在设置 → LLM API 中填写 API Key（与编剧室对话共用）。" },
       { status: 400 }
     );
   }

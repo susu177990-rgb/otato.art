@@ -159,7 +159,7 @@ export default function OnboardingPage() {
   const runGenerateSeriesBible = useCallback(
     async (opts?: { replaceExisting?: boolean; creativeBriefOverride?: string }): Promise<Project> => {
       if (!settings.apiKey) {
-        throw new Error("请先配置 API Key");
+        throw new Error("请先在设置 → LLM API 中配置 API Key");
       }
       const res = await fetch("/api/onboarding/generate-series-bible", {
         method: "POST",

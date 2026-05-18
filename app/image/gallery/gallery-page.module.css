@@ -300,6 +300,19 @@
   font-weight: 600;
 }
 
+.sectionHint {
+  margin: 8px 0 4px;
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sectionHint:first-of-type {
+  margin-top: 0;
+}
+
 .proseBlock {
   max-height: 220px;
   overflow-y: auto;

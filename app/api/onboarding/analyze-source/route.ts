@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const projectId = body.projectId;
   const settings = body.settings;
   if (!projectId || !settings?.apiKey) {
-    return Response.json({ error: "需要 projectId 与 settings.apiKey" }, { status: 400 });
+    return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 
   const project = getProject(projectId);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { ImageAspectRatio, ImageGalleryRecord } from "@/lib/image-workspace";
+import { GPT_IMAGE_QUALITY_LABELS, type ImageAspectRatio, type ImageGalleryRecord } from "@/lib/image-workspace";
 import { loadImageGallery, saveImageGallery } from "@/lib/image-storage";
 import shellStyles from "../../shared/shell.module.css";
 import styles from "./gallery-page.module.css";
@@ -90,6 +90,7 @@ export default function ImageGalleryPage() {
                     <span className={styles.tileMetaName}>{record.modeName}</span>
                     <span className={styles.tileMetaInfo}>
                       {record.aspectRatio} · {record.imageSize}
+                      {record.gptImageQuality ? ` · 细节程度：${GPT_IMAGE_QUALITY_LABELS[record.gptImageQuality]}` : ""}
                     </span>
                   </span>
                 </span>
@@ -140,6 +141,7 @@ export default function ImageGalleryPage() {
                   <dt>参数</dt>
                   <dd>
                     {selected.aspectRatio} · {selected.imageSize}
+                    {selected.gptImageQuality ? ` · 细节程度：${GPT_IMAGE_QUALITY_LABELS[selected.gptImageQuality]}` : ""}
                   </dd>
                 </div>
                 <div className={styles.metaCell}>
@@ -155,8 +157,17 @@ export default function ImageGalleryPage() {
               </dl>
 
               <div className={styles.section}>
-                <h3>角色设定 / 输入</h3>
-                <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
+                <h3>作图输入</h3>
+                {selected.userInputSecondary ? (
+                  <>
+                    <p className={styles.sectionHint}>左栏 / 绘画风格与质感</p>
+                    <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
+                    <p className={styles.sectionHint}>右栏 / 分镜剧本</p>
+                    <pre className={styles.proseBlock}>{selected.userInputSecondary}</pre>
+                  </>
+                ) : (
+                  <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
+                )}
               </div>
 
               <div className={styles.section}>
