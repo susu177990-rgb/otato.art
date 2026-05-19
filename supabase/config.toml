@@ -1,0 +1,9 @@
+# For detailed configuration reference documentation, visit:
+# https://supabase.com/docs/guides/local-development/cli/config
+project_id = "bfvilvoiangeilxuxpdh"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15

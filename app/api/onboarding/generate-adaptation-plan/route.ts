@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 
-  const existing = getProject(projectId);
+  const existing = await getProject(projectId);
   if (!existing) {
     return Response.json({ error: "项目不存在" }, { status: 404 });
   }
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     seriesBibleError = bibleResult.error;
   }
 
-  saveProject(merged);
+  await saveProject(merged);
 
   return Response.json({
     ok: true,

@@ -1,5 +1,7 @@
 .DS_Store
 .cursor/
+.codex/
+.omc/
 
 # Next.js / Node (monorepo root + web)
 .next/

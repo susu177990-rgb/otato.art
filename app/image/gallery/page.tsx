@@ -3,21 +3,31 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { GPT_IMAGE_QUALITY_LABELS, type ImageGalleryRecord } from "@/lib/image-workspace";
-import { loadImageGallery, saveImageGallery } from "@/lib/image-storage";
+import { fetchGalleryRecords, replaceGalleryRecordsApi } from "@/lib/workspace-api";
+import { useApiSettings } from "@/components/ApiSettingsProvider";
 import shellStyles from "../../shared/shell.module.css";
 import styles from "./gallery-page.module.css";
 
 export default function ImageGalleryPage() {
+  const { workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
   const [selected, setSelected] = useState<ImageGalleryRecord | null>(null);
 
   useEffect(() => {
-    setRecords(loadImageGallery());
-  }, []);
+    if (!workspaceReady) return;
+    void fetchGalleryRecords()
+      .then(setRecords)
+      .catch((e) => console.warn("[gallery] load failed", e));
+  }, [workspaceReady]);
 
-  function updateRecords(next: ImageGalleryRecord[]) {
+  async function updateRecords(next: ImageGalleryRecord[]) {
     setRecords(next);
-    saveImageGallery(next);
+    try {
+      const saved = await replaceGalleryRecordsApi(next);
+      setRecords(saved);
+    } catch (e) {
+      console.warn("[gallery] save failed", e);
+    }
     if (selected && !next.some((record) => record.id === selected.id)) {
       setSelected(null);
     }
@@ -50,7 +60,7 @@ export default function ImageGalleryPage() {
         <nav className={shellStyles.topnav}>
           <button
             type="button"
-            onClick={() => updateRecords([])}
+            onClick={() => void updateRecords([])}
             disabled={records.length === 0}
             className={[shellStyles.navLink, shellStyles.navLinkDanger].join(" ")}
           >
@@ -203,7 +213,7 @@ export default function ImageGalleryPage() {
                 <button
                   type="button"
                   className={[shellStyles.navLink, shellStyles.navLinkDanger, styles.modalAction].join(" ")}
-                  onClick={() => updateRecords(records.filter((record) => record.id !== selected.id))}
+                  onClick={() => void updateRecords(records.filter((record) => record.id !== selected.id))}
                 >
                   删除
                 </button>

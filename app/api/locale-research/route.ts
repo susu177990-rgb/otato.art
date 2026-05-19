@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) {
     return Response.json({ error: "项目不存在" }, { status: 404 });
   }

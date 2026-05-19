@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import type { Settings } from "@/lib/types";
+import { getSiteSettingsAdminEmails } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
-  canWriteWorkspaceSettingsFile,
-  getMergedWorkspaceSnapshot,
-  mergeLlmFromWorkspaceFile,
-  writeWorkspaceSettingsToDisk,
-  type WorkspaceSettingsFileV1,
-} from "@/lib/workspace-settings-server";
-import { mergeImageSettings, type ImageWorkspaceSettings } from "@/lib/image-workspace";
+  getWorkspaceSnapshot,
+  upsertWorkspaceSnapshot,
+} from "@/lib/db/workspace-settings-store";
 
 export async function GET() {
   try {
-    const snapshot = getMergedWorkspaceSnapshot();
+    const supabase = await createSupabaseServerClient();
+    const snapshot = await getWorkspaceSnapshot(supabase);
     return NextResponse.json(snapshot);
   } catch (e) {
     console.error("[workspace-settings GET]", e);
@@ -20,28 +18,32 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!canWriteWorkspaceSettingsFile()) {
-    return NextResponse.json(
-      {
-        error: "write_disabled",
-        hint:
-          "仅本地开发（next dev）或设置环境变量 ALLOW_WORKSPACE_SETTINGS_WRITE=1 时可写入 workspace-settings.json；线上多为只读文件系统，请在本机保存后 git commit / push。",
-      },
-      { status: 403 },
-    );
-  }
-
   try {
-    const body = (await req.json()) as { llm?: Settings; imageWorkspace?: unknown };
-    const llm = mergeLlmFromWorkspaceFile(body?.llm);
-    const imageWorkspace = mergeImageSettings(body?.imageWorkspace ?? {}) as ImageWorkspaceSettings;
-    const payload: WorkspaceSettingsFileV1 = {
-      version: 1,
-      llm,
-      imageWorkspace,
-    };
-    writeWorkspaceSettingsToDisk(payload);
-    return NextResponse.json({ ok: true });
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    }
+    const adminEmails = getSiteSettingsAdminEmails();
+    const email = user.email?.trim().toLowerCase();
+    if (!email || !adminEmails.includes(email)) {
+      return NextResponse.json(
+        {
+          error: "没有权限修改全站设置",
+          hint: "请在服务端环境变量 SITE_SETTINGS_ADMIN_EMAILS 中配置管理员邮箱。",
+        },
+        { status: 403 },
+      );
+    }
+
+    const body = (await req.json()) as { llm?: unknown; imageWorkspace?: unknown };
+    const snapshot = await upsertWorkspaceSnapshot(supabase, {
+      llm: body.llm as Parameters<typeof upsertWorkspaceSnapshot>[1]["llm"],
+      imageWorkspace: body.imageWorkspace,
+    });
+    return NextResponse.json(snapshot);
   } catch (e) {
     console.error("[workspace-settings POST]", e);
     return NextResponse.json({ error: "write_failed" }, { status: 500 });

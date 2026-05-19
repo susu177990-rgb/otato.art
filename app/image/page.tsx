@@ -13,8 +13,6 @@ import {
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
   IMAGE_REF_SLOT_COUNT,
-  IMAGE_GALLERY_STORAGE_KEY,
-  IMAGE_SETTINGS_STORAGE_KEY,
   placeholderInnerHint,
   type GptImageQuality,
   type ImageAspectRatio,
@@ -22,8 +20,13 @@ import {
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
-import { loadImageGallery, loadImageSettings, prependImageGalleryRecord, saveImageSettings } from "@/lib/image-storage";
-import { WORKSPACE_SETTINGS_SYNC_EVENT } from "@/lib/workspace-settings-client";
+import { useApiSettings } from "@/components/ApiSettingsProvider";
+import {
+  fetchGalleryRecords,
+  fetchWorkspaceSnapshot,
+  prependGalleryRecordApi,
+  saveWorkspaceSnapshot,
+} from "@/lib/workspace-api";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
@@ -128,7 +131,7 @@ async function downloadGeneratedImage(url: string): Promise<void> {
 }
 
 export default function ImagePage() {
-  /** 与 SSR 首帧一致，避免 hydration 抖动；真实配置在 effect / storage 同步里拉取 */
+  const { settings: llmSettings, imageWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
   const [selectedModeId, setSelectedModeId] = useState<string>("real-character-asset");
@@ -194,44 +197,29 @@ export default function ImagePage() {
   }, [aspectRatio, imageSize, settings.gptImageQuality, selectedModelId]);
 
   useEffect(() => {
-    function refreshImageWorkspaceFromDisk() {
-      setSettings(loadImageSettings());
-      setRecords(loadImageGallery());
-    }
-    refreshImageWorkspaceFromDisk();
+    if (workspaceReady) setSettings(imageWorkspace);
+  }, [imageWorkspace, workspaceReady]);
 
-    /** 其它标签页改了 localStorage 时同步（同源 storage 事件不进当前页写入方，故生成前另有强制读取） */
-    function onStorage(ev: StorageEvent) {
-      if (ev.key === IMAGE_SETTINGS_STORAGE_KEY || ev.key === IMAGE_GALLERY_STORAGE_KEY || ev.key === null) {
-        refreshImageWorkspaceFromDisk();
+  useEffect(() => {
+    async function refreshGallery() {
+      try {
+        const records = await fetchGalleryRecords();
+        setRecords(records);
+      } catch (e) {
+        console.warn("[image] gallery load failed", e);
       }
     }
-    window.addEventListener("storage", onStorage);
+    if (workspaceReady) void refreshGallery();
 
-    function onWorkspaceSync() {
-      refreshImageWorkspaceFromDisk();
-    }
-    window.addEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
-
-    /** 从设置页返回本标签、或手机切回前台时再读盘，避免界面显示旧内存态 */
     function onVisibility() {
-      if (document.visibilityState === "visible") refreshImageWorkspaceFromDisk();
+      if (document.visibilityState === "visible" && workspaceReady) {
+        void refreshWorkspace();
+        void refreshGallery();
+      }
     }
     document.addEventListener("visibilitychange", onVisibility);
-
-    /** 浏览器后退恢复 bfcache 时 React 状态可能是旧的 */
-    function onPageShow(e: PageTransitionEvent) {
-      if (e.persisted) refreshImageWorkspaceFromDisk();
-    }
-    window.addEventListener("pageshow", onPageShow);
-
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pageshow", onPageShow);
-    };
-  }, []);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [workspaceReady, refreshWorkspace]);
 
   const modes = useMemo(
     () => [...IMAGE_MODES, ...(settings.customModes ?? [])],
@@ -272,7 +260,7 @@ export default function ImagePage() {
   function persistGptImageQuality(q: GptImageQuality) {
     setSettings((prev) => {
       const next = { ...prev, gptImageQuality: q };
-      saveImageSettings(next);
+      void saveWorkspaceSnapshot({ llm: llmSettings, imageWorkspace: next }).then(() => refreshWorkspace());
       return next;
     });
   }
@@ -344,14 +332,14 @@ export default function ImagePage() {
     });
   }
 
-  function writeRecord(
+  async function writeRecord(
     status: "success" | "error",
     imageUrl?: string,
     message?: string,
     promptSnapshot?: string,
   ) {
     const resolvedPrompt = promptSnapshot ?? finalPrompt;
-    const next = prependImageGalleryRecord({
+    const record: ImageGalleryRecord = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       modeId: selectedModeId,
@@ -369,8 +357,14 @@ export default function ImagePage() {
       refImageCount: filledRefFileCount,
       status,
       error: message,
-    });
-    setRecords(next);
+    };
+    try {
+      const next = await prependGalleryRecordApi(record);
+      setRecords(next);
+    } catch (e) {
+      console.warn("[image] gallery save failed", e);
+      setRecords((prev) => [record, ...prev]);
+    }
   }
 
   async function handleGenerate() {
@@ -381,8 +375,9 @@ export default function ImagePage() {
       return;
     }
 
-    /** 提交前强制与 localStorage 对齐：避免页面内存仍是旧快照而设置里早已保存（返回/bfcache/未触发同步时常见） */
-    const liveSettings = loadImageSettings();
+    /** 提交前强制与云端对齐 */
+    const liveSnapshot = await fetchWorkspaceSnapshot();
+    const liveSettings = liveSnapshot.imageWorkspace;
     setSettings(liveSettings);
     const liveModel = liveSettings.models[selectedModelId];
     const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
@@ -425,7 +420,7 @@ export default function ImagePage() {
       if (!imageUrl) throw new Error(typeof data.error === "string" && data.error ? data.error : "服务器未返回图片地址");
       setResultUrl(imageUrl);
       try {
-        writeRecord("success", imageUrl, undefined, promptForRequest);
+        void writeRecord("success", imageUrl, undefined, promptForRequest);
       } catch (persistErr) {
         console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
       }
@@ -433,7 +428,7 @@ export default function ImagePage() {
       const message = e instanceof Error ? e.message : "生图失败";
       setError(message);
       try {
-        writeRecord("error", undefined, message);
+        void writeRecord("error", undefined, message);
       } catch (persistErr) {
         console.warn("写入失败记录到本地画廊时出错:", persistErr);
       }
@@ -563,8 +558,7 @@ export default function ImagePage() {
                               setSelectedModeId(record.modeId);
                               setAspectRatio(record.aspectRatio);
                               setImageSize(record.imageSize);
-                              const live = loadImageSettings();
-                              const tpl = live.prompts[record.modeId] ?? "";
+                              const tpl = settings.prompts[record.modeId] ?? "";
                               const n = composerSlotCountForTemplate(tpl, record.modeId);
                               let slots: string[];
                               if (record.userSlotInputs && record.userSlotInputs.length > 0) {
@@ -578,7 +572,10 @@ export default function ImagePage() {
                               if (record.gptImageQuality) {
                                 setSettings((prev) => {
                                   const next = { ...prev, gptImageQuality: record.gptImageQuality! };
-                                  saveImageSettings(next);
+                                  void saveWorkspaceSnapshot({
+                                    llm: llmSettings,
+                                    imageWorkspace: next,
+                                  }).then(() => refreshWorkspace());
                                   return next;
                                 });
                               }

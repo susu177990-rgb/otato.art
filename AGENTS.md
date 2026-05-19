@@ -4,14 +4,47 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## 环境变量（编剧室）
+## 环境变量
 
-本地开发：在仓库根目录下使用 `.env.local`（Next.js 默认加载）。  
-英语 Locale 简报等能力使用你在界面「设置」里填写的大模型 API Key，不依赖单独的搜索类环境变量。
+本地：仓库根目录 `.env.local`（Next.js 默认加载）。部署（Zeabur）：在控制台配置同名变量。
 
-## 项目级设置（随仓库同步）
+### Supabase（必填）
 
-- **真相来源**：仓库根目录 `workspace-settings.json`（LLM 网关 + 生图工作台）。
-- **本地**：运行 `next dev` 时，在 `/settings` 点「保存」会 **写回该 JSON**，随后请 `git commit` / `push`。
-- **线上**：构建会带上已提交的 JSON；常见托管环境无写盘权限时无法在界面写文件，需在本机更新 JSON 后提交再部署。
-- 可选环境变量：`ALLOW_WORKSPACE_SETTINGS_WRITE=1` 在非 development 时允许服务端写入（仅限可信环境）。
+| 变量 | 说明 |
+|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | 项目 URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key（可暴露给浏览器） |
+| `SUPABASE_SERVICE_ROLE_KEY` | 仅服务端；迁移脚本用，**勿提交 Git** |
+
+### 其它
+
+- `WATTPAD_API_URL` — Wattpad 子服务地址（可选，默认本机 8765）
+
+## 数据与认证
+
+- **登录**：Supabase Auth 邮箱 + 密码（`/login` 可注册）。
+- **持久化**：PostgreSQL（`site_settings`、`projects`、`image_gallery_records`）；项目和图库按 `auth.users` 隔离，RLS 启用。
+- **设置页**：LLM / 生图 API Key 与提示词写入 Supabase 的全站配置，所有账号共用；只有管理员邮箱可在应用内修改。
+
+### Supabase Dashboard
+
+1. Authentication → Providers → Email 开启
+2. URL Configuration：Site URL = Zeabur 域名；Redirect URLs 含 `https://<域名>/auth/callback` 与 `http://localhost:4000/auth/callback`
+
+### 数据库迁移
+
+```bash
+supabase login
+supabase link --project-ref bfvilvoiangeilxuxpdh
+supabase db push
+```
+
+### 导入本地旧数据
+
+注册账号后：
+
+```bash
+npx tsx scripts/migrate-local-data-to-supabase.ts --owner-email=你的邮箱
+```
+
+浏览器内旧 `localStorage` 会在首次登录后自动尝试一次性导入（见 `WorkspaceLocalMigration`）。

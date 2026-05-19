@@ -7,9 +7,8 @@ import styles from "./settings-page.module.css";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
-import { loadSettings as loadLlmSettings } from "@/components/SettingsDialog";
-import { saveLlmSettingsToLocal } from "@/lib/llm-settings-storage";
-import { flushWorkspaceSettingsToProject } from "@/lib/workspace-settings-client";
+import { useApiSettings } from "@/components/ApiSettingsProvider";
+import { saveWorkspaceSnapshot } from "@/lib/workspace-api";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
@@ -23,7 +22,6 @@ import {
   type ImageModeId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
-import { loadImageSettings, saveImageSettings } from "@/lib/image-storage";
 
 type Tab = "llmApi" | "imageApi" | "imagePrompts";
 
@@ -33,33 +31,39 @@ const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "imagePrompts", label: "生图 提示词" },
 ];
 
-function persistLlmSettings(s: Settings) {
-  const next = { ...s, model: normalizeModel(s.model) };
-  saveLlmSettingsToLocal(next);
-  flushWorkspaceSettingsToProject();
-  return next;
-}
-
 export default function SettingsPage() {
+  const { settings: loadedLlm, imageWorkspace: loadedImage, workspaceReady, refreshWorkspace } =
+    useApiSettings();
   const [tab, setTab] = useState<Tab>("llmApi");
-  const [llmSettings, setLlmSettings] = useState<Settings>(() =>
-    typeof window !== "undefined" ? loadLlmSettings() : DEFAULT_SETTINGS,
-  );
-  const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(() =>
-    typeof window !== "undefined" ? loadImageSettings() : DEFAULT_IMAGE_SETTINGS,
-  );
+  const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
   const imagePromptsPersistMergeRef = useRef<(() => ImageWorkspaceSettings) | null>(null);
 
-  function saveAll() {
+  useEffect(() => {
+    if (!workspaceReady) return;
+    setLlmSettings(loadedLlm);
+    setImageSettings(loadedImage);
+  }, [workspaceReady, loadedLlm, loadedImage]);
+
+  async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings) {
+    const normalizedLlm = { ...llm, model: normalizeModel(llm.model) };
+    await saveWorkspaceSnapshot({ llm: normalizedLlm, imageWorkspace: image });
+    await refreshWorkspace();
+  }
+
+  async function saveAll() {
     const mergedImage =
       typeof imagePromptsPersistMergeRef.current === "function"
         ? imagePromptsPersistMergeRef.current()
         : imageSettings;
     setImageSettings(mergedImage);
-    persistLlmSettings(llmSettings);
-    saveImageSettings(mergedImage);
-    setSavedMessage("已保存");
+    try {
+      await persistWorkspace(llmSettings, mergedImage);
+      setSavedMessage("已保存到云端");
+    } catch {
+      setSavedMessage("保存失败");
+    }
     window.setTimeout(() => setSavedMessage(""), 1400);
   }
 
@@ -89,11 +93,8 @@ export default function SettingsPage() {
       <div className={shellStyles.body}>
         <div className={shellStyles.shell}>
           <p className={styles.workspacePersistNotice}>
-            <strong>项目级配置</strong>以仓库根目录{" "}
-            <code className={shellStyles.mono}>workspace-settings.json</code> 为准（启动时会注入浏览器）。
-            本地运行 <code className={shellStyles.mono}>next dev</code>{" "}
-            时点击「保存」会尝试写回该文件；请将其 <strong>git commit 并推送</strong>
-            ，其他机器拉代码后即与仓库一致。部署环境若无写盘权限，界面仍会保存到浏览器缓存，需在本机写入 JSON 后提交。
+            <strong>全站配置</strong>保存在 Supabase。这里修改的 LLM / 生图 API Key 与提示词是 SaaS 全局设置，
+            所有登录账号与设备都会读取同一份配置；项目与画廊仍按用户账号隔离。
           </p>
           <div className={styles.tabBar}>
             <div className={shellStyles.segmented}>
@@ -122,6 +123,10 @@ export default function SettingsPage() {
               value={imageSettings}
               onChange={setImageSettings}
               persistMergeRef={imagePromptsPersistMergeRef}
+              onPersistImage={async (next) => {
+                setImageSettings(next);
+                await persistWorkspace(llmSettings, next);
+              }}
             />
           ) : null}
 
@@ -198,10 +203,12 @@ function ImagePromptsPanel({
   value,
   onChange,
   persistMergeRef,
+  onPersistImage,
 }: {
   value: ImageWorkspaceSettings;
   onChange: (next: ImageWorkspaceSettings) => void;
   persistMergeRef?: MutableRefObject<(() => ImageWorkspaceSettings) | null>;
+  onPersistImage: (next: ImageWorkspaceSettings) => Promise<void>;
 }) {
   const builtinRows: ModePromptRow[] = IMAGE_MODES.filter((m) => m.id !== "free").map((m) => ({
     id: m.id,
@@ -286,7 +293,7 @@ function ImagePromptsPanel({
       };
     }
     onChange(next);
-    saveImageSettings(next);
+    void onPersistImage(next);
     setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
     setDraftPrompts((prev) => {
       const copy = { ...prev };
@@ -339,7 +346,7 @@ function ImagePromptsPanel({
       prompts: { ...value.prompts, [id]: "" },
     };
     onChange(next);
-    saveImageSettings(next);
+    void onPersistImage(next);
     handleEditPrompt(id);
   }
 
@@ -356,7 +363,7 @@ function ImagePromptsPanel({
       refSlotHintsByMode: restHints,
     };
     onChange(next);
-    saveImageSettings(next);
+    void onPersistImage(next);
     setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
     setDraftPrompts((prev) => {
       const copy = { ...prev };
@@ -396,7 +403,7 @@ function ImagePromptsPanel({
       refSlotHintsByMode: restHints,
     };
     onChange(next);
-    saveImageSettings(next);
+    void onPersistImage(next);
     setEditingPromptModeId((cur) => (cur === mode.id ? null : cur));
     setDraftPrompts((prev) => {
       const copy = { ...prev };

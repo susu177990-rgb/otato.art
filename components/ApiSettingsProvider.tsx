@@ -9,17 +9,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
-import { loadSettings, SETTINGS_STORAGE_KEY } from "@/components/SettingsDialog";
+import { usePathname, useRouter } from "next/navigation";
+import { DEFAULT_IMAGE_SETTINGS } from "@/lib/image-workspace";
+import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
+import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import type { Settings } from "@/lib/types";
-import { WORKSPACE_SETTINGS_SYNC_EVENT } from "@/lib/workspace-settings-client";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 type ApiSettingsContextValue = {
   settings: Settings;
-  /**
-   * 全局 LLM 网关配置（`/settings` → LLM API）；调用本方法等价于跳转设置页。
-   */
+  imageWorkspace: ImageWorkspaceSettings;
+  workspaceReady: boolean;
+  refreshWorkspace: () => Promise<void>;
   openSettings: () => void;
 };
 
@@ -35,34 +36,44 @@ export function useApiSettings(): ApiSettingsContextValue {
 
 export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [settings, setSettings] = useState<Settings>(() =>
-    typeof window !== "undefined" ? loadSettings() : DEFAULT_SETTINGS,
-  );
+  const pathname = usePathname();
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [imageWorkspace, setImageWorkspace] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const isPublicAuthPath =
+    pathname === "/login" || pathname.startsWith("/auth/") || pathname.startsWith("/api/auth/");
 
-  const refresh = useCallback(() => {
-    setSettings(loadSettings());
-  }, []);
+  const refreshWorkspace = useCallback(async () => {
+    if (isPublicAuthPath) {
+      setSettings(DEFAULT_SETTINGS);
+      setImageWorkspace(DEFAULT_IMAGE_SETTINGS);
+      setWorkspaceReady(false);
+      return;
+    }
+
+    try {
+      const snapshot = await fetchWorkspaceSnapshot();
+      setSettings(snapshot.llm);
+      setImageWorkspace(snapshot.imageWorkspace);
+    } catch (e) {
+      console.error("[ApiSettingsProvider] refresh failed", e);
+    } finally {
+      setWorkspaceReady(true);
+    }
+  }, [isPublicAuthPath]);
 
   useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key === SETTINGS_STORAGE_KEY) refresh();
-    }
-    window.addEventListener("storage", onStorage);
-    function onWorkspaceSync() {
-      refresh();
-    }
-    window.addEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
-    };
-  }, [refresh]);
+    void refreshWorkspace();
+  }, [refreshWorkspace]);
 
   const openSettings = useCallback(() => {
     router.push("/settings");
   }, [router]);
 
-  const value = useMemo(() => ({ settings, openSettings }), [settings, openSettings]);
+  const value = useMemo(
+    () => ({ settings, imageWorkspace, workspaceReady, refreshWorkspace, openSettings }),
+    [settings, imageWorkspace, workspaceReady, refreshWorkspace, openSettings],
+  );
 
   return <ApiSettingsContext.Provider value={value}>{children}</ApiSettingsContext.Provider>;
 }

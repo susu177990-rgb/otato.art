@@ -3,10 +3,6 @@
 import { useEffect, useState } from "react";
 import type { Settings } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
-import { loadLlmSettings, saveLlmSettingsToLocal, SETTINGS_STORAGE_KEY } from "@/lib/llm-settings-storage";
-import { flushWorkspaceSettingsToProject } from "@/lib/workspace-settings-client";
-
-export { SETTINGS_STORAGE_KEY };
 
 interface Props {
   open: boolean;
@@ -54,8 +50,6 @@ export default function SettingsDialog({ open, onClose, settings, onSave }: Prop
       ...draft,
       model: normalizeModel(draft.model),
     };
-    saveLlmSettingsToLocal(next);
-    flushWorkspaceSettingsToProject();
     onSave(next);
     setEditing(false);
   }
@@ -160,5 +154,3 @@ export default function SettingsDialog({ open, onClose, settings, onSave }: Prop
     </div>
   );
 }
-
-export { loadLlmSettings as loadSettings };

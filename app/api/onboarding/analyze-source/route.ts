@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 
-  const project = getProject(projectId);
+  const project = await getProject(projectId);
   if (!project) {
     return Response.json({ error: "项目不存在" }, { status: 404 });
   }
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     adaptationPhase: "analyzed" as const,
     onboardingStatus,
   };
-  saveProject(merged);
+  await saveProject(merged);
 
   return Response.json({
     ok: true,
