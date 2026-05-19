@@ -12,20 +12,23 @@ import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
+  IMAGE_REF_SLOT_COUNT,
   defaultImageModePrompt,
   extractPromptPlaceholderOccurrences,
   newCustomImageModeId,
+  refSlotHintsDraftRowsToStored,
+  refSlotHintsStoredToDraftRows,
   type ImageModeId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
 import { loadImageSettings, saveImageSettings } from "@/lib/image-storage";
 
-type Tab = "llmApi" | "imagePrompts" | "imageApi";
+type Tab = "llmApi" | "imageApi" | "imagePrompts";
 
 const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "llmApi", label: "LLM API" },
-  { id: "imagePrompts", label: "生图 提示词" },
   { id: "imageApi", label: "生图 API" },
+  { id: "imagePrompts", label: "生图 提示词" },
 ];
 
 function persistLlmSettings(s: Settings) {
@@ -208,6 +211,7 @@ function ImagePromptsPanel({
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
+  const [draftRefHintRows, setDraftRefHintRows] = useState<Partial<Record<string, string[]>>>({});
 
   useEffect(() => {
     const ref = persistMergeRef;
@@ -216,7 +220,18 @@ function ImagePromptsPanel({
       if (editingPromptModeId === null) return value;
       const id = editingPromptModeId;
       const text = draftPrompts[id] ?? value.prompts[id] ?? "";
-      let merged: ImageWorkspaceSettings = { ...value, prompts: { ...value.prompts, [id]: text } };
+      const rows =
+        draftRefHintRows[id] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[id]);
+      const parsedHints = refSlotHintsDraftRowsToStored(rows);
+      const hintsMap = { ...value.refSlotHintsByMode };
+      if (parsedHints.length === 0) delete hintsMap[id];
+      else hintsMap[id] = parsedHints;
+
+      let merged: ImageWorkspaceSettings = {
+        ...value,
+        prompts: { ...value.prompts, [id]: text },
+        refSlotHintsByMode: hintsMap,
+      };
       if (id.startsWith("custom_")) {
         const labelRaw =
           draftLabels[id] ?? value.customModes?.find((m) => m.id === id)?.label ?? id;
@@ -231,13 +246,28 @@ function ImagePromptsPanel({
     return () => {
       ref.current = null;
     };
-  }, [persistMergeRef, value, editingPromptModeId, draftPrompts, draftLabels]);
+  }, [
+    persistMergeRef,
+    value,
+    editingPromptModeId,
+    draftPrompts,
+    draftLabels,
+    draftRefHintRows,
+  ]);
 
   function handleSavePrompt(modeId: string) {
     const text = draftPrompts[modeId] ?? value.prompts[modeId] ?? "";
+    const rows =
+      draftRefHintRows[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]);
+    const parsedHints = refSlotHintsDraftRowsToStored(rows);
+    const hintsMap = { ...value.refSlotHintsByMode };
+    if (parsedHints.length === 0) delete hintsMap[modeId];
+    else hintsMap[modeId] = parsedHints;
+
     let next: ImageWorkspaceSettings = {
       ...value,
       prompts: { ...value.prompts, [modeId]: text },
+      refSlotHintsByMode: hintsMap,
     };
     if (modeId.startsWith("custom_")) {
       const labelRaw =
@@ -261,6 +291,11 @@ function ImagePromptsPanel({
       delete copy[modeId];
       return copy;
     });
+    setDraftRefHintRows((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
   }
 
   function handleEditPrompt(modeId: string) {
@@ -270,6 +305,14 @@ function ImagePromptsPanel({
         delete copy[editingPromptModeId];
       }
       copy[modeId] = value.prompts[modeId] ?? "";
+      return copy;
+    });
+    setDraftRefHintRows((prev) => {
+      const copy = { ...prev };
+      if (editingPromptModeId !== null && editingPromptModeId !== modeId) {
+        delete copy[editingPromptModeId];
+      }
+      copy[modeId] = refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]);
       return copy;
     });
     if (modeId.startsWith("custom_")) {
@@ -297,10 +340,13 @@ function ImagePromptsPanel({
     if (!modeId.startsWith("custom_")) return;
     const restPrompts = { ...value.prompts };
     delete restPrompts[modeId];
+    const restHints = { ...value.refSlotHintsByMode };
+    delete restHints[modeId];
     const next: ImageWorkspaceSettings = {
       ...value,
       customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
       prompts: restPrompts,
+      refSlotHintsByMode: restHints,
     };
     onChange(next);
     saveImageSettings(next);
@@ -315,6 +361,11 @@ function ImagePromptsPanel({
       delete copy[modeId];
       return copy;
     });
+    setDraftRefHintRows((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
   }
 
   function handleDeletePromptRow(mode: ModePromptRow) {
@@ -324,15 +375,18 @@ function ImagePromptsPanel({
     }
     if (
       !window.confirm(
-        `「${mode.label}」将恢复为内置默认提示词（当前模版修改会丢失），确定？`,
+        `「${mode.label}」将恢复为内置默认提示词，并清空该模式的参考图槽说明（当前模版修改会丢失），确定？`,
       )
     ) {
       return;
     }
     const defaultPrompt = defaultImageModePrompt(mode.id as ImageModeId);
+    const restHints = { ...value.refSlotHintsByMode };
+    delete restHints[mode.id];
     const next: ImageWorkspaceSettings = {
       ...value,
       prompts: { ...value.prompts, [mode.id]: defaultPrompt },
+      refSlotHintsByMode: restHints,
     };
     onChange(next);
     saveImageSettings(next);
@@ -341,6 +395,36 @@ function ImagePromptsPanel({
       const copy = { ...prev };
       delete copy[mode.id];
       return copy;
+    });
+    setDraftRefHintRows((prev) => {
+      const copy = { ...prev };
+      delete copy[mode.id];
+      return copy;
+    });
+  }
+
+  function handleAddRefHintRow(modeId: string) {
+    setDraftRefHintRows((prev) => {
+      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
+      if (cur.length >= IMAGE_REF_SLOT_COUNT) return prev;
+      return { ...prev, [modeId]: [...cur, ""] };
+    });
+  }
+
+  function handleRemoveRefHintRow(modeId: string, index: number) {
+    setDraftRefHintRows((prev) => {
+      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
+      if (cur.length <= 1) return prev;
+      cur.splice(index, 1);
+      return { ...prev, [modeId]: cur };
+    });
+  }
+
+  function handleChangeRefHintRow(modeId: string, index: number, text: string) {
+    setDraftRefHintRows((prev) => {
+      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
+      cur[index] = text;
+      return { ...prev, [modeId]: cur };
     });
   }
 
@@ -355,7 +439,12 @@ function ImagePromptsPanel({
               <code className={shellStyles.mono}>{"{{…}}"}</code>{" "}
               占位符，作图页会对应多一栏输入（从左到右依次填入）；输入框内的灰色说明文字取自对应占位符「括号里的内容」，请在{" "}
               <code className={shellStyles.mono}>{"{{此处写提示}}"}</code>{" "}
-              中写好管理者面向用户的说明。超过 6 处占位时窄屏可能较挤。每张卡片均有「删除」：自定义模式为移除该模式；内置模式为恢复默认模版。顶部「保存」会并入正在编辑中的草稿。
+              中写好管理者面向用户的说明。
+              <strong className={styles.promptIntroStrong}>
+                下方「参考图槽」按「图1」「图2」逐栏填写说明：每栏一个小输入框；在最后一栏输入框右侧点「+」可增加一栏（最多 {IMAGE_REF_SLOT_COUNT}{" "}
+                栏）。未填的槽在作图页仅显示「图n」。不再尝试从正文自动识别。
+              </strong>
+              超过 6 处占位时窄屏可能较挤。每张卡片均有「删除」：自定义模式为移除该模式；内置模式为恢复默认模版（含清空该模式参考图说明）。顶部「保存」会并入正在编辑中的草稿。
             </p>
             <div className={styles.promptIntroActions}>
               <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
@@ -372,6 +461,9 @@ function ImagePromptsPanel({
           const savedText = value.prompts[mode.id] ?? "";
           const textareaValue = isEditing ? (draftPrompts[mode.id] ?? savedText) : savedText;
           const occCount = extractPromptPlaceholderOccurrences(savedText).length;
+          const refRowsForMode = isEditing
+            ? (draftRefHintRows[mode.id] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]))
+            : refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]);
 
           return (
             <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
@@ -436,6 +528,65 @@ function ImagePromptsPanel({
                   setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
                 }}
               />
+              <div className={styles.promptModeRefHintsWrap}>
+                <span className={styles.promptModeRefHintsLabel}>
+                  参考图槽说明（每栏对应作图页「图1」「图2」…，最多 {IMAGE_REF_SLOT_COUNT} 栏）
+                </span>
+                <div className={styles.promptModeRefHintsList}>
+                  {refRowsForMode.map((hintText, idx) => (
+                    <div key={idx} className={styles.promptModeRefHintRow}>
+                      <span className={styles.promptModeRefHintIdx}>图{idx + 1}</span>
+                      <input
+                        type="text"
+                        className={[
+                          shellStyles.input,
+                          styles.promptModeRefHintInput,
+                          !isEditing ? styles.promptModeTextareaReadOnly : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        value={hintText}
+                        readOnly={!isEditing}
+                        placeholder={idx === 0 ? "例如：面部参考" : "可选说明"}
+                        spellCheck={false}
+                        aria-label={`参考图槽图${idx + 1}说明`}
+                        onClick={() => {
+                          if (!isEditing) handleEditPrompt(mode.id);
+                        }}
+                        onFocus={() => {
+                          if (!isEditing) handleEditPrompt(mode.id);
+                        }}
+                        onChange={(e) => {
+                          if (!isEditing) return;
+                          handleChangeRefHintRow(mode.id, idx, e.target.value);
+                        }}
+                      />
+                      {isEditing &&
+                      idx === refRowsForMode.length - 1 &&
+                      refRowsForMode.length < IMAGE_REF_SLOT_COUNT ? (
+                        <button
+                          type="button"
+                          className={[shellStyles.buttonSubtle, styles.promptModeRefHintPlusBtn].join(" ")}
+                          onClick={() => handleAddRefHintRow(mode.id)}
+                          aria-label="添加一栏参考图槽说明"
+                        >
+                          +
+                        </button>
+                      ) : null}
+                      {isEditing && refRowsForMode.length > 1 ? (
+                        <button
+                          type="button"
+                          className={[shellStyles.buttonSubtle, styles.promptModeRefHintRowBtn].join(" ")}
+                          onClick={() => handleRemoveRefHintRow(mode.id, idx)}
+                          aria-label={`移除图${idx + 1}说明栏`}
+                        >
+                          移除
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </article>
           );
         })}

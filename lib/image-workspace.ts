@@ -125,6 +125,9 @@ export interface CustomImageMode {
   label: string;
 }
 
+/** 作图页上传参考图槽位数量（图1…） */
+export const IMAGE_REF_SLOT_COUNT = 10;
+
 export interface ImageWorkspaceSettings {
   /** 内置 + 自定义模式的模版；自定义键为 {@link CustomImageMode.id} */
   prompts: Record<string, string>;
@@ -133,6 +136,11 @@ export interface ImageWorkspaceSettings {
   gptImageQuality: GptImageQuality;
   /** 接在内置 {@link IMAGE_MODES} 之后展示 */
   customModes: CustomImageMode[];
+  /**
+   * 作图页参考图槽说明：modeId → 与「图1、图2…」顺序对应的短文（管理员在设置里逐行填写）。
+   * 某行留空则该槽仅显示「图n」。
+   */
+  refSlotHintsByMode: Record<string, string[]>;
 }
 
 export interface ImageGalleryRecord {
@@ -175,6 +183,7 @@ function imageModelFromBaked(id: ImageModelId): ImageModelSettings {
 export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   gptImageQuality: "auto",
   customModes: [],
+  refSlotHintsByMode: {},
   prompts: {
     "real-character-asset": REAL_CHARACTER_ASSET_PROMPT,
     "photoreal-portrait-four-view": PHOTOREAL_PORTRAIT_FOUR_VIEW_PROMPT,
@@ -222,6 +231,50 @@ function coercePromptsRecord(raw: unknown): Record<string, string> {
   return out;
 }
 
+function coerceRefSlotHintsByMode(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(val)) continue;
+    const lines = val.map((x) => String(x ?? "").trim()).slice(0, IMAGE_REF_SLOT_COUNT);
+    let end = lines.length;
+    while (end > 0 && !lines[end - 1]) end -= 1;
+    if (end > 0) out[modeId] = lines.slice(0, end);
+  }
+  return out;
+}
+
+/** 设置页多行文案 → 存入 settings 的数组（去掉末尾空行） */
+export function parseRefSlotHintsTextarea(text: string): string[] {
+  const rawLines = text.split(/\r?\n/);
+  const lines = Array.from({ length: IMAGE_REF_SLOT_COUNT }, (_, i) => (rawLines[i] ?? "").trim());
+  let end = lines.length;
+  while (end > 0 && !lines[end - 1]) end -= 1;
+  return lines.slice(0, end);
+}
+
+/** 设置页展示用：数组 → 多行文本 */
+export function formatRefSlotHintsForTextarea(stored: string[] | undefined): string {
+  if (!stored?.length) return "";
+  const lines = Array.from({ length: IMAGE_REF_SLOT_COUNT }, (_, i) => (stored[i] ?? "").trim());
+  let end = lines.length;
+  while (end > 0 && !lines[end - 1]) end -= 1;
+  return lines.slice(0, end).join("\n");
+}
+
+/** 写入 settings：去掉末尾空栏，每栏 trim */
+export function refSlotHintsDraftRowsToStored(rows: string[]): string[] {
+  let end = rows.length;
+  while (end > 0 && !String(rows[end - 1] ?? "").trim()) end -= 1;
+  return rows.slice(0, end).map((s) => String(s).trim());
+}
+
+/** 设置页编辑 UI：未配置时默认一行空字符串（仅「图1」一栏） */
+export function refSlotHintsStoredToDraftRows(stored: string[] | undefined): string[] {
+  if (stored && stored.length > 0) return [...stored];
+  return [""];
+}
+
 function coerceGptImageQuality(v: unknown): GptImageQuality | undefined {
   return v === "auto" || v === "low" || v === "medium" || v === "high" ? v : undefined;
 }
@@ -246,6 +299,7 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
   return {
     gptImageQuality: coerceGptImageQuality(source.gptImageQuality) ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
     customModes,
+    refSlotHintsByMode: coerceRefSlotHintsByMode(source.refSlotHintsByMode),
     prompts: {
       ...DEFAULT_IMAGE_SETTINGS.prompts,
       ...sourcePrompts,

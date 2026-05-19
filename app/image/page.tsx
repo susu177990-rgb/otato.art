@@ -12,6 +12,7 @@ import {
   GPT_IMAGE_QUALITY_ORDER,
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
+  IMAGE_REF_SLOT_COUNT,
   IMAGE_GALLERY_STORAGE_KEY,
   IMAGE_SETTINGS_STORAGE_KEY,
   placeholderInnerHint,
@@ -27,16 +28,15 @@ import styles from "./image-page.module.css";
 
 const ASPECT_RATIOS: ImageAspectRatio[] = ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"];
 const IMAGE_SIZES: ImageSizeTier[] = ["1K", "2K", "4K"];
-const REF_IMAGE_SLOT_COUNT = 10;
 
 type RefSlot = { previewUrl: string; file: File } | null;
 
 function createEmptyRefSlots(): RefSlot[] {
-  return Array.from({ length: REF_IMAGE_SLOT_COUNT }, () => null);
+  return Array.from({ length: IMAGE_REF_SLOT_COUNT }, () => null);
 }
 
 function normalizeRefSlots(slots: Array<RefSlot | null | undefined>): RefSlot[] {
-  return Array.from({ length: REF_IMAGE_SLOT_COUNT }, (_, index) => slots[index] ?? null);
+  return Array.from({ length: IMAGE_REF_SLOT_COUNT }, (_, index) => slots[index] ?? null);
 }
 
 function revokeRefPreview(slot: RefSlot | null) {
@@ -254,6 +254,7 @@ export default function ImagePage() {
     () => buildImagePromptFromSlots(promptTemplate, slotInputs),
     [promptTemplate, slotInputs],
   );
+  const refSlotHintsLines = settings.refSlotHintsByMode[selectedModeId] ?? [];
   const modelReady = Boolean(selectedModel.endpointUrl.trim() && selectedModel.apiKey.trim() && selectedModel.modelName.trim());
   const filledRefFileCount = useMemo(() => refSlots.filter(Boolean).length, [refSlots]);
   const sidebarHistoryRecords = useMemo(() => {
@@ -610,7 +611,9 @@ export default function ImagePage() {
                   fillRefImagesFromIndex(index, e.dataTransfer.files);
                 }}
               >
-                <label>
+                <label
+                  aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，点击上传参考图`}
+                >
                   <input
                     className={styles.hiddenInput}
                     type="file"
@@ -628,8 +631,10 @@ export default function ImagePage() {
                     </>
                   ) : (
                     <span className={styles.refEmptyContent}>
-                      <span className={styles.refIcon}>▧</span>
-                      <span>图{index + 1}</span>
+                      <span className={styles.refSlotIndex}>图{index + 1}</span>
+                      {refSlotHintsLines[index]?.trim() ? (
+                        <span className={styles.refSlotHintText}>{refSlotHintsLines[index].trim()}</span>
+                      ) : null}
                     </span>
                   )}
                 </label>
