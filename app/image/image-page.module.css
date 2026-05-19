@@ -51,6 +51,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 供结果图用 cqw/cqh 约束在「侧栏净空后的画布」内，避免 % 高度在 auto 父级下失效导致裁切 */
+  container-type: size;
+  container-name: resultViewport;
 }
 
 @supports (container-type: inline-size) {
@@ -59,19 +62,19 @@
   }
 }
 
-/* 外层裁切框随图片比例收缩，不再占满整列视口（避免与真实宽高比错位的大灰边） */
+/* 占满 safeFrame 内容区（有明确宽高），内部图片按 contain 缩放；不裁切溢出 */
 .resultClip {
   box-sizing: border-box;
-  width: auto;
-  max-width: 100%;
-  height: auto;
-  max-height: 100%;
+  flex: 1 1 0;
+  width: 100%;
   min-width: 0;
   min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   border: none;
   border-radius: 30px;
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -79,43 +82,53 @@
 
 .resultImage {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
   width: auto;
   height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   border-radius: 30px;
 }
 
-/* 结果图叠层：容器紧贴图片边缘；下载按钮绝对定位叠在图内底部居中，避免 grid stretch 把按钮挤出画幅 */
+@supports (width: 1cqh) {
+  .resultImage {
+    max-width: 100cqw;
+    max-height: 100cqh;
+  }
+}
+
+/* 结果图叠层：容器紧贴缩放后的图片边缘；下载按钮绝对定位叠在图内底部居中 */
 .resultMedia {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
-  min-height: 0;
 }
 
 .resultImageStack {
   position: relative;
-  display: inline-block;
+  display: block;
+  flex: 0 1 auto;
   width: fit-content;
   height: fit-content;
   max-width: 100%;
   max-height: 100%;
-  min-height: 0;
   min-width: 0;
-  vertical-align: middle;
+  min-height: 0;
 }
 
 .resultPreviewHit {
   display: block;
   box-sizing: border-box;
-  max-width: 100%;
-  max-height: 100%;
+  flex: 0 1 auto;
   min-width: 0;
   min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   margin: 0;
   padding: 0;
   border: none;
@@ -133,12 +146,19 @@
 
 .resultPreviewHit .resultImage {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
   width: auto;
   height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   border-radius: 30px;
+}
+
+@supports (width: 1cqh) {
+  .resultPreviewHit .resultImage {
+    max-width: 100cqw;
+    max-height: 100cqh;
+  }
 }
 
 .resultDownloadBtn {
