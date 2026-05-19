@@ -15,6 +15,7 @@ import MessageBubble from "./MessageBubble";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
 import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
 import shellStyles from "@/app/shared/shell.module.css";
+import { BRAND_NAME } from "@/lib/branding";
 import styles from "./chat-window.module.css";
 
 export type ChatWindowHandle = {
@@ -233,7 +234,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
         {showEmptyHint && (
           <div className={styles.empty}>
             <div>
-              <h2 className={styles.emptyTitle}>BL 短剧编剧室</h2>
+              <h2 className={styles.emptyTitle}>{BRAND_NAME}</h2>
               <p className={shellStyles.helpText}>{emptySub}</p>
             </div>
           </div>

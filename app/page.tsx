@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/branding";
 import shellStyles from "./shared/shell.module.css";
 
 function ModeHomeInner() {
@@ -25,7 +26,7 @@ function ModeHomeInner() {
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>BL 短剧工作台</p>
+            <p className={shellStyles.plainDockText}>{BRAND_NAME}</p>
           </div>
         </div>
         <nav className={shellStyles.topnav}>
@@ -38,7 +39,7 @@ function ModeHomeInner() {
       <div className={shellStyles.heroWrap}>
         <div style={{ maxWidth: 720, width: "100%", textAlign: "center" }}>
           <h1 className={shellStyles.heroTitle}>选择工作模式</h1>
-          <p className={shellStyles.heroSubtitle}>剧本立项 · 网文素材 · 模式化生图</p>
+          <p className={shellStyles.heroSubtitle}>{BRAND_TAGLINE}</p>
         </div>
 
         <div

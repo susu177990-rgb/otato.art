@@ -3,6 +3,7 @@
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { BRAND_NAME } from "@/lib/branding";
 import shellStyles from "../shared/shell.module.css";
 
 type Mode = "login" | "signup";
@@ -65,7 +66,9 @@ function LoginInner() {
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>剧本工作台 · {mode === "login" ? "登录" : "注册"}</p>
+            <p className={shellStyles.plainDockText}>
+              {BRAND_NAME} · {mode === "login" ? "登录" : "注册"}
+            </p>
           </div>
         </div>
       </header>

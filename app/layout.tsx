@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BRAND_NAME, BRAND_PAGE_DESCRIPTION, BRAND_PAGE_TITLE } from "@/lib/branding";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ApiSettingsProvider } from "@/components/ApiSettingsProvider";
 import { WorkspaceLocalMigration } from "@/components/WorkspaceLocalMigration";
@@ -15,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BL 短剧编剧室",
-  description: "海外女性向 BL 商业短剧 Agent 对话界面",
+  title: {
+    default: BRAND_PAGE_TITLE,
+    template: `%s · ${BRAND_NAME}`,
+  },
+  description: BRAND_PAGE_DESCRIPTION,
 };
 
 export default function RootLayout({

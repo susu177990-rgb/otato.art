@@ -1,7 +1,8 @@
 {
-  "name": "script-agent",
+  "name": "gleam-media-studios",
   "version": "1.1.0",
   "private": true,
+  "description": "Gleam Media Studios — content creation and visual production workspace",
   "engines": {
     "node": ">=20"
   },
