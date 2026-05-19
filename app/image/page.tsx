@@ -4,21 +4,21 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  buildImagePrompt,
+  buildImagePromptFromSlots,
+  composerSlotCountForTemplate,
   DEFAULT_IMAGE_SETTINGS,
+  extractPromptPlaceholderOccurrences,
   GPT_IMAGE_QUALITY_LABELS,
   GPT_IMAGE_QUALITY_ORDER,
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
-  IMAGE_MODE_DUAL_PLACEHOLDERS,
   IMAGE_GALLERY_STORAGE_KEY,
   IMAGE_SETTINGS_STORAGE_KEY,
-  templateUsesDualPaintingAndScriptSlots,
+  placeholderInnerHint,
   type GptImageQuality,
   type ImageAspectRatio,
   type ImageGalleryRecord,
   type ImageModelId,
-  type ImageModeId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
 import { loadImageGallery, loadImageSettings, prependImageGalleryRecord, saveImageSettings } from "@/lib/image-storage";
@@ -78,6 +78,28 @@ function measuredWidthForNativeSelect(select: HTMLSelectElement): number {
   return widthPx;
 }
 
+function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): string[] {
+  return Array.from({ length: len }, (_, i) => slots?.[i] ?? "");
+}
+
+/** 作曲器每一栏的 placeholder：优先用模版里对应 `{{提示文案}}` 括号内文字 */
+function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): string {
+  const tok = occ[slotIndex];
+  if (tok) {
+    const hint = placeholderInnerHint(tok);
+    if (hint) return hint;
+    return `槽位 ${slotIndex + 1}（请在模版 {{}} 内写好提示文字）`;
+  }
+  if (modeId === "free") return "直接输入完整提示词（自由模式无固定模版）";
+  if (modeId === "storyboard-continuation") {
+    return "输入本分镜脚本（将接续参考图1的上一拍，写入连续性推演模版）";
+  }
+  if (modeId === "prop-asset") {
+    return "输入道具资产设定（材质、结构、用途、磨损特征等），写入模版「## 5. 资产设定」";
+  }
+  return "当前模版无 {{}} 占位符时的补充说明（可在设置里为模版添加 {{提示文字}}）";
+}
+
 async function downloadGeneratedImage(url: string): Promise<void> {
   try {
     const res = await fetch(url);
@@ -108,12 +130,11 @@ export default function ImagePage() {
   /** 与 SSR 首帧一致，避免 hydration 抖动；真实配置在 effect / storage 同步里拉取 */
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
-  const [selectedModeId, setSelectedModeId] = useState<ImageModeId>("real-character-asset");
+  const [selectedModeId, setSelectedModeId] = useState<string>("real-character-asset");
   const [selectedModelId, setSelectedModelId] = useState<ImageModelId>("gpt-image-2");
   const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("4:3");
   const [imageSize, setImageSize] = useState<ImageSizeTier>("1K");
-  const [userInput, setUserInput] = useState("");
-  const [userInputSecondary, setUserInputSecondary] = useState("");
+  const [slotInputs, setSlotInputs] = useState<string[]>([""]);
   const [refSlots, setRefSlots] = useState<RefSlot[]>(createEmptyRefSlots);
   const [resultUrl, setResultUrl] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -205,16 +226,33 @@ export default function ImagePage() {
     };
   }, []);
 
+  const modes = useMemo(
+    () => [...IMAGE_MODES, ...(settings.customModes ?? [])],
+    [settings.customModes],
+  );
+
   const selectedModel = settings.models[selectedModelId];
-  const promptTemplate = settings.prompts[selectedModeId];
-  const useDualPaintingScriptComposer = templateUsesDualPaintingAndScriptSlots(promptTemplate);
-  const dualPlaceholders = IMAGE_MODE_DUAL_PLACEHOLDERS[selectedModeId] ?? {
-    left: "左栏填写内容",
-    right: "右栏填写内容",
-  };
+  const promptTemplate = settings.prompts[selectedModeId] ?? "";
+  const placeholderOccurrences = useMemo(
+    () => extractPromptPlaceholderOccurrences(promptTemplate),
+    [promptTemplate],
+  );
+  const composerSlotCount = composerSlotCountForTemplate(promptTemplate, selectedModeId);
+
+  useEffect(() => {
+    setSlotInputs((prev) => normalizeSlotInputsToLength(prev, composerSlotCount));
+  }, [selectedModeId, promptTemplate, composerSlotCount]);
+
+  useEffect(() => {
+    if (modes.some((m) => m.id === selectedModeId)) return;
+    const fallback =
+      modes.find((m) => m.id === "real-character-asset")?.id ?? modes[0]?.id ?? "free";
+    setSelectedModeId(fallback);
+  }, [modes, selectedModeId]);
+
   const finalPrompt = useMemo(
-    () => buildImagePrompt(promptTemplate, userInput, userInputSecondary),
-    [promptTemplate, userInput, userInputSecondary],
+    () => buildImagePromptFromSlots(promptTemplate, slotInputs),
+    [promptTemplate, slotInputs],
   );
   const modelReady = Boolean(selectedModel.endpointUrl.trim() && selectedModel.apiKey.trim() && selectedModel.modelName.trim());
   const filledRefFileCount = useMemo(() => refSlots.filter(Boolean).length, [refSlots]);
@@ -298,17 +336,24 @@ export default function ImagePage() {
     });
   }
 
-  function writeRecord(status: "success" | "error", imageUrl?: string, message?: string) {
+  function writeRecord(
+    status: "success" | "error",
+    imageUrl?: string,
+    message?: string,
+    promptSnapshot?: string,
+  ) {
+    const resolvedPrompt = promptSnapshot ?? finalPrompt;
     const next = prependImageGalleryRecord({
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       modeId: selectedModeId,
-      modeName: IMAGE_MODES.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
+      modeName: modes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
       modelId: selectedModelId,
       modelName: selectedModel.modelName,
-      finalPrompt,
-      userInput,
-      userInputSecondary: useDualPaintingScriptComposer ? userInputSecondary : undefined,
+      finalPrompt: resolvedPrompt,
+      userInput: slotInputs[0] ?? "",
+      userInputSecondary: slotInputs.length >= 2 ? slotInputs[1] : undefined,
+      userSlotInputs: [...slotInputs],
       aspectRatio,
       imageSize,
       gptImageQuality: selectedModel.provider === "gpt-image" ? settings.gptImageQuality : undefined,
@@ -323,7 +368,7 @@ export default function ImagePage() {
   async function handleGenerate() {
     setError("");
 
-    if (selectedModeId === "free" && !userInput.trim()) {
+    if (selectedModeId === "free" && !(slotInputs[0] ?? "").trim()) {
       setError("自由模式请填写完整提示词（无内置模版）。");
       return;
     }
@@ -332,6 +377,8 @@ export default function ImagePage() {
     const liveSettings = loadImageSettings();
     setSettings(liveSettings);
     const liveModel = liveSettings.models[selectedModelId];
+    const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
+    const promptForRequest = buildImagePromptFromSlots(liveTemplate, slotInputs);
     const liveReady = Boolean(
       liveModel.endpointUrl && liveModel.apiKey && liveModel.modelName,
     );
@@ -349,7 +396,7 @@ export default function ImagePage() {
       fd.append(
         "meta",
         JSON.stringify({
-          prompt: finalPrompt,
+          prompt: promptForRequest,
           model: liveModel,
           aspectRatio,
           imageSize,
@@ -370,7 +417,7 @@ export default function ImagePage() {
       if (!imageUrl) throw new Error(typeof data.error === "string" && data.error ? data.error : "服务器未返回图片地址");
       setResultUrl(imageUrl);
       try {
-        writeRecord("success", imageUrl);
+        writeRecord("success", imageUrl, undefined, promptForRequest);
       } catch (persistErr) {
         console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
       }
@@ -411,14 +458,14 @@ export default function ImagePage() {
                 <div
                   className={[
                     styles.modeScrollWrap,
-                    IMAGE_MODES.length > 7 ? styles.modeScrollWrapFaded : "",
+                    modes.length > 7 ? styles.modeScrollWrapFaded : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
                   <div className={styles.modeScroll}>
                     <div className={styles.modeList}>
-                      {IMAGE_MODES.map((mode) => {
+                      {modes.map((mode) => {
                         const active = selectedModeId === mode.id;
                         return (
                           <button
@@ -508,8 +555,18 @@ export default function ImagePage() {
                               setSelectedModeId(record.modeId);
                               setAspectRatio(record.aspectRatio);
                               setImageSize(record.imageSize);
-                              setUserInput(record.userInput);
-                              setUserInputSecondary(record.userInputSecondary ?? "");
+                              const live = loadImageSettings();
+                              const tpl = live.prompts[record.modeId] ?? "";
+                              const n = composerSlotCountForTemplate(tpl, record.modeId);
+                              let slots: string[];
+                              if (record.userSlotInputs && record.userSlotInputs.length > 0) {
+                                slots = normalizeSlotInputsToLength(record.userSlotInputs, n);
+                              } else {
+                                slots = Array.from({ length: n }, () => "");
+                                slots[0] = record.userInput;
+                                if (n >= 2) slots[1] = record.userInputSecondary ?? "";
+                              }
+                              setSlotInputs(slots);
                               if (record.gptImageQuality) {
                                 setSettings((prev) => {
                                   const next = { ...prev, gptImageQuality: record.gptImageQuality! };
@@ -591,45 +648,30 @@ export default function ImagePage() {
           </div>
 
           <div className={styles.composer}>
-            {useDualPaintingScriptComposer ? (
-              <div className={styles.promptDualGrid} role="group" aria-label="作图双输入">
-                <div className={styles.promptDualPane}>
+            <div
+              className={styles.promptSlotGrid}
+              style={{ gridTemplateColumns: `repeat(${slotInputs.length}, minmax(0, 1fr))` }}
+              role="group"
+              aria-label="作图输入"
+            >
+              {slotInputs.map((val, i) => (
+                <div key={i} className={styles.promptSlotPane}>
                   <textarea
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    placeholder={dualPlaceholders.left}
-                    aria-label="绘画风格与质感"
+                    value={val}
+                    onChange={(e) =>
+                      setSlotInputs((prev) => {
+                        const next = [...prev];
+                        next[i] = e.target.value;
+                        return next;
+                      })
+                    }
+                    placeholder={composerPlaceholder(selectedModeId, placeholderOccurrences, i)}
+                    aria-label={`作图输入槽位 ${i + 1}`}
                     className={styles.promptInput}
                   />
                 </div>
-                <div className={styles.promptDualPane}>
-                  <textarea
-                    value={userInputSecondary}
-                    onChange={(e) => setUserInputSecondary(e.target.value)}
-                    placeholder={dualPlaceholders.right}
-                    aria-label="本分镜剧本"
-                    className={styles.promptInput}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className={styles.promptInputShell}>
-                <textarea
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  placeholder={
-                    selectedModeId === "free"
-                      ? "直接输入完整提示词（自由模式无固定模版）"
-                      : selectedModeId === "storyboard-continuation"
-                        ? "输入本分镜脚本（将接续参考图1的上一拍，写入连续性推演模版）"
-                        : selectedModeId === "prop-asset"
-                          ? "输入道具资产设定（材质、结构、用途、磨损特征等），写入模版「## 5. 资产设定」"
-                          : "输入角色设定，将写入固定提示词模版"
-                  }
-                  className={styles.promptInput}
-                />
-              </div>
-            )}
+              ))}
+            </div>
             <div className={styles.toolbar}>
               <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
                 {IMAGE_MODEL_ORDER.map((id) => {

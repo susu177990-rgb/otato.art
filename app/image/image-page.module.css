@@ -836,6 +836,32 @@
   border-right: none;
 }
 
+.promptSlotGrid {
+  display: grid;
+  grid-template-rows: 112px;
+  height: 112px;
+  min-height: 112px;
+  max-height: 112px;
+  gap: 0;
+  align-items: stretch;
+}
+
+.promptSlotPane {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 112px;
+  min-height: 112px;
+  max-height: 112px;
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.promptSlotPane:last-child {
+  border-right: none;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

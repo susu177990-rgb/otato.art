@@ -152,16 +152,34 @@ export default function ImageGalleryPage() {
 
               <div className={styles.section}>
                 <h3>作图输入</h3>
-                {selected.userInputSecondary ? (
-                  <>
-                    <p className={styles.sectionHint}>左栏 / 绘画风格与质感</p>
-                    <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
-                    <p className={styles.sectionHint}>右栏 / 分镜剧本</p>
-                    <pre className={styles.proseBlock}>{selected.userInputSecondary}</pre>
-                  </>
-                ) : (
-                  <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
-                )}
+                {(() => {
+                  const slotsFromRecord =
+                    selected.userSlotInputs && selected.userSlotInputs.length > 0
+                      ? selected.userSlotInputs
+                      : null;
+                  if (slotsFromRecord && slotsFromRecord.length > 1) {
+                    return slotsFromRecord.map((text, i) => (
+                      <div key={i}>
+                        <p className={styles.sectionHint}>槽位 {i + 1}</p>
+                        <pre className={styles.proseBlock}>{text?.trim() ? text : "（无）"}</pre>
+                      </div>
+                    ));
+                  }
+                  if (slotsFromRecord && slotsFromRecord.length === 1) {
+                    return <pre className={styles.proseBlock}>{slotsFromRecord[0]?.trim() ? slotsFromRecord[0] : "（无）"}</pre>;
+                  }
+                  if (selected.userInputSecondary) {
+                    return (
+                      <>
+                        <p className={styles.sectionHint}>左栏 / 绘画风格与质感</p>
+                        <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>
+                        <p className={styles.sectionHint}>右栏 / 分镜剧本</p>
+                        <pre className={styles.proseBlock}>{selected.userInputSecondary}</pre>
+                      </>
+                    );
+                  }
+                  return <pre className={styles.proseBlock}>{selected.userInput || "（无）"}</pre>;
+                })()}
               </div>
 
               <div className={styles.section}>

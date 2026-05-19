@@ -119,17 +119,26 @@ export interface ImageModelSettings {
   provider: "gpt-image" | "nano-banana";
 }
 
+/** 用户自定义作图模式（id 建议 `custom_` + UUID，避免与内置 {@link ImageModeId} 冲突） */
+export interface CustomImageMode {
+  id: string;
+  label: string;
+}
+
 export interface ImageWorkspaceSettings {
-  prompts: Record<ImageModeId, string>;
+  /** 内置 + 自定义模式的模版；自定义键为 {@link CustomImageMode.id} */
+  prompts: Record<string, string>;
   models: Record<ImageModelId, ImageModelSettings>;
   /** gpt-image 模型请求质量；nano-banana 忽略 */
   gptImageQuality: GptImageQuality;
+  /** 接在内置 {@link IMAGE_MODES} 之后展示 */
+  customModes: CustomImageMode[];
 }
 
 export interface ImageGalleryRecord {
   id: string;
   createdAt: string;
-  modeId: ImageModeId;
+  modeId: string;
   modeName: string;
   modelId: ImageModelId;
   modelName: string;
@@ -137,6 +146,8 @@ export interface ImageGalleryRecord {
   userInput: string;
   /** 双槽输入模式（如动漫分镜）：第二段用户文案 */
   userInputSecondary?: string;
+  /** 按模版中 `{{…}}` 出现顺序保存的各槽输入（新记录优先） */
+  userSlotInputs?: string[];
   aspectRatio: ImageAspectRatio;
   imageSize: ImageSizeTier;
   /** 仅 GPT Image 记录可能有值 */
@@ -163,6 +174,7 @@ function imageModelFromBaked(id: ImageModelId): ImageModelSettings {
 
 export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   gptImageQuality: "auto",
+  customModes: [],
   prompts: {
     "real-character-asset": REAL_CHARACTER_ASSET_PROMPT,
     "photoreal-portrait-four-view": PHOTOREAL_PORTRAIT_FOUR_VIEW_PROMPT,
@@ -182,6 +194,34 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   },
 };
 
+const CUSTOM_MODE_ID_RE = /^custom_[a-zA-Z0-9_-]+$/;
+
+function coerceCustomModes(raw: unknown): CustomImageMode[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: CustomImageMode[] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const id = String(o.id ?? "").trim();
+    const label = String(o.label ?? "").trim();
+    if (!CUSTOM_MODE_ID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, label: label || id });
+  }
+  return out;
+}
+
+function coercePromptsRecord(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+    else if (v != null) out[k] = String(v);
+  }
+  return out;
+}
+
 function coerceGptImageQuality(v: unknown): GptImageQuality | undefined {
   return v === "auto" || v === "low" || v === "medium" || v === "high" ? v : undefined;
 }
@@ -199,11 +239,13 @@ export function coerceImageModelStrings(m: ImageModelSettings): ImageModelSettin
 
 export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
   const source = raw && typeof raw === "object" ? (raw as Partial<ImageWorkspaceSettings>) : {};
-  const sourcePrompts = source.prompts && typeof source.prompts === "object" ? source.prompts : {};
+  const sourcePrompts = coercePromptsRecord(source.prompts);
   const sourceModels = source.models && typeof source.models === "object" ? source.models : {};
+  const customModes = coerceCustomModes(source.customModes);
 
   return {
     gptImageQuality: coerceGptImageQuality(source.gptImageQuality) ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
+    customModes,
     prompts: {
       ...DEFAULT_IMAGE_SETTINGS.prompts,
       ...sourcePrompts,
@@ -297,7 +339,65 @@ export const IMAGE_MODE_DUAL_PLACEHOLDERS: Partial<Record<ImageModeId, ImageMode
   },
 };
 
-export function buildImagePrompt(template: string, primary: string, secondary?: string): string {
+const PLACEHOLDER_OCCURRENCE_RE = /\{\{[^}]+\}\}/g;
+
+/** 模版中每一处 `{{…}}` 按从左到右顺序（同一字符串出现多次则各占一档） */
+export function extractPromptPlaceholderOccurrences(template: string): string[] {
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  const re = new RegExp(PLACEHOLDER_OCCURRENCE_RE.source, "g");
+  while ((m = re.exec(template)) !== null) {
+    out.push(m[0]);
+  }
+  return out;
+}
+
+/**
+ * 取出 `{{…}}` 括号内的文案（trim），用作作图页对应输入框的 placeholder。
+ * 括号内留空时返回空字符串，由调用方兜底。
+ */
+export function placeholderInnerHint(fullToken: string): string {
+  const m = fullToken.match(/^\{\{([\s\S]*)\}\}$/);
+  return (m?.[1] ?? "").trim();
+}
+
+/** 作图页输入栏数量：自由模式 1；无占位符时 1；否则为出现次数 */
+export function composerSlotCountForTemplate(template: string, modeId: string): number {
+  if (modeId === "free") return 1;
+  const n = extractPromptPlaceholderOccurrences(template).length;
+  return n === 0 ? 1 : n;
+}
+
+export function newCustomImageModeId(): string {
+  return `custom_${crypto.randomUUID()}`;
+}
+
+function slotValueForLegacyDualToken(token: string, primaryTrimmed: string, secondaryTrimmed: string): string {
+  if (token === IMAGE_PROMPT_SLOT_FILM_STYLE || token === IMAGE_PROMPT_SLOT_PAINTING_STYLE) return primaryTrimmed;
+  if (token === IMAGE_PROMPT_SLOT_FILM_SCRIPT || token === IMAGE_PROMPT_SLOT_STORYBOARD_SCRIPT) return secondaryTrimmed;
+  return primaryTrimmed;
+}
+
+/** 将各槽内容按出现顺序依次替换每一处占位符（禁止 replaceAll，以支持同形占位符多槽） */
+export function buildImagePromptFromSlots(template: string, slots: string[]): string {
+  const occ = extractPromptPlaceholderOccurrences(template);
+  if (occ.length === 0) {
+    return buildImagePromptLegacyNoPlaceholders(template, slots[0] ?? "", slots[1]);
+  }
+  let result = template;
+  let cursor = 0;
+  for (let i = 0; i < occ.length; i++) {
+    const token = occ[i];
+    const idx = result.indexOf(token, cursor);
+    if (idx === -1) break;
+    const val = (slots[i] ?? "").trim();
+    result = result.slice(0, idx) + val + result.slice(idx + token.length);
+    cursor = idx + val.length;
+  }
+  return result;
+}
+
+function buildImagePromptLegacyNoPlaceholders(template: string, primary: string, secondary?: string): string {
   const trimmedPrimary = primary.trim();
   const trimmedSecondary = (secondary ?? "").trim();
   if (templateUsesDualPaintingAndScriptSlots(template)) {
@@ -323,4 +423,16 @@ export function buildImagePrompt(template: string, primary: string, secondary?: 
     return template.replaceAll("{{用户输入分镜脚本}}", trimmedUser);
   }
   return `${template.trim()}\n\n## 5. 角色设定\n${trimmedUser}`;
+}
+
+/** 兼容旧调用：按占位符出现顺序从 primary / secondary 推导各槽 */
+export function buildImagePrompt(template: string, primary: string, secondary?: string): string {
+  const occ = extractPromptPlaceholderOccurrences(template);
+  if (occ.length === 0) {
+    return buildImagePromptLegacyNoPlaceholders(template, primary, secondary);
+  }
+  const tp = primary.trim();
+  const ts = (secondary ?? "").trim();
+  const slots = occ.map((tok) => slotValueForLegacyDualToken(tok, tp, ts));
+  return buildImagePromptFromSlots(template, slots);
 }
