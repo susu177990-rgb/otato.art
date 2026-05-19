@@ -7,7 +7,9 @@ import styles from "./settings-page.module.css";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
-import { SETTINGS_STORAGE_KEY, loadSettings as loadLlmSettings } from "@/components/SettingsDialog";
+import { loadSettings as loadLlmSettings } from "@/components/SettingsDialog";
+import { saveLlmSettingsToLocal } from "@/lib/llm-settings-storage";
+import { flushWorkspaceSettingsToProject } from "@/lib/workspace-settings-client";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
@@ -33,23 +35,21 @@ const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
 
 function persistLlmSettings(s: Settings) {
   const next = { ...s, model: normalizeModel(s.model) };
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
-  }
+  saveLlmSettingsToLocal(next);
+  flushWorkspaceSettingsToProject();
   return next;
 }
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>("llmApi");
-  const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [llmSettings, setLlmSettings] = useState<Settings>(() =>
+    typeof window !== "undefined" ? loadLlmSettings() : DEFAULT_SETTINGS,
+  );
+  const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(() =>
+    typeof window !== "undefined" ? loadImageSettings() : DEFAULT_IMAGE_SETTINGS,
+  );
   const [savedMessage, setSavedMessage] = useState("");
   const imagePromptsPersistMergeRef = useRef<(() => ImageWorkspaceSettings) | null>(null);
-
-  useEffect(() => {
-    setLlmSettings(loadLlmSettings());
-    setImageSettings(loadImageSettings());
-  }, []);
 
   function saveAll() {
     const mergedImage =
@@ -88,6 +88,13 @@ export default function SettingsPage() {
 
       <div className={shellStyles.body}>
         <div className={shellStyles.shell}>
+          <p className={styles.workspacePersistNotice}>
+            <strong>项目级配置</strong>以仓库根目录{" "}
+            <code className={shellStyles.mono}>workspace-settings.json</code> 为准（启动时会注入浏览器）。
+            本地运行 <code className={shellStyles.mono}>next dev</code>{" "}
+            时点击「保存」会尝试写回该文件；请将其 <strong>git commit 并推送</strong>
+            ，其他机器拉代码后即与仓库一致。部署环境若无写盘权限，界面仍会保存到浏览器缓存，需在本机写入 JSON 后提交。
+          </p>
           <div className={styles.tabBar}>
             <div className={shellStyles.segmented}>
               {TAB_DEFS.map((def) => {

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ApiSettingsProvider } from "@/components/ApiSettingsProvider";
+import { getMergedWorkspaceSnapshot } from "@/lib/workspace-settings-server";
+import { WorkspaceSettingsBootstrapShell } from "@/lib/workspace-settings-client";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,15 +20,19 @@ export const metadata: Metadata = {
   description: "海外女性向 BL 商业短剧 Agent 对话界面",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const workspaceSnapshot = getMergedWorkspaceSnapshot();
+
   return (
     <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="h-full bg-background text-foreground antialiased">
-        <ApiSettingsProvider>{children}</ApiSettingsProvider>
+        <WorkspaceSettingsBootstrapShell snapshot={workspaceSnapshot}>
+          <ApiSettingsProvider>{children}</ApiSettingsProvider>
+        </WorkspaceSettingsBootstrapShell>
       </body>
     </html>
   );

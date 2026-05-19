@@ -2,34 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { Settings } from "@/lib/types";
-import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
-import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { loadLlmSettings, saveLlmSettingsToLocal, SETTINGS_STORAGE_KEY } from "@/lib/llm-settings-storage";
+import { flushWorkspaceSettingsToProject } from "@/lib/workspace-settings-client";
 
-export const SETTINGS_STORAGE_KEY = "bl-agent-settings";
-
-function load(): Settings {
-  if (typeof window === "undefined") {
-    return { ...DEFAULT_SETTINGS, model: normalizeModel(DEFAULT_SETTINGS.model) };
-  }
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) {
-      const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as Settings;
-      return {
-        apiUrl: pickNonEmptyTrimmed(merged.apiUrl, DEFAULT_SETTINGS.apiUrl),
-        apiKey: pickNonEmptyTrimmed(merged.apiKey, DEFAULT_SETTINGS.apiKey),
-        model: normalizeModel(merged.model ?? DEFAULT_SETTINGS.model),
-      };
-    }
-  } catch {}
-  return { ...DEFAULT_SETTINGS, model: normalizeModel(DEFAULT_SETTINGS.model) };
-}
-
-function save(s: Settings) {
-  const next = { ...s, model: normalizeModel(s.model) };
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(next));
-}
+export { SETTINGS_STORAGE_KEY };
 
 interface Props {
   open: boolean;
@@ -77,7 +54,8 @@ export default function SettingsDialog({ open, onClose, settings, onSave }: Prop
       ...draft,
       model: normalizeModel(draft.model),
     };
-    save(next);
+    saveLlmSettingsToLocal(next);
+    flushWorkspaceSettingsToProject();
     onSave(next);
     setEditing(false);
   }
@@ -183,4 +161,4 @@ export default function SettingsDialog({ open, onClose, settings, onSave }: Prop
   );
 }
 
-export { load as loadSettings };
+export { loadLlmSettings as loadSettings };

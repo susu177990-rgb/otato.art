@@ -8,6 +8,7 @@ import {
   type ImageWorkspaceSettings,
   mergeImageSettings,
 } from "@/lib/image-workspace";
+import { flushWorkspaceSettingsToProject } from "@/lib/workspace-settings-client";
 
 export function loadImageSettings(): ImageWorkspaceSettings {
   if (typeof window === "undefined") return DEFAULT_IMAGE_SETTINGS;
@@ -22,6 +23,7 @@ export function loadImageSettings(): ImageWorkspaceSettings {
 
 export function saveImageSettings(settings: ImageWorkspaceSettings): void {
   window.localStorage.setItem(IMAGE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  flushWorkspaceSettingsToProject();
 }
 
 export function loadImageGallery(): ImageGalleryRecord[] {

@@ -23,6 +23,7 @@ import {
   type ImageSizeTier,
 } from "@/lib/image-workspace";
 import { loadImageGallery, loadImageSettings, prependImageGalleryRecord, saveImageSettings } from "@/lib/image-storage";
+import { WORKSPACE_SETTINGS_SYNC_EVENT } from "@/lib/workspace-settings-client";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
@@ -207,6 +208,11 @@ export default function ImagePage() {
     }
     window.addEventListener("storage", onStorage);
 
+    function onWorkspaceSync() {
+      refreshImageWorkspaceFromDisk();
+    }
+    window.addEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
+
     /** 从设置页返回本标签、或手机切回前台时再读盘，避免界面显示旧内存态 */
     function onVisibility() {
       if (document.visibilityState === "visible") refreshImageWorkspaceFromDisk();
@@ -221,6 +227,7 @@ export default function ImagePage() {
 
     return () => {
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);
     };

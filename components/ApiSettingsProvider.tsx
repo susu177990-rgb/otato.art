@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { loadSettings, SETTINGS_STORAGE_KEY } from "@/components/SettingsDialog";
 import type { Settings } from "@/lib/types";
+import { WORKSPACE_SETTINGS_SYNC_EVENT } from "@/lib/workspace-settings-client";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
 type ApiSettingsContextValue = {
@@ -34,22 +35,27 @@ export function useApiSettings(): ApiSettingsContextValue {
 
 export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(() =>
+    typeof window !== "undefined" ? loadSettings() : DEFAULT_SETTINGS,
+  );
 
   const refresh = useCallback(() => {
     setSettings(loadSettings());
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === SETTINGS_STORAGE_KEY) refresh();
     }
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    function onWorkspaceSync() {
+      refresh();
+    }
+    window.addEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(WORKSPACE_SETTINGS_SYNC_EVENT, onWorkspaceSync);
+    };
   }, [refresh]);
 
   const openSettings = useCallback(() => {
