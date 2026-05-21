@@ -45,7 +45,7 @@ export function ChatSkillRail({
                     className={[
                       imageStyles.modeButton,
                       railStyles.railCard,
-                      noneActive ? imageStyles.modeButtonActive : "",
+                      noneActive ? [imageStyles.modeButtonActive, railStyles.railCardActive].join(" ") : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -66,7 +66,7 @@ export function ChatSkillRail({
                         className={[
                           imageStyles.modeButton,
                           railStyles.railCard,
-                          active ? imageStyles.modeButtonActive : "",
+                          active ? [imageStyles.modeButtonActive, railStyles.railCardActive].join(" ") : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}

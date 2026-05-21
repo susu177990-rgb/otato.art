@@ -1,12 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
+import {
+  isStoredGeneratedImageUrl,
+  persistGeneratedImageToStorage,
+} from "@/lib/db/persist-generated-image";
 
 const DEFAULT_GALLERY_RECORD_LIMIT = 24;
 
 /** 剥离 DB 中不应持久化的内联图（与写入前 sanitize 一致） */
 function withoutInlineGalleryPayload(record: ImageGalleryRecord): ImageGalleryRecord {
   return sanitizeGalleryRecordForStorage(record);
+}
+
+async function persistGalleryRecordImage(
+  supabase: SupabaseClient,
+  userId: string,
+  record: ImageGalleryRecord,
+): Promise<ImageGalleryRecord> {
+  const url = record.imageUrl?.trim();
+  if (!url || isStoredGeneratedImageUrl(url)) return record;
+  const stored = await persistGeneratedImageToStorage(supabase, userId, url, record.id);
+  return { ...record, imageUrl: stored };
 }
 
 /** 移除 JSONB 中的内联大图，避免 SELECT 触发 statement timeout */
@@ -55,7 +70,10 @@ export async function replaceGalleryRecords(
 
   if (records.length === 0) return;
 
-  const rows = records.map((record) => ({
+  const persisted = await Promise.all(
+    records.map((record) => persistGalleryRecordImage(supabase, user.id, record)),
+  );
+  const rows = persisted.map((record) => ({
     id: record.id,
     user_id: user.id,
     data: sanitizeGalleryRecordForStorage(record),
@@ -75,16 +93,19 @@ export async function prependGalleryRecord(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
+  const persisted = await persistGalleryRecordImage(supabase, user.id, record);
+
   const { error } = await supabase.from("image_gallery_records").insert({
-    id: record.id,
+    id: persisted.id,
     user_id: user.id,
-    data: sanitizeGalleryRecordForStorage(record),
-    created_at: record.createdAt,
+    data: sanitizeGalleryRecordForStorage(persisted),
+    created_at: persisted.createdAt,
   });
 
   if (error) throw error;
   const existing = await listGalleryRecords(supabase, DEFAULT_GALLERY_RECORD_LIMIT - 1);
-  return [withoutInlineGalleryPayload(record), ...existing.filter((item) => item.id !== record.id)];
+  const saved = withoutInlineGalleryPayload(persisted);
+  return [saved, ...existing.filter((item) => item.id !== saved.id)];
 }
 
 export async function importGalleryRecords(
@@ -107,7 +128,10 @@ export async function importGalleryForUser(
 ): Promise<void> {
   if (records.length === 0) return;
 
-  const rows = records.map((record) => ({
+  const persisted = await Promise.all(
+    records.map((record) => persistGalleryRecordImage(supabase, userId, record)),
+  );
+  const rows = persisted.map((record) => ({
     id: record.id,
     user_id: userId,
     data: sanitizeGalleryRecordForStorage(record),

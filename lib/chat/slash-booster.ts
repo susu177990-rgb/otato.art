@@ -13,11 +13,17 @@ export function extractSlashCommandBoosterFromMessages(messages: ChatMessage[]):
     const firstToken = firstLine.split(/\s+/)[0] ?? "";
     if (!firstToken.startsWith("/")) continue;
 
-    const cmd = firstToken.replace(/\/{2,}/g, "/");
+    const cmd = firstToken.replace(/\/{2,}/g, "/").toLowerCase();
+
+    const imageNote =
+      cmd === "/grid" || cmd === "/grid-all"
+        ? "系统会同时调用作图 API 生成真实九宫格预览；你可在文字中说明分镜，但不得在未看到【系统·生图结果】success:true 时说「已生成」。"
+        : "若本条指令不涉及作图，不得声称已生成图片。";
 
     return (
       `用户本条消息以 Slash 指令 «${cmd}» 开头（正文可能还有后续行）。你必须立刻按照上文挂载的 Skill 文档里对该指令的约定输出「可直接复制使用的实质内容」` +
       `（例如 /asset 必须输出完整模板，而不是再列一遍命令表）。` +
+      `${imageNote} ` +
       `严禁重复欢迎菜单、「请先发送 /start」等泛泛话术搪塞。` +
       `仅在 Skill 明确写明当前必须先完成其它步骤且当前指令无效时，才用两三句话说明原因并给出唯一清晰的下一步。`
     );

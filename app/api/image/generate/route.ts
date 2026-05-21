@@ -1,9 +1,20 @@
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { generateImage, parseGenerateRequest } from "@/lib/image-generate";
 import { normalizeIncomingImageModel } from "@/lib/image-workspace";
 import type { GptImageQuality } from "@/lib/image-workspace";
+import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return Response.json({ error: "请先登录后再生图" }, { status: 401 });
+  }
+
   const incoming = await parseGenerateRequest(req);
   if (!incoming.ok) return incoming.response;
   const body = incoming.body;
@@ -26,7 +37,15 @@ export async function POST(req: NextRequest) {
       gptImageQuality,
       refImages: body.refImages,
     });
-    return Response.json(result);
+
+    const imageUrl = await persistGeneratedImageToStorage(
+      supabase,
+      user.id,
+      result.imageUrl,
+      randomUUID(),
+    );
+
+    return Response.json({ imageUrl, payloadKind: result.payloadKind });
   } catch (error) {
     const message = error instanceof Error ? error.message : "生图失败";
     return Response.json({ error: message }, { status: 500 });

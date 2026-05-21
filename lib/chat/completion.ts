@@ -142,15 +142,17 @@ export function parseAssistantChoice(data: Record<string, unknown>): {
 
   const toolCalls: ChatToolCall[] = [];
   if (Array.isArray(rawCalls)) {
-    for (const c of rawCalls) {
-      if (c?.type === "function" && c.function?.name && c.id) {
-        const rawArgs = c.function.arguments;
-        toolCalls.push({
-          id: c.id,
-          name: c.function.name,
-          arguments: typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs ?? {}, null, 0),
-        });
-      }
+    for (let i = 0; i < rawCalls.length; i++) {
+      const c = rawCalls[i];
+      const fn = c?.function;
+      const name = fn?.name?.trim();
+      if (!name) continue;
+      const rawArgs = fn?.arguments;
+      toolCalls.push({
+        id: (typeof c?.id === "string" && c.id) || `call-${i}-${Date.now()}`,
+        name,
+        arguments: typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs ?? {}, null, 0),
+      });
     }
   }
 
@@ -169,12 +171,22 @@ export function parseAssistantChoice(data: Record<string, unknown>): {
     contentText = texts.length ? texts.join("\n") : null;
   }
 
+  if (!contentText?.trim()) {
+    for (const key of ["reasoning_content", "reasoning", "text"] as const) {
+      const alt = message[key];
+      if (typeof alt === "string" && alt.trim()) {
+        contentText = alt.trim();
+        break;
+      }
+    }
+  }
+
   return { contentText, toolCalls };
 }
 
 export interface ChatCompletionRawOptions {
   tools?: unknown[];
-  tool_choice?: string | Record<string, unknown>;
+  tool_choice?: string;
 }
 
 export async function sendChatCompletionRaw(

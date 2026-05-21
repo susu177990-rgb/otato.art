@@ -1,4 +1,4 @@
-/* 与 /image .stage 同构：居中区 + 左右绝对 渐变滑动轨道（保留原设计） */
+/* 与 /image .stage 同构：消息区 + 底部输入；左右轨道用 image-page modePanel/historyPanel（42% 垂直居中） */
 
 .stage {
   position: relative;
@@ -75,6 +75,20 @@
 
 .toolBubble {
   font-size: 11px;
+}
+
+.toolLabel {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a1a1aa;
+}
+
+.toolError {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #fca5a5;
 }
 
 .toolCall {

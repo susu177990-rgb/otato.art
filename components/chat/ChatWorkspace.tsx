@@ -74,16 +74,30 @@ function parseToolMedia(text: string): ParsedToolMedia | null {
 }
 
 function ToolResultBody({ text }: { text: string }) {
+  let parsed: { success?: boolean; error?: string } | null = null;
+  try {
+    parsed = JSON.parse(text) as { success?: boolean; error?: string };
+  } catch {
+    parsed = null;
+  }
+
+  if (parsed?.success === false) {
+    return (
+      <p className={styles.toolError}>
+        生图失败：{parsed.error || "未知错误"}
+      </p>
+    );
+  }
+
   const media = parseToolMedia(text);
   if (media) {
     return (
       <div className={styles.toolResult}>
-        <pre className={styles.toolJson}>{media.text.length > 1200 ? `${media.text.slice(0, 1200)}…` : media.text}</pre>
         {media.isVideo ? (
           <video src={media.mediaUrl} controls className={styles.toolMedia} />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={media.mediaUrl} alt="" className={styles.toolMedia} />
+          <img src={media.mediaUrl} alt="生图结果" className={styles.toolMedia} />
         )}
       </div>
     );
@@ -139,9 +153,17 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       .filter((p): p is { type: "text"; text: string } => p.type === "text")
       .map((p) => p.text)
       .join("\n");
+    let label = "工具结果";
+    try {
+      const j = JSON.parse(text) as { success?: boolean };
+      if (j.success) label = "生图结果";
+    } catch {
+      /* ignore */
+    }
     return (
       <div className={[shellStyles.bubbleRow, shellStyles.bubbleRowAssistant].join(" ")}>
         <div className={[shellStyles.bubbleAssistant, styles.toolBubble].join(" ")}>
+          <p className={styles.toolLabel}>{label}</p>
           <ToolResultBody text={text} />
         </div>
       </div>
@@ -432,7 +454,21 @@ export function ChatWorkspace() {
 
       const updated = await sendChatAgentTurn(sendConvId, userMessage, imageModelForTurn);
 
-      if (activeIdRef.current !== sendConvId) return;
+      if (activeIdRef.current !== sendConvId) {
+        setError("回复已生成，但你已切换到其他会话，请切回该会话查看。");
+        return;
+      }
+
+      const hasAssistant = updated.messages.some(
+        (m) =>
+          m.role === "assistant" &&
+          m.parts.some((p) => p.type === "text" && typeof p.text === "string" && p.text.trim().length > 0),
+      );
+      const hasTool = updated.messages.some((m) => m.role === "tool");
+      if (!hasAssistant && !hasTool) {
+        setError("模型未返回任何内容，请检查 设置 → LLM API 或更换模型后重试。");
+        return;
+      }
 
       setConversation(updated);
       setSummaries((prev) => {

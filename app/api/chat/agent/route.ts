@@ -3,6 +3,7 @@ import { effectiveAgentImageModelId } from "@/lib/chat/image-model-catalog";
 import { llmToChatApiConfig } from "@/lib/chat-settings";
 import type { ImageModelId } from "@/lib/image-workspace";
 import { runAgentChatTurn } from "@/lib/chat/agent";
+import { deriveConversationTitleFromFirstMessage } from "@/lib/chat/conversation-title";
 import type { ChatAttachment, ChatMessage, ChatMessagePart, SkillPackRecord } from "@/lib/chat/types";
 import { getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
@@ -81,6 +82,8 @@ export async function POST(req: Request) {
       conversationMessages: messagesForApi,
       skillMarkdownBlocks: skillBlocks,
       conversationAttachments: mergedAttachments,
+      supabase,
+      userId: user.id,
     });
 
     const updated: typeof conv = {
@@ -97,10 +100,8 @@ export async function POST(req: Request) {
         .map((p) => p.text)
         .join("")
         .trim();
-      if (text) {
-        const t = text.replace(/\s+/g, " ");
-        updated.title = t.length > 48 ? `${t.slice(0, 48)}…` : t;
-      }
+      const title = deriveConversationTitleFromFirstMessage(text);
+      if (title) updated.title = title;
     }
 
     await saveChatConversation(supabase, user.id, updated);

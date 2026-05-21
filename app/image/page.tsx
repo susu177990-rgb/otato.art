@@ -32,7 +32,6 @@ import {
   prependGalleryRecordApi,
   saveWorkspaceSnapshot,
 } from "@/lib/workspace-api";
-import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
@@ -630,9 +629,8 @@ export default function ImagePage() {
     };
     saveReferenceImagesForRecord(record.id, referenceImages ?? []);
     if (imageUrl?.trim()) saveImageResultForRecord(record.id, imageUrl);
-    const remoteRecord = sanitizeGalleryRecordForStorage(record);
     try {
-      const next = await prependGalleryRecordApi(remoteRecord);
+      const next = await prependGalleryRecordApi(record);
       if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
     } catch (e) {
       console.warn("[image] gallery save failed", e);

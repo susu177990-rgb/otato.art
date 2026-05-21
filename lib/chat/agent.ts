@@ -1,110 +1,272 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatApiConfig, ChatMessage, ConversationAttachmentEntry } from "@/lib/chat/types";
-import { effectiveAgentImageModelId } from "@/lib/chat/image-model-catalog";
-import type { ImageModelId, ImageWorkspaceSettings } from "@/lib/image-workspace";
+import { buildImageModelCatalog, effectiveAgentImageModelId } from "@/lib/chat/image-model-catalog";
+import type {
+  GptImageQuality,
+  ImageAspectRatio,
+  ImageModelId,
+  ImageSizeTier,
+  ImageWorkspaceSettings,
+} from "@/lib/image-workspace";
 import { buildAttachmentsById, compactMessagesForAgentApi } from "@/lib/chat/attachments";
 import { parseAssistantChoice, sendChatCompletionRaw, validateMessagesForSend } from "@/lib/chat/completion";
 import { executeAgentTool, type AgentToolContext } from "@/lib/chat/agent-tools";
+import {
+  buildAssistantFromGenerateResult,
+  parseGenerateImageToolJson,
+  stripHallucinatedImageClaims,
+} from "@/lib/chat/generate-image-result";
 import {
   applyImageIntentBoosterToLastUser,
   buildImageIntentBooster,
   buildFallbackGenerateImageArgs,
   detectImageGenerationIntent,
-  openAiToolChoiceForImageIntent,
 } from "@/lib/chat/image-intent";
+import {
+  extractLeadingSlashCommand,
+  slashCommandRequiresGenerateImage,
+} from "@/lib/chat/slash-command";
 import { applySlashBoosterToLastUser, extractSlashCommandBoosterFromMessages } from "@/lib/chat/slash-booster";
 
 export const AGENT_MAX_ITERATIONS = 10;
 
-export const OPENAI_AGENT_TOOLS: unknown[] = [
-  {
-    type: "function",
-    function: {
-      name: "list_saved_models",
-      description:
-        "列出当前可用于对话 Agent 的作图模型（不含密钥），对应设置页「生图 API」中的模型槽位。",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_conversation_attachments",
-      description:
-        "列出当前对话中用户曾上传的附件索引（无二进制）。需要引用较早轮次用户发来的文件、图片时应先调用。",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_attachment",
-      description:
-        "根据 attachment_id 查看附件元数据与用法说明；generate_image 可直接使用 attachment_id 作为参考图引用。",
-      parameters: {
-        type: "object",
-        properties: {
-          attachment_id: {
-            type: "string",
-            description: "list_conversation_attachments 返回的 attachment_id",
-          },
-        },
-        required: ["attachment_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "generate_image",
-      description:
-        "调用作图 API 生成图片。preset_id 可省略（使用用户在对话栏选择的默认模型）。也可先 list_saved_models 查看可用模型。ref_image_urls 可为 http(s)、data URL，或本会话 attachment_id。",
-      parameters: {
-        type: "object",
-        properties: {
-          preset_id: {
-            type: "string",
-            description: "作图模型 id：gpt-image-2 | nano-banana-2 | nano-banana-pro；省略则用对话默认模型",
-          },
-          prompt: { type: "string", description: "图像描述提示词" },
-          aspect_ratio: { type: "string", description: "如 auto, 1:1, 16:9 等" },
-          image_size: { type: "string", description: "1K | 2K | 4K" },
-          image_quality: { type: "string", description: "auto | low | medium | high（gpt-image 专用）" },
-          ref_image_urls: {
-            type: "array",
-            items: { type: "string" },
-            description: "参考图：URL、data:image...、或 attachment_id",
-          },
-        },
-        required: ["prompt"],
-      },
-    },
-  },
-];
+/** 勿再发给 Grsai/Rix（带 tools 会返回空 message） */
+export const OPENAI_AGENT_TOOLS: unknown[] = [];
+
+type AgentDecision =
+  | { action: "reply"; reason?: string }
+  | {
+      action: "generate_image";
+      reason?: string;
+      generate_image: {
+        prompt: string;
+        preset_id?: ImageModelId;
+        aspect_ratio?: ImageAspectRatio;
+        image_size?: ImageSizeTier;
+        image_quality?: GptImageQuality;
+        ref_image_urls?: string[];
+      };
+    };
 
 function buildAgentSystemText(
   skillBlocks: string[],
   defaultImageModel?: { id: ImageModelId; label: string },
+  willGenerateImage?: boolean,
 ): string {
   const skillsSection =
     skillBlocks.length === 0 ? "（当前未挂载 Skill 文档）" : skillBlocks.join("\n\n---\n\n");
 
   const imageDefaultLine = defaultImageModel
-    ? `- 用户当前在对话栏选择的**默认生图模型**为 \`${defaultImageModel.id}\`（${defaultImageModel.label}）。调用 **generate_image** 时若未指定其它模型，请使用 \`preset_id: "${defaultImageModel.id}"\`（也可省略 preset_id）。`
-    : `- 调用 **generate_image** 前可先 **list_saved_models** 确认 preset_id。`;
+    ? `- 用户默认生图模型：\`${defaultImageModel.id}\`（${defaultImageModel.label}）。`
+    : "";
 
-  return `你是 Gleam Media Studios 工作台内的对话 Agent。用户可能在 Skill 文档中定义了工作方式，请优先遵循 Skill 中的流程与约束。
+  const imageRules = willGenerateImage
+    ? `${imageDefaultLine}
+- 本轮系统会先调用作图 API，再把【系统·生图结果】JSON 发给你。
+- 仅当 JSON 中 \`success: true\` 且含 \`media_url\` 时，才可对用户说图片已生成，并提示查看下方「生图结果」预览。
+- 若 \`success: false\`，必须如实说明失败原因，禁止说已生成、禁止编造链接。`
+    : `${imageDefaultLine}
+- 本轮**未**调用作图 API。禁止声称「已生成」「图片如下」或编造 media_url；只输出文字/分镜/文案。`;
 
-## 工具使用约定
-${imageDefaultLine}
-- 用户提出作图、配图、分镜图、海报、插画等需求时，**必须**调用 **generate_image** 真实生图，禁止仅用文字描述「已生成」或编造图片链接。
-- 若用户上传了参考图，或消息带有【生图指令·必须执行】前缀，**首轮回复必须先调用 generate_image**，再简短说明结果。
-- **用户历史上传的附件**：较早轮次的图片/文件在模型上下文里可能已被压缩为占位说明。需要引用它们时，请先 **list_conversation_attachments**，再在 **generate_image** 的 **ref_image_urls** 中填入对应的 **attachment_id**。
-- 工具返回 JSON：success 为 false 时向用户说明原因；success 且含 media_url 时汇总结果（不要编造 URL）。
+  return `你是 Gleam Media Studios 工作台内的自主对话 Agent。用户挂载的 Skill 文档优先。
+
+## 作图（事实约束）
+${imageRules}
 
 ## Skill 文档
 ${skillsSection}`;
 }
 
+function buildImageResultContextMessage(toolJson: string, ok: boolean): ChatMessage {
+  const tail = ok
+    ? "请用简洁中文说明生图结果，并提示用户查看下方「生图结果」预览。禁止编造 URL。"
+    : "请用简洁中文说明失败原因。禁止说已生成。";
+  return {
+    id: `ctx-img-${Date.now()}`,
+    role: "user",
+    createdAt: Date.now(),
+    parts: [{ type: "text", text: `【系统·生图结果】\n${toolJson}\n\n${tail}` }],
+  };
+}
+
+function buildAttachmentCatalogText(attachments: ConversationAttachmentEntry[] | undefined): string {
+  const list = (attachments || []).filter((a) => a.kind === "image" || a.mime.startsWith("image/"));
+  if (list.length === 0) return "（本会话当前没有可用于图生图/参考图的图片附件）";
+  return list
+    .map((a) => `- ${a.id}: ${a.name} (${a.mime})`)
+    .join("\n");
+}
+
+function buildAgentDecisionSystemText(params: {
+  skillBlocks: string[];
+  imageWorkspace: ImageWorkspaceSettings;
+  defaultImageModelId: ImageModelId;
+  modelLabel: string;
+  conversationAttachments?: ConversationAttachmentEntry[];
+}): string {
+  const skillsSection =
+    params.skillBlocks.length === 0 ? "（当前未挂载 Skill 文档）" : params.skillBlocks.join("\n\n---\n\n");
+  const models = buildImageModelCatalog(params.imageWorkspace)
+    .map((m) => `- ${m.preset_id}: ${m.display_name} / ${m.model_name} / ${m.provider}`)
+    .join("\n");
+
+  return `你是 Gleam Media Studios 的自主 Agent 行动决策器。你必须先判断本轮应该直接文字回复，还是调用真实生图工具。
+
+只输出一个 JSON 对象，不要 Markdown、不要解释、不要代码块。
+
+JSON 结构二选一：
+{"action":"reply","reason":"一句话原因"}
+{"action":"generate_image","reason":"一句话原因","generate_image":{"prompt":"完整生图提示词","preset_id":"${params.defaultImageModelId}","aspect_ratio":"auto","image_size":"1K","image_quality":"auto","ref_image_urls":[]}}
+
+决策规则：
+- 用户要求“生成图片 / 生图 / 画图 / 出图 / 做海报 / 画分镜图 / 改图 / 根据上传图片生成或重绘”时，选择 generate_image。
+- Skill 指令或用户命令的最终交付物是图片时，选择 generate_image，即使用户没有明确说“调用 API”。
+- 用户只是问怎么做、要提示词、要文字方案、要修改文案，或明确说不要图时，选择 reply。
+- 如果选择 generate_image，prompt 必须是可直接发给作图 API 的完整提示词，不要只复述“帮我生成图片”。
+- 如果用户上传了参考图并要求参考/改图/图生图，把对应附件 id 填到 ref_image_urls；不要填不存在的 id。
+- 未指定参数时使用默认模型：${params.defaultImageModelId}（${params.modelLabel}），aspect_ratio 用 "auto"，image_size 用 "1K"，image_quality 用 "auto"。
+
+可用生图模型：
+${models}
+
+可用图片附件：
+${buildAttachmentCatalogText(params.conversationAttachments)}
+
+挂载的 Skill 文档：
+${skillsSection}`;
+}
+
+function extractJsonObject(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(unfenced) as Record<string, unknown>;
+  } catch {
+    // continue
+  }
+
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(unfenced.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isImageAspectRatio(v: unknown): v is ImageAspectRatio {
+  return v === "auto" || v === "1:1" || v === "3:4" || v === "4:3" || v === "9:16" ||
+    v === "16:9" || v === "21:9" || v === "3:2" || v === "2:3";
+}
+
+function isImageSizeTier(v: unknown): v is ImageSizeTier {
+  return v === "1K" || v === "2K" || v === "4K";
+}
+
+function isGptImageQuality(v: unknown): v is GptImageQuality {
+  return v === "auto" || v === "low" || v === "medium" || v === "high";
+}
+
+function parseAgentDecision(text: string, defaultImageModelId: ImageModelId): AgentDecision | null {
+  const obj = extractJsonObject(text);
+  if (!obj) return null;
+  if (obj.action === "reply") {
+    return { action: "reply", reason: typeof obj.reason === "string" ? obj.reason : undefined };
+  }
+  if (obj.action !== "generate_image") return null;
+
+  const raw = obj.generate_image;
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as Record<string, unknown>;
+  const prompt = typeof g.prompt === "string" ? g.prompt.trim() : "";
+  if (!prompt) return null;
+
+  const refImageUrls = Array.isArray(g.ref_image_urls)
+    ? g.ref_image_urls.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim())
+    : undefined;
+
+  return {
+    action: "generate_image",
+    reason: typeof obj.reason === "string" ? obj.reason : undefined,
+    generate_image: {
+      prompt,
+      preset_id: effectiveAgentImageModelId(
+        typeof g.preset_id === "string" ? g.preset_id : undefined,
+        defaultImageModelId,
+      ),
+      aspect_ratio: isImageAspectRatio(g.aspect_ratio) ? g.aspect_ratio : undefined,
+      image_size: isImageSizeTier(g.image_size) ? g.image_size : undefined,
+      image_quality: isGptImageQuality(g.image_quality) ? g.image_quality : undefined,
+      ref_image_urls: refImageUrls,
+    },
+  };
+}
+
+function mergeGeneratedImageArgsWithFallback(decision: AgentDecision | null, fallbackArgsJson: string): string {
+  if (decision?.action !== "generate_image") return fallbackArgsJson;
+
+  let fallback: {
+    prompt?: string;
+    ref_image_urls?: string[];
+  } = {};
+  try {
+    fallback = JSON.parse(fallbackArgsJson || "{}") as typeof fallback;
+  } catch {
+    fallback = {};
+  }
+
+  const g = decision.generate_image;
+  const refs = g.ref_image_urls?.length ? g.ref_image_urls : fallback.ref_image_urls;
+  return JSON.stringify({
+    preset_id: g.preset_id,
+    prompt: g.prompt || fallback.prompt,
+    aspect_ratio: g.aspect_ratio,
+    image_size: g.image_size,
+    image_quality: g.image_quality,
+    ref_image_urls: refs?.length ? refs : undefined,
+  });
+}
+
+async function decideAgentAction(params: {
+  chatApiConfig: ChatApiConfig;
+  history: ChatMessage[];
+  skillMarkdownBlocks: string[];
+  imageWorkspace: ImageWorkspaceSettings;
+  defaultImageModelId: ImageModelId;
+  modelLabel: string;
+  conversationAttachments?: ConversationAttachmentEntry[];
+}): Promise<AgentDecision | null> {
+  const systemMsg: ChatMessage = {
+    id: `sys-agent-router-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role: "system",
+    createdAt: Date.now(),
+    parts: [
+      {
+        type: "text",
+        text: buildAgentDecisionSystemText({
+          skillBlocks: params.skillMarkdownBlocks,
+          imageWorkspace: params.imageWorkspace,
+          defaultImageModelId: params.defaultImageModelId,
+          modelLabel: params.modelLabel,
+          conversationAttachments: params.conversationAttachments,
+        }),
+      },
+    ],
+  };
+
+  const raw = await sendChatCompletionRaw(params.chatApiConfig, [systemMsg, ...params.history]);
+  const { contentText } = parseAssistantChoice(raw);
+  return contentText ? parseAgentDecision(contentText, params.defaultImageModelId) : null;
+}
+
+/**
+ * 自主 Agent 一轮：服务端真实生图（/grid、生图意图）+ 纯文本 LLM（不传 tools）。
+ */
 export async function runAgentChatTurn(params: {
   chatApiConfig: ChatApiConfig;
   imageWorkspace: ImageWorkspaceSettings;
@@ -113,6 +275,8 @@ export async function runAgentChatTurn(params: {
   skillMarkdownBlocks: string[];
   conversationAttachments?: ConversationAttachmentEntry[];
   maxIterations?: number;
+  supabase?: SupabaseClient;
+  userId?: string;
 }): Promise<ChatMessage[]> {
   const {
     chatApiConfig,
@@ -121,7 +285,8 @@ export async function runAgentChatTurn(params: {
     conversationMessages,
     skillMarkdownBlocks,
     conversationAttachments,
-    maxIterations = AGENT_MAX_ITERATIONS,
+    supabase,
+    userId,
   } = params;
 
   const resolvedModelId = effectiveAgentImageModelId(undefined, defaultImageModelId);
@@ -131,12 +296,36 @@ export async function runAgentChatTurn(params: {
     attachmentsById: buildAttachmentsById(conversationAttachments),
     imageWorkspace,
     defaultImageModelId: resolvedModelId,
+    supabase,
+    userId,
   };
 
+  const slashCmd = extractLeadingSlashCommand(conversationMessages);
+  const slashWantsImage = slashCommandRequiresGenerateImage(slashCmd);
   const slashBooster = extractSlashCommandBoosterFromMessages(conversationMessages);
-  const imageIntent = slashBooster ? null : detectImageGenerationIntent(conversationMessages);
-  const forceGenerateImage =
-    Boolean(imageIntent?.active) && !slashBooster;
+  const imageIntent = detectImageGenerationIntent(conversationMessages);
+  const compacted = compactMessagesForAgentApi(conversationMessages.filter((m) => m.role !== "system"));
+  const withSlash = applySlashBoosterToLastUser(compacted, slashBooster);
+  const imageBooster = imageIntent?.active ? buildImageIntentBooster(imageIntent) : null;
+  const history = applyImageIntentBoosterToLastUser(withSlash, imageBooster);
+
+  let decision: AgentDecision | null = null;
+  try {
+    decision = await decideAgentAction({
+      chatApiConfig,
+      history,
+      skillMarkdownBlocks,
+      imageWorkspace,
+      defaultImageModelId: resolvedModelId,
+      modelLabel,
+      conversationAttachments,
+    });
+  } catch (e) {
+    console.warn("[chat/agent decision]", e);
+  }
+
+  const runGenerateImage =
+    slashWantsImage || decision?.action === "generate_image" || Boolean(imageIntent?.active);
 
   const systemMsg: ChatMessage = {
     id: `sys-agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -145,66 +334,86 @@ export async function runAgentChatTurn(params: {
     parts: [
       {
         type: "text",
-        text: buildAgentSystemText(skillMarkdownBlocks, { id: resolvedModelId, label: modelLabel }),
+        text: buildAgentSystemText(skillMarkdownBlocks, { id: resolvedModelId, label: modelLabel }, runGenerateImage),
       },
     ],
   };
 
-  const compacted = compactMessagesForAgentApi(conversationMessages.filter((m) => m.role !== "system"));
-  const withSlash = applySlashBoosterToLastUser(compacted, slashBooster);
-  const imageBooster = imageIntent?.active ? buildImageIntentBooster(imageIntent) : null;
-  const history = applyImageIntentBoosterToLastUser(withSlash, imageBooster);
-
-  let apiMessages: ChatMessage[] = [systemMsg, ...history];
-
-  validateMessagesForSend(apiMessages);
-
   const appended: ChatMessage[] = [];
+  let llmContext: ChatMessage[] = [systemMsg, ...history];
+  let generateOutcome: ReturnType<typeof parseGenerateImageToolJson> = null;
 
-  for (let round = 0; round < maxIterations; round++) {
-    const raw = await sendChatCompletionRaw(chatApiConfig, apiMessages, {
-      tools: OPENAI_AGENT_TOOLS,
-      tool_choice: openAiToolChoiceForImageIntent(forceGenerateImage && round === 0),
+  if (runGenerateImage) {
+    const fallbackArgs = buildFallbackGenerateImageArgs(conversationMessages);
+    const resultStr = await executeAgentTool(
+      "generate_image",
+      slashWantsImage ? fallbackArgs : mergeGeneratedImageArgsWithFallback(decision, fallbackArgs),
+      toolCtx,
+    );
+    generateOutcome = parseGenerateImageToolJson(resultStr);
+
+    appended.push({
+      id: `msg-${Date.now()}-tool-img`,
+      role: "tool",
+      createdAt: Date.now(),
+      parts: [{ type: "text", text: resultStr }],
+      toolCallId: `local-img-${Date.now()}`,
     });
 
-    const { contentText, toolCalls } = parseAssistantChoice(raw);
-
-    const assistantMsg: ChatMessage = {
-      id: `msg-${Date.now()}-ar-${round}-${Math.random().toString(36).slice(2, 7)}`,
-      role: "assistant",
-      createdAt: Date.now(),
-      parts: contentText ? [{ type: "text", text: contentText }] : [],
-      toolCalls: toolCalls.length ? toolCalls : undefined,
-    };
-
-    let toolCallsToRun = toolCalls;
-    if (toolCallsToRun.length === 0 && forceGenerateImage && round === 0) {
-      const fallbackId = `call-fb-${Date.now()}`;
-      const fallbackArgs = buildFallbackGenerateImageArgs(conversationMessages);
-      toolCallsToRun = [{ id: fallbackId, name: "generate_image", arguments: fallbackArgs }];
-      assistantMsg.toolCalls = toolCallsToRun;
-    }
-
-    appended.push(assistantMsg);
-    apiMessages = [...apiMessages, assistantMsg];
-
-    if (toolCallsToRun.length === 0) {
-      break;
-    }
-
-    for (const tc of toolCallsToRun) {
-      const resultStr = await executeAgentTool(tc.name, tc.arguments, toolCtx);
-      const toolMsg: ChatMessage = {
-        id: `msg-${Date.now()}-tool-${tc.id}`,
-        role: "tool",
+    if (!generateOutcome?.success) {
+      appended.push({
+        id: `msg-${Date.now()}-asst-fail`,
+        role: "assistant",
         createdAt: Date.now(),
-        parts: [{ type: "text", text: resultStr }],
-        toolCallId: tc.id,
-      };
-      appended.push(toolMsg);
-      apiMessages = [...apiMessages, toolMsg];
+        parts: [
+          {
+            type: "text",
+            text: buildAssistantFromGenerateResult(
+              generateOutcome ?? { success: false, error: "生图 API 未返回有效结果" },
+              null,
+            ),
+          },
+        ],
+      });
+      return appended;
     }
+
+    llmContext = [...llmContext, buildImageResultContextMessage(resultStr, true)];
   }
 
-  return appended;
+  validateMessagesForSend(llmContext);
+
+  const raw = await sendChatCompletionRaw(chatApiConfig, llmContext);
+  const { contentText } = parseAssistantChoice(raw);
+  let finalText = contentText?.trim() || null;
+
+  if (generateOutcome?.success) {
+    finalText = buildAssistantFromGenerateResult(generateOutcome, finalText);
+  } else if (finalText) {
+    finalText = stripHallucinatedImageClaims(finalText);
+  }
+
+  if (finalText) {
+    appended.push({
+      id: `msg-${Date.now()}-asst`,
+      role: "assistant",
+      createdAt: Date.now(),
+      parts: [{ type: "text", text: finalText }],
+    });
+    return appended;
+  }
+
+  if (generateOutcome?.success) {
+    appended.push({
+      id: `msg-${Date.now()}-asst-img-only`,
+      role: "assistant",
+      createdAt: Date.now(),
+      parts: [{ type: "text", text: buildAssistantFromGenerateResult(generateOutcome, null) }],
+    });
+    return appended;
+  }
+
+  throw new Error(
+    "模型返回为空。请检查 设置 → LLM API；若为生图指令，请确认 设置 → 生图 API 已配置且可用。",
+  );
 }

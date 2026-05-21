@@ -24,6 +24,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - **登录**：Supabase Auth 邮箱 + 密码（`/login` 可注册）。
 - **持久化**：PostgreSQL（`site_settings`、`projects`、`image_gallery_records`）；项目和图库按 `auth.users` 隔离，RLS 启用。
+- **生图文件**：像素在 Supabase Storage 桶 `generated-images`（公开读）；`image_gallery_records.data.imageUrl` 与对话 `media_url` 存稳定 URL。需执行迁移 `20260521100000_generated_images_storage.sql`（或 `scripts/apply-generated-images-storage-manual.sql`）。
 - **设置页**：LLM / 生图 API Key、提示词与 Skill 写入 Supabase 的全站配置，所有登录账号共用并可修改（需登录）。
 
 ### Supabase Dashboard

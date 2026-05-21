@@ -1,4 +1,7 @@
+import { randomUUID } from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateImage } from "@/lib/image-generate";
+import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
 import {
   buildImageModelCatalog,
   effectiveAgentImageModelId,
@@ -17,6 +20,9 @@ export interface AgentToolContext {
   attachmentsById: Record<string, ConversationAttachmentEntry>;
   imageWorkspace: ImageWorkspaceSettings;
   defaultImageModelId: ImageModelId;
+  /** 对话生图结果上传到 Storage；未提供时仅返回上游临时地址 */
+  supabase?: SupabaseClient;
+  userId?: string;
 }
 
 function resolveRefUrls(
@@ -166,10 +172,20 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
     refImages,
   });
 
+  let mediaUrl = imageUrl;
+  if (ctx.supabase && ctx.userId) {
+    mediaUrl = await persistGeneratedImageToStorage(
+      ctx.supabase,
+      ctx.userId,
+      imageUrl,
+      randomUUID(),
+    );
+  }
+
   return JSON.stringify({
     success: true,
     kind: "image",
-    media_url: imageUrl,
+    media_url: mediaUrl,
     preset_id: presetId,
   });
 }

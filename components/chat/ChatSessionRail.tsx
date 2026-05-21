@@ -68,7 +68,7 @@ export function ChatSessionRail({
                         <button
                           key={item.id}
                           type="button"
-                          className={[imageStyles.modeButton, railStyles.railCard].join(" ")}
+                          className={[imageStyles.modeButton, railStyles.railCard].filter(Boolean).join(" ")}
                           onClick={() => onNew()}
                         >
                           <span className={[imageStyles.modeName, railStyles.railName].join(" ")}>新建</span>
@@ -107,7 +107,9 @@ export function ChatSessionRail({
                                 imageStyles.modeButton,
                                 railStyles.railCard,
                                 styles.sessionBtn,
-                                active ? imageStyles.modeButtonActive : "",
+                                active
+                                  ? [imageStyles.modeButtonActive, railStyles.railCardActive].join(" ")
+                                  : "",
                               ]
                                 .filter(Boolean)
                                 .join(" ")}

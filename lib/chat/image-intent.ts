@@ -13,6 +13,7 @@ const IMAGE_INTENT_PATTERNS: RegExp[] = [
   /生成.{0,6}(?:图|图片|插画|海报|分镜|封面)/,
   /画.{0,4}(?:一|个|张|幅|点|出)?(?:图|插画|海报|分镜|场景)/,
   /帮我画|给我画|请画|画一下|画张|画一幅/,
+  /画(?:一只|一个|一张|一幅|个|点)?[\u4e00-\u9fa5a-zA-Z]{1,24}(?:猫|狗|鸟|花|人|场景|海报|封面)/,
   /图生图|以图生图|参考图生|用这张(?:图|参考)|根据(?:这张|上传的)图/,
   /\b(?:generate|create|draw|make)\s+(?:an?\s+)?(?:image|picture|illustration|poster)\b/i,
   /\bimage\s+generation\b/i,
@@ -83,9 +84,8 @@ export function buildImageIntentBooster(intent: ImageGenerationIntent): string {
 
   return (
     "【生图指令·必须执行】\n" +
-    "用户本条需求是生成/绘制真实图片。你必须在本轮调用 generate_image（禁止仅用文字假装已出图、禁止编造 media_url）。\n" +
-    "- prompt：根据用户描述与上下文写成完整绘图提示词（可中文）。\n" +
-    "- preset_id 可省略，使用对话栏默认生图模型。\n" +
+    "用户本条需求是生成/绘制真实图片。系统将自动调用作图 API；你只有在看到【系统·生图结果】且 JSON 中 success 为 true 并含 media_url 时，才可说已生成。\n" +
+    "若未见该 JSON 或 success 为 false，必须明确说明未出图或失败原因，禁止假装已生成。\n" +
     `${refLine}\n${refOnlyLine}\n`.trim()
   );
 }
@@ -129,9 +129,14 @@ export function applyImageIntentBoosterToLastUser(
   return cloned;
 }
 
-export function openAiToolChoiceForImageIntent(force: boolean): string | Record<string, unknown> {
-  if (!force) return "auto";
-  return { type: "function", function: { name: "generate_image" } };
+/**
+ * 仅传 OpenAI 通用字符串（auto / none / required）。
+ * 部分中转（如 Rix/Grsai）不支持 `tool_choice: { type, function: { name } }`，会 400 unknown_parameter。
+ * 生图意图改由用户消息 booster + agent 服务端 fallback 保证执行。
+ */
+export function openAiToolChoiceForImageIntent(_force: boolean): string {
+  void _force;
+  return "auto";
 }
 
 /** LLM 未调工具时的服务端兜底：用用户原文 + 本条附件 id 直接生图 */
@@ -141,7 +146,15 @@ export function buildFallbackGenerateImageArgs(messages: ChatMessage[]): string 
   prompt = prompt
     .replace(/【生图指令·必须执行】[\s\S]*?(?=\n\n|$)/, "")
     .replace(/【Slash 指令约束】[\s\S]*?(?=\n\n|$)/, "")
+    .replace(/^\/grid-all\s+/i, "")
+    .replace(/^\/grid\s+/i, "")
     .trim();
+
+  const rawHead = last ? userMessagePlainText(last).split(/\s+/)[0] ?? "" : "";
+  if (/^\/grid/i.test(rawHead)) {
+    const body = prompt || "分镜画面";
+    prompt = `影视分镜九宫格构图，单张图内含 3x3 分镜格子，风格统一，${body}`;
+  }
 
   const refIds: string[] = [];
   if (last) {
