@@ -1,11 +1,15 @@
+/* 会话轨：与 Skill 同宽，行内操作不撑开轨道 */
 .sessionRow {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.sessionMain {
-  padding-left: 26px;
-  padding-right: 26px;
+.sessionBtn {
+  padding-left: 22px !important;
+  padding-right: 22px !important;
 }
 
 .renameBtn,
@@ -16,8 +20,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: none;
   border-radius: 4px;
@@ -30,7 +34,7 @@
 }
 
 .renameBtn {
-  left: 7px;
+  left: 4px;
   color: #a1a1aa;
 }
 
@@ -40,8 +44,8 @@
 }
 
 .deleteBtn {
-  right: 7px;
-  font-size: 14px;
+  right: 4px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1;
   color: #f87171;
@@ -63,6 +67,7 @@
 .renameInput {
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   font: inherit;
   font-size: 11px;
   font-weight: 600;

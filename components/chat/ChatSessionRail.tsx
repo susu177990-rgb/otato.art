@@ -5,12 +5,6 @@ import imageStyles from "@/app/image/image-page.module.css";
 import railStyles from "./chat-side-rail.module.css";
 import styles from "./chat-session-rail.module.css";
 
-function displayTitle(title: string): string {
-  const t = title.trim();
-  if (t.length <= 16) return t;
-  return `${t.slice(0, 15)}…`;
-}
-
 function PencilIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -25,7 +19,7 @@ function PencilIcon() {
   );
 }
 
-/** 与左侧 ChatSkillRail 对称：复用 image 右侧 historyPanel 定位 + mode 轨道样式 */
+/** 与 /image 右侧 history 栏同结构：居中、渐变遮罩、纵向滑动 */
 export function ChatSessionRail({
   summaries,
   activeId,
@@ -55,15 +49,19 @@ export function ChatSessionRail({
   return (
     <aside className={imageStyles.historyPanel} aria-label="会话">
       <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
-        <div className={imageStyles.modeRail}>
-          <div className={imageStyles.modeRailFrame}>
+        <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
+          <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>
             <div
-              className={[imageStyles.modeScrollWrap, faded ? imageStyles.modeScrollWrapFaded : ""]
+              className={[
+                imageStyles.modeScrollWrap,
+                railStyles.railScrollWrap,
+                faded ? imageStyles.modeScrollWrapFaded : "",
+              ]
                 .filter(Boolean)
                 .join(" ")}
             >
-              <div className={imageStyles.modeScroll}>
-                <div className={imageStyles.modeList}>
+              <div className={[imageStyles.modeScroll, railStyles.railScroll].join(" ")}>
+                <div className={[imageStyles.modeList, railStyles.railList].join(" ")}>
                   {items.map((item) => {
                     if (item.kind === "new") {
                       return (
@@ -73,7 +71,7 @@ export function ChatSessionRail({
                           className={[imageStyles.modeButton, railStyles.railCard].join(" ")}
                           onClick={() => onNew()}
                         >
-                          <span className={imageStyles.modeName}>新建</span>
+                          <span className={[imageStyles.modeName, railStyles.railName].join(" ")}>新建</span>
                         </button>
                       );
                     }
@@ -81,6 +79,7 @@ export function ChatSessionRail({
                     const s = item.session;
                     const active = s.id === activeId;
                     const renaming = renamingId === s.id;
+                    const title = s.title.trim() || "新对话";
 
                     return (
                       <div key={s.id} className={styles.sessionRow}>
@@ -101,19 +100,19 @@ export function ChatSessionRail({
                           <>
                             <button
                               type="button"
-                              title={s.title}
+                              title={title}
                               onClick={() => onSelect(s.id)}
                               onDoubleClick={() => onStartRename(s.id, s.title)}
                               className={[
                                 imageStyles.modeButton,
                                 railStyles.railCard,
-                                styles.sessionMain,
+                                styles.sessionBtn,
                                 active ? imageStyles.modeButtonActive : "",
                               ]
                                 .filter(Boolean)
                                 .join(" ")}
                             >
-                              <span className={imageStyles.modeName}>{displayTitle(s.title)}</span>
+                              <span className={[imageStyles.modeName, railStyles.railName].join(" ")}>{title}</span>
                             </button>
                             <button
                               type="button"

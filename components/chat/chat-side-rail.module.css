@@ -1,22 +1,44 @@
-/* 对话页 Skill / 会话轨道内的小卡（modeButton）固定更宽 */
+/* 对话页左右轨道：锁死 120px（须在 TSX 挂 rail* 类；勿用 :global(.modeX) 匹配 image 模块哈希类名） */
+
 .railColumn {
-  --chat-rail-card-width: 112px;
-  width: var(--chat-rail-card-width);
-  min-width: var(--chat-rail-card-width);
-  max-width: min(320px, calc(100vw - 80px));
+  --chat-rail-card-width: 120px;
+  width: var(--chat-rail-card-width) !important;
+  min-width: var(--chat-rail-card-width) !important;
+  max-width: var(--chat-rail-card-width) !important;
+  overflow: hidden;
 }
 
-.railColumn :global(.modeScrollWrap),
-.railColumn :global(.modeScroll),
-.railColumn :global(.modeList) {
-  width: var(--chat-rail-card-width);
+.railRail,
+.railRailFrame,
+.railScrollWrap,
+.railScroll,
+.railList {
+  width: var(--chat-rail-card-width) !important;
+  max-width: var(--chat-rail-card-width) !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+.railScrollWrap,
+.railScroll {
+  overflow-x: hidden !important;
 }
 
 .railCard {
   box-sizing: border-box;
   width: 100% !important;
-  min-width: var(--chat-rail-card-width) !important;
-  max-width: 100%;
+  max-width: 100% !important;
+  min-width: 0 !important;
   padding-left: 14px;
   padding-right: 14px;
+}
+
+.railName {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -47,20 +47,35 @@ export async function deleteChatConversationApi(id: string): Promise<void> {
   if (!res.ok) throw new Error("无法删除会话");
 }
 
+const CHAT_AGENT_TIMEOUT_MS = 300_000;
+
 export async function sendChatAgentTurn(
   conversationId: string,
   userMessage: ChatMessage,
   preferredImageModelId?: ImageModelId,
 ): Promise<ChatConversation> {
-  const res = await fetch("/api/chat/agent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ conversationId, userMessage, preferredImageModelId }),
-  });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error || "发送失败");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHAT_AGENT_TIMEOUT_MS);
+
+  try {
+    const res = await fetch("/api/chat/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, userMessage, preferredImageModelId }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error || "发送失败");
+    }
+    const data = (await res.json()) as { conversation: ChatConversation };
+    return data.conversation;
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("请求超时（超过 5 分钟）。若挂载了 Skill 生图或多轮工具，请稍后重试或换更短消息。");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = (await res.json()) as { conversation: ChatConversation };
-  return data.conversation;
 }

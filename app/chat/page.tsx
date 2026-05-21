@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import shellStyles from "../shared/shell.module.css";
-import styles from "./chat-page.module.css";
 
 export default function ChatPage() {
   return (
@@ -19,9 +18,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <div className={[shellStyles.body, styles.body].join(" ")}>
-        <ChatWorkspace />
-      </div>
+      <ChatWorkspace />
     </main>
   );
 }

@@ -1,83 +1,237 @@
-.root {
-  font-size: 13px;
-  line-height: 1.55;
-  color: #e4e4e7;
+/* GitHub markdown-body 深色预览（对齐 primer / github-markdown-css dark） */
+
+.markdownBody {
+  -webkit-text-size-adjust: 100%;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans",
+    Helvetica,
+    Arial,
+    sans-serif,
+    "Apple Color Emoji",
+    "Segoe UI Emoji";
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e6edf3;
+  word-wrap: break-word;
+}
+
+.markdownBody > :first-child {
+  margin-top: 0 !important;
+}
+
+.markdownBody > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6 {
+  margin-top: 1.5em;
+  margin-bottom: 1em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #f0f6fc;
+}
+
+.h1 {
+  margin: 0.67em 0;
+  padding-bottom: 0.3em;
+  font-size: 2em;
+  border-bottom: 1px solid #3d444d;
 }
 
 .h2 {
-  margin: 0 0 0.65em;
-  font-size: 15px;
-  font-weight: 600;
-  color: #e4e4e7;
-  text-align: center;
+  padding-bottom: 0.3em;
+  font-size: 1.5em;
+  border-bottom: 1px solid #3d444d;
 }
 
 .h3 {
-  margin: 1em 0 0.5em;
-  font-size: 13px;
-  font-weight: 600;
-  color: #d4d4d8;
+  font-size: 1.25em;
+}
+
+.h4 {
+  font-size: 1em;
+}
+
+.h5 {
+  font-size: 0.875em;
+}
+
+.h6 {
+  font-size: 0.85em;
+  color: #9198a1;
+}
+
+.p,
+.blockquote,
+.ul,
+.ol,
+.pre,
+.tableWrap {
+  margin-top: 0;
+  margin-bottom: 1em;
 }
 
 .ul,
 .ol {
-  margin: 0 0 0.75em;
-  padding-left: 1.25em;
+  padding-left: 2em;
 }
 
-.li {
-  margin: 0.25em 0;
+.li + .li {
+  margin-top: 0.25em;
 }
 
-.p {
-  margin: 0 0 0.75em;
-}
-
-.p:last-child {
+.li > .ul,
+.li > .ol {
+  margin-top: 0.25em;
   margin-bottom: 0;
 }
 
+.blockquote {
+  padding: 0 1em;
+  color: #9198a1;
+  border-left: 0.25em solid #3d444d;
+}
+
+.blockquote > :first-child {
+  margin-top: 0;
+}
+
+.blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.hr {
+  height: 0.25em;
+  margin: 1.5em 0;
+  padding: 0;
+  border: 0;
+  background-color: #3d444d;
+}
+
+.tableWrap {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.table {
+  width: max-content;
+  max-width: 100%;
+  border-spacing: 0;
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+}
+
+.th,
+.td {
+  padding: 6px 13px;
+  border: 1px solid #3d444d;
+}
+
+.tr {
+  background-color: transparent;
+  border-top: 1px solid #3d444d;
+}
+
+.tr:nth-child(2n) {
+  background-color: rgba(99, 110, 123, 0.08);
+}
+
+.th {
+  font-weight: 600;
+  background-color: rgba(99, 110, 123, 0.12);
+}
+
 .link {
-  color: #a1a1aa;
+  color: #4493f8;
+  text-decoration: none;
+}
+
+.link:hover {
   text-decoration: underline;
-  text-underline-offset: 2px;
+}
+
+.strong {
+  font-weight: 600;
+  color: #f0f6fc;
+}
+
+.em {
+  font-style: italic;
+}
+
+.del {
+  text-decoration: line-through;
+  color: #9198a1;
+}
+
+.taskCheckbox {
+  margin: 0 0.2em 0.25em -1.4em;
+  vertical-align: middle;
 }
 
 .pre {
-  margin: 0.5em 0;
-  padding: 10px 12px;
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.35);
-  font-size: 11px;
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  color: #e6edf3;
+  background-color: #161b22;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+}
+
+.codeBlock {
+  display: inline;
+  max-width: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 100%;
 }
 
 .codeInline {
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: ui-monospace, monospace;
-  background: rgba(255, 255, 255, 0.08);
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  white-space: break-spaces;
+  background-color: rgba(110, 118, 129, 0.35);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .img {
   max-width: 100%;
-  max-height: 240px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  object-fit: contain;
+  box-sizing: content-box;
+  background-color: transparent;
+  border-radius: 6px;
+  border: 1px solid #30363d;
 }
 
-/* 对话页空状态说明：整块居中，正文左对齐（避免居中换行参差不齐） */
+/* 空状态 Skill 说明：弱化 + 居中 */
 .rootGuide {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
-  opacity: 0.62;
-  color: #a1a1aa;
-  line-height: 1.65;
+  opacity: 0.72;
+  color: #9198a1;
+  font-size: 13px;
 }
 
 .rootGuide > * {
@@ -87,13 +241,16 @@
   margin-right: auto;
 }
 
+.rootGuide .h1,
 .rootGuide .h2,
 .rootGuide .h3 {
   text-align: center;
+  border-bottom: none;
   color: inherit;
 }
 
 .rootGuide .h2 {
+  font-size: 1.1em;
   font-weight: 500;
 }
 
@@ -115,14 +272,9 @@
 }
 
 .rootGuide .link {
-  color: #9ca3af;
-}
-
-.rootGuide .codeInline {
-  background: rgba(255, 255, 255, 0.05);
+  color: #8b949e;
 }
 
 .rootGuide .pre {
   text-align: left;
-  opacity: 0.9;
 }

@@ -120,7 +120,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
     return (
       <div className={[shellStyles.bubbleRow, shellStyles.bubbleRowAssistant].join(" ")}>
         <div className={shellStyles.bubbleAssistant}>
-          {text ? <ChatMarkdown markdown={text} /> : null}
+          {text ? <ChatMarkdown markdown={text} /> : msg.toolCalls?.length ? (
+            <p className={styles.sending}>正在调用工具…</p>
+          ) : null}
           {msg.toolCalls?.map((tc) => (
             <details key={tc.id} className={styles.toolCall}>
               <summary>工具 · {tc.name}</summary>
@@ -170,6 +172,8 @@ export function ChatWorkspace() {
   activeIdRef.current = activeId;
 
   const conversationMatchesActive = Boolean(activeId && conversation?.id === activeId);
+  const threadVisible =
+    conversationMatchesActive || Boolean(isSending && conversation && activeId === conversation.id);
 
   const loadSkillPacks = useCallback(async () => {
     const { skillPacks: packs } = await fetchSiteSkillPacks();
@@ -220,10 +224,14 @@ export function ChatWorkspace() {
     }
 
     const loadId = activeId;
-    setConversation(null);
+    let cancelled = false;
+
+    setConversation((prev) => {
+      if (prev?.id === loadId) return prev;
+      return null;
+    });
     setIsLoadingConversation(true);
 
-    let cancelled = false;
     void fetchChatConversation(loadId)
       .then((c) => {
         if (cancelled || activeIdRef.current !== loadId || c.id !== loadId) return;
@@ -408,7 +416,6 @@ export function ChatWorkspace() {
         convId = created.id;
         conv = created;
         activeIdRef.current = created.id;
-        setActiveId(created.id);
         setSummaries((prev) => [{ id: created.id, title: created.title, updatedAt: created.updatedAt }, ...prev]);
       }
 
@@ -418,8 +425,9 @@ export function ChatWorkspace() {
         messages: [...conv.messages, userMessage],
         updatedAt: Date.now(),
       };
-      if (activeIdRef.current === sendConvId) {
-        setConversation(optimistic);
+      setConversation(optimistic);
+      if (activeId !== sendConvId) {
+        setActiveId(sendConvId);
       }
 
       const updated = await sendChatAgentTurn(sendConvId, userMessage, imageModelForTurn);
@@ -453,9 +461,9 @@ export function ChatWorkspace() {
       />
 
       <div ref={scrollRef} className={styles.messages}>
-        {isLoadingConversation && activeId ? (
+        {isLoadingConversation && activeId && !threadVisible ? (
           <p className={styles.sending}>加载会话…</p>
-        ) : !conversationMatchesActive ? null : !conversation?.messages.length ? (
+        ) : !threadVisible ? null : !conversation?.messages.length ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyGuide}>
               <ChatMarkdown markdown={emptyGuideMarkdown} variant="guide" />
@@ -468,7 +476,7 @@ export function ChatWorkspace() {
             ))}
           </div>
         )}
-        {isSending && conversationMatchesActive ? <p className={styles.sending}>思考中…</p> : null}
+        {isSending && threadVisible ? <p className={styles.sending}>思考中…</p> : null}
       </div>
 
       <ChatComposer

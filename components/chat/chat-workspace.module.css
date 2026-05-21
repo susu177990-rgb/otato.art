@@ -1,13 +1,19 @@
-/* 与 /image .stage 同构：上消息区 + 下悬浮 composer，无顶部分割线 */
+/* 与 /image .stage 同构：居中区 + 左右绝对 渐变滑动轨道（保留原设计） */
+
 .stage {
   position: relative;
   flex: 1;
+  width: 100%;
   min-height: 0;
   overflow: hidden;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   padding: 16px 24px 24px;
+  --chat-skill-rail: 120px;
+  --chat-session-rail: 120px;
+  --chat-rail-gutter: 24px;
 }
 
 .messages {
@@ -17,7 +23,8 @@
   min-width: 0;
   overflow-y: auto;
   padding: 4px 12px 12px;
-  padding-inline: calc(min(200px, calc(100vw - 56px)) + 6px);
+  padding-left: calc(var(--chat-skill-rail) + var(--chat-rail-gutter) + 8px);
+  padding-right: calc(var(--chat-session-rail) + var(--chat-rail-gutter) + 8px);
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -102,4 +109,17 @@
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   object-fit: contain;
+}
+
+@media (max-width: 900px) {
+  .stage {
+    --chat-skill-rail: 108px;
+    --chat-session-rail: 108px;
+    --chat-rail-gutter: 16px;
+  }
+
+  .messages {
+    padding-left: calc(var(--chat-skill-rail) + var(--chat-rail-gutter) + 6px);
+    padding-right: calc(var(--chat-session-rail) + var(--chat-rail-gutter) + 6px);
+  }
 }
