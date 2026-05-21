@@ -1,0 +1,8 @@
+{
+  "id": "general-movie",
+  "label": "通用电影项目",
+  "directionId": "general-screenplay",
+  "requiredTerms": ["通用编剧", "作品形态", "目标受众"],
+  "forbiddenTerms": ["女频 BL", "双男主", "海外女性向", "Chinglish"],
+  "forbiddenMarkers": ["agent/script-agent/shared/short-drama/pacing-and-hooks.md"]
+}

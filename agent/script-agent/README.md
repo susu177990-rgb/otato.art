@@ -1,27 +1,62 @@
 # Script Agent Resource Layout
 
-`agent/script-agent/` is the single source of truth for the script-writing agent resources.
+`agent/script-agent/` is the single source of truth for the screenplay agent resources.
 
-## Current Layout
+## Current Production Model
 
-- `prompts/`, `knowledge/`, `templates/`, `skills/`, and `context_assets/` are the legacy production prompt surface. In the current product state, this surface is still BL short-drama oriented.
-- `directions/` contains explicit creative direction packages. The first package is `directions/bl-short-drama/`, which wraps the existing women-oriented BL short-drama specialization as the default product direction. Its `migrationShadowPromptFiles` are review-only BL rule copies; tests and migration scripts may opt into `directionMode: "shadow-preview"` for comparison.
-- `core/` contains the shadow shared screenplay workflow layer. Production prompt assembly keeps it off by default; tests and migration scripts may opt into `coreMode: "shadow-preview"` for comparison.
-- `manifest.json` declares the agent package and the default creative direction.
-- `PROMPT_MIGRATION_READINESS.md` is the stage 7 closeout baseline. It records default/core-preview/direction-preview/combined-preview prompt hashes, marker order, duplicate-rule mapping, and deletion boundaries. Regenerate it with `npm run report:script-agent-migration`.
+Production prompt assembly is now:
 
-## Migration Direction
+`core/` + `shared/` + `directions/`
 
-Do not move the existing legacy prompt files in the first direction-system pass. The intended path is:
+`legacy/` is an archived replay surface for regression comparison and emergency fallback only.
 
-1. Keep current BL behavior stable.
-2. Load a selected `directions/<id>/` package on top of the existing prompt surface.
-3. Use `coreMode: "shadow-preview"` only for parity checks and migration review; do not enable it from application APIs.
-4. Use `directionMode: "shadow-preview"` only for parity checks and migration review; do not enable it from application APIs.
-5. Add future directions, such as `general-screenplay`, only after their prompts, templates, defaults, and validation expectations are implemented.
+## Layout
+
+- `core/` contains the reusable screenplay workflow layer: stage protocol, Markdown delivery, project context, adaptation skeletons, continuity checks, series-bible generation, and metadata extraction.
+- `shared/` contains opt-in modules that are reusable but not universal defaults:
+  - `shared/short-drama/` for short-drama pacing, hooks, paywall, and episode-ending rules.
+  - `shared/locale/english/` for English dialogue, locale brief, and Chinglish checks.
+  - `shared/adaptation/` for adaptation analysis and planning workflow.
+- `directions/` contains creative direction packages:
+  - `directions/general-screenplay/` is the new-project default and carries no BL, short-drama, market, language, or episode-count defaults.
+  - `directions/bl-short-drama/` preserves the existing women-oriented BL short-drama business direction and loads short-drama plus English-locale shared modules.
+- `legacy/` contains the archived historical BL production resources: old `prompts/`, `knowledge/`, `templates/`, `skills/`, and `context_assets/`.
+- `fixtures/` contains deterministic prompt assembly samples for offline smoke checks.
+- `manifest.json` declares the agent package and the new-project default creative direction.
+
+## Loader Contract
+
+- `loadSystemPrompt(directionId)` uses direction-aware modular assembly by default.
+- `general-screenplay` loads `core stable -> general direction prompts -> general direction templates`.
+- `bl-short-drama` loads `core stable -> shared/short-drama -> shared/locale/english -> BL direction prompts -> BL direction templates`.
+- `loadSystemPrompt("bl-short-drama", { assemblyMode: "legacy" })` replays the archived BL baseline.
+- `SCRIPT_AGENT_FORCE_LEGACY_BL=1` temporarily forces BL back to the archived legacy baseline.
+- `coreMode: "shadow-preview"` and `directionMode: "shadow-preview"` remain migration-preview tools and intentionally use legacy assembly for comparison.
+
+## Reports
+
+- `LEGACY_BASELINE.md` records the frozen BL legacy hash, length, load order, and replay command.
+- `LEGACY_ARCHIVE.md` records the archive policy and migration map.
+- `PROMPT_MIGRATION_READINESS.md` records legacy, preview, BL modular, and general modular prompt hashes.
+- `PROMPT_DUPLICATE_RULE_DIFF.md` records the rule ownership map from legacy to `core/`, `shared/`, and `directions/`.
+- `PROMPT_FIXTURE_REPORT.md` records fixture prompt hashes and shared-module coverage.
 
 ## Verification
 
-- `npm run report:script-agent-migration` regenerates `PROMPT_MIGRATION_READINESS.md` and verifies that the default `bl-short-drama` prompt hash and length remain unchanged.
-- `npm run smoke:prompt-parity` verifies that the default `bl-short-drama` prompt does not load core shadow modules, while the preview prompt loads `core/` in the expected order.
-- `npm run smoke:direction-shadow` verifies that BL migration shadow files exist, stay out of default and core-only prompts, and load only in explicit direction-preview prompts with the expected order.
+- `npm run smoke:legacy-baseline` verifies the archived BL baseline hash and load order.
+- `npm run smoke:prompt-fixtures` verifies offline fixture prompts and rewrites `PROMPT_FIXTURE_REPORT.md`.
+- `npm run smoke:prompt-modular` verifies modular BL and general prompt assembly.
+- `npm run smoke:bl-modular-parity` verifies BL modular prompt coverage against required BL business rules.
+- `npm run smoke:legacy-archive` verifies legacy is archived, not root-loaded, and still replayable.
+- `npm run smoke:prompt-parity` verifies legacy/core-shadow preview behavior.
+- `npm run smoke:direction-shadow` verifies direction-shadow preview behavior.
+- `npm run report:script-agent-migration` rewrites the readiness report.
+- `npm run report:script-agent-rule-diff` rewrites the duplicate-rule diff report.
+
+## Maintenance Policy
+
+- Do not add new behavior to `legacy/`.
+- Add universal rules to `core/`.
+- Add opt-in reusable rules to `shared/`.
+- Add market, genre, relationship, audience, language, and format commitments to a specific `directions/*` package.
+- Old projects without a valid direction continue to run as `bl-short-drama`; new projects default to `general-screenplay`.

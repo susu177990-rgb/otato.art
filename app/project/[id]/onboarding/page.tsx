@@ -21,6 +21,7 @@ import {
   getCreativeDirection,
   isCreativeDirectionLocked,
   listCreativeDirections,
+  normalizeExistingProjectCreativeDirectionId,
   normalizeCreativeDirectionId,
 } from "@/lib/creative-directions";
 import {
@@ -129,7 +130,7 @@ export default function OnboardingPage() {
         return;
       }
       const p: Project = await res.json();
-      const directionId = normalizeCreativeDirectionId(p.creativeDirectionId);
+      const directionId = normalizeExistingProjectCreativeDirectionId(p.creativeDirectionId);
       setProject(p);
       setCreativeDirectionId(directionId);
       setMeta(normalizeMeta(p));

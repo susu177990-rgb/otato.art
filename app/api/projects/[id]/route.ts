@@ -4,7 +4,7 @@ import { deleteProject, getProject, saveProject } from "@/lib/db/project-store";
 import {
   ensureProjectCreativeDirection,
   isCreativeDirectionLocked,
-  normalizeCreativeDirectionId,
+  normalizeExistingProjectCreativeDirectionId,
 } from "@/lib/creative-directions";
 import type { Project } from "@/lib/types";
 
@@ -44,8 +44,8 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 
   const updates = (await req.json()) as Record<string, unknown>;
   if (Object.prototype.hasOwnProperty.call(updates, "creativeDirectionId")) {
-    const currentDirectionId = normalizeCreativeDirectionId(existing.creativeDirectionId);
-    const requestedDirectionId = normalizeCreativeDirectionId(
+    const currentDirectionId = normalizeExistingProjectCreativeDirectionId(existing.creativeDirectionId);
+    const requestedDirectionId = normalizeExistingProjectCreativeDirectionId(
       typeof updates.creativeDirectionId === "string" ? updates.creativeDirectionId : undefined,
     );
     if (requestedDirectionId !== currentDirectionId && isCreativeDirectionLocked(existing)) {

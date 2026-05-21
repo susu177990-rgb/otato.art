@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ensureProjectCreativeDirection,
-  getCreativeDirection,
+  getExistingProjectCreativeDirection,
 } from "@/lib/creative-directions";
 import { migrateStage5To7 } from "@/lib/project-migrate";
 import type { Project, ProjectSummary } from "@/lib/types";
 
 function toSummary(project: Project): ProjectSummary {
-  const direction = getCreativeDirection(project.creativeDirectionId);
+  const direction = getExistingProjectCreativeDirection(project.creativeDirectionId);
   return {
     id: project.id,
     name: project.name,

@@ -20,7 +20,10 @@ import {
 import { detectStage, detectStageFromContent } from "@/lib/stage-detect";
 import { evaluateStageGate } from "@/lib/stage-gate";
 import { buildProjectContext } from "@/lib/project-context";
-import { DEFAULT_CREATIVE_DIRECTION_ID, normalizeCreativeDirectionId } from "@/lib/creative-directions";
+import {
+  DEFAULT_CREATIVE_DIRECTION_ID,
+  normalizeExistingProjectCreativeDirectionId,
+} from "@/lib/creative-directions";
 import { downloadArtifactsZip } from "@/lib/export-artifacts";
 import { SOURCE_ANALYSIS_CONTEXT_CHARS } from "@/lib/source-materials";
 import { getStudioAutoStageUserMessage, STUDIO_AUTO_STAGE1_USER_MESSAGE } from "@/lib/studio-auto-kickoff";
@@ -189,7 +192,7 @@ function StudioInner() {
       setEnglishLocaleBrief(p.englishLocaleBrief ?? "");
       setOnboardingStatus(p.onboardingStatus ?? "ready");
       setProjectOriginMode(p.originMode ?? "original");
-      setCreativeDirectionId(normalizeCreativeDirectionId(p.creativeDirectionId));
+      setCreativeDirectionId(normalizeExistingProjectCreativeDirectionId(p.creativeDirectionId));
       setProjectSourceAnalysis(p.sourceAnalysis ?? "");
       setInitialLoadComplete(true);
     } catch {

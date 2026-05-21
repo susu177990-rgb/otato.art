@@ -29,6 +29,12 @@ import type { ImageModelId } from "@/lib/image-workspace";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-workspace.module.css";
 
+type ParsedToolMedia = {
+  text: string;
+  mediaUrl: string;
+  isVideo: boolean;
+};
+
 function attachmentKindFromFile(file: File): ChatAttachmentKind {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";
@@ -44,31 +50,43 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-function ToolResultBody({ text }: { text: string }) {
+function parseToolMedia(text: string): ParsedToolMedia | null {
+  let parsed: {
+    success?: boolean;
+    media_url?: string;
+    kind?: string;
+  };
   try {
-    const j = JSON.parse(text) as {
-      success?: boolean;
-      media_url?: string;
-      kind?: string;
-      error?: string;
-    };
-    if (j.success && j.media_url && typeof j.media_url === "string") {
-      const u = j.media_url;
-      const isVid =
-        j.kind === "video" || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u) || u.startsWith("data:video");
-      return (
-        <div className={styles.toolResult}>
-          <pre className={styles.toolJson}>{text.length > 1200 ? `${text.slice(0, 1200)}…` : text}</pre>
-          {isVid ? (
-            <video src={u} controls className={styles.toolMedia} />
-          ) : (
-            <img src={u} alt="" className={styles.toolMedia} />
-          )}
-        </div>
-      );
-    }
+    parsed = JSON.parse(text) as typeof parsed;
   } catch {
-    /* not json */
+    return null;
+  }
+  if (!parsed.success || !parsed.media_url || typeof parsed.media_url !== "string") {
+    return null;
+  }
+
+  const mediaUrl = parsed.media_url;
+  const isVideo =
+    parsed.kind === "video" ||
+    /\.(mp4|webm|mov|m4v)(\?|$)/i.test(mediaUrl) ||
+    mediaUrl.startsWith("data:video");
+  return { text, mediaUrl, isVideo };
+}
+
+function ToolResultBody({ text }: { text: string }) {
+  const media = parseToolMedia(text);
+  if (media) {
+    return (
+      <div className={styles.toolResult}>
+        <pre className={styles.toolJson}>{media.text.length > 1200 ? `${media.text.slice(0, 1200)}…` : media.text}</pre>
+        {media.isVideo ? (
+          <video src={media.mediaUrl} controls className={styles.toolMedia} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={media.mediaUrl} alt="" className={styles.toolMedia} />
+        )}
+      </div>
+    );
   }
   return <pre className={styles.toolJson}>{text}</pre>;
 }

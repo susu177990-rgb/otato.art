@@ -1,0 +1,11 @@
+{
+  "id": "bl-short-drama",
+  "label": "BL 短剧项目",
+  "directionId": "bl-short-drama",
+  "requiredTerms": ["女频 BL 短剧", "双男主", "海外女性向", "英语对白", "Chinglish"],
+  "requiredMarkers": [
+    "agent/script-agent/shared/short-drama/pacing-and-hooks.md",
+    "agent/script-agent/shared/locale/english/dialogue-locale.md"
+  ],
+  "forbiddenTerms": []
+}

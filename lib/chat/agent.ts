@@ -4,6 +4,13 @@ import type { ImageModelId, ImageWorkspaceSettings } from "@/lib/image-workspace
 import { buildAttachmentsById, compactMessagesForAgentApi } from "@/lib/chat/attachments";
 import { parseAssistantChoice, sendChatCompletionRaw, validateMessagesForSend } from "@/lib/chat/completion";
 import { executeAgentTool, type AgentToolContext } from "@/lib/chat/agent-tools";
+import {
+  applyImageIntentBoosterToLastUser,
+  buildImageIntentBooster,
+  buildFallbackGenerateImageArgs,
+  detectImageGenerationIntent,
+  openAiToolChoiceForImageIntent,
+} from "@/lib/chat/image-intent";
 import { applySlashBoosterToLastUser, extractSlashCommandBoosterFromMessages } from "@/lib/chat/slash-booster";
 
 export const AGENT_MAX_ITERATIONS = 10;
@@ -89,7 +96,8 @@ function buildAgentSystemText(
 
 ## 工具使用约定
 ${imageDefaultLine}
-- 用户提出作图、配图、分镜图等需求时，应使用 **generate_image** 调用生图 API，勿编造图片链接。
+- 用户提出作图、配图、分镜图、海报、插画等需求时，**必须**调用 **generate_image** 真实生图，禁止仅用文字描述「已生成」或编造图片链接。
+- 若用户上传了参考图，或消息带有【生图指令·必须执行】前缀，**首轮回复必须先调用 generate_image**，再简短说明结果。
 - **用户历史上传的附件**：较早轮次的图片/文件在模型上下文里可能已被压缩为占位说明。需要引用它们时，请先 **list_conversation_attachments**，再在 **generate_image** 的 **ref_image_urls** 中填入对应的 **attachment_id**。
 - 工具返回 JSON：success 为 false 时向用户说明原因；success 且含 media_url 时汇总结果（不要编造 URL）。
 
@@ -126,6 +134,9 @@ export async function runAgentChatTurn(params: {
   };
 
   const slashBooster = extractSlashCommandBoosterFromMessages(conversationMessages);
+  const imageIntent = slashBooster ? null : detectImageGenerationIntent(conversationMessages);
+  const forceGenerateImage =
+    Boolean(imageIntent?.active) && !slashBooster;
 
   const systemMsg: ChatMessage = {
     id: `sys-agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -139,10 +150,10 @@ export async function runAgentChatTurn(params: {
     ],
   };
 
-  const history = applySlashBoosterToLastUser(
-    compactMessagesForAgentApi(conversationMessages.filter((m) => m.role !== "system")),
-    slashBooster,
-  );
+  const compacted = compactMessagesForAgentApi(conversationMessages.filter((m) => m.role !== "system"));
+  const withSlash = applySlashBoosterToLastUser(compacted, slashBooster);
+  const imageBooster = imageIntent?.active ? buildImageIntentBooster(imageIntent) : null;
+  const history = applyImageIntentBoosterToLastUser(withSlash, imageBooster);
 
   let apiMessages: ChatMessage[] = [systemMsg, ...history];
 
@@ -153,7 +164,7 @@ export async function runAgentChatTurn(params: {
   for (let round = 0; round < maxIterations; round++) {
     const raw = await sendChatCompletionRaw(chatApiConfig, apiMessages, {
       tools: OPENAI_AGENT_TOOLS,
-      tool_choice: "auto",
+      tool_choice: openAiToolChoiceForImageIntent(forceGenerateImage && round === 0),
     });
 
     const { contentText, toolCalls } = parseAssistantChoice(raw);
@@ -166,14 +177,22 @@ export async function runAgentChatTurn(params: {
       toolCalls: toolCalls.length ? toolCalls : undefined,
     };
 
+    let toolCallsToRun = toolCalls;
+    if (toolCallsToRun.length === 0 && forceGenerateImage && round === 0) {
+      const fallbackId = `call-fb-${Date.now()}`;
+      const fallbackArgs = buildFallbackGenerateImageArgs(conversationMessages);
+      toolCallsToRun = [{ id: fallbackId, name: "generate_image", arguments: fallbackArgs }];
+      assistantMsg.toolCalls = toolCallsToRun;
+    }
+
     appended.push(assistantMsg);
     apiMessages = [...apiMessages, assistantMsg];
 
-    if (toolCalls.length === 0) {
+    if (toolCallsToRun.length === 0) {
       break;
     }
 
-    for (const tc of toolCalls) {
+    for (const tc of toolCallsToRun) {
       const resultStr = await executeAgentTool(tc.name, tc.arguments, toolCtx);
       const toolMsg: ChatMessage = {
         id: `msg-${Date.now()}-tool-${tc.id}`,

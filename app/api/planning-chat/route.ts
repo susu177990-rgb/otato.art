@@ -36,7 +36,9 @@ export async function POST(req: NextRequest) {
   }
 
   const base =
-    sessionKind === "adaptation_planner" ? loadAdaptationPlannerPrompt() : loadPlanningSessionPrompt();
+    sessionKind === "adaptation_planner"
+      ? loadAdaptationPlannerPrompt(creativeDirectionId)
+      : loadPlanningSessionPrompt(creativeDirectionId);
   const directionContext = buildCreativeDirectionContext(creativeDirectionId);
   const systemContent =
     planningBootstrap && planningBootstrap.trim().length > 0

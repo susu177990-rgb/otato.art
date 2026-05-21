@@ -33,6 +33,7 @@ const mdComponents: Components = {
       </code>
     );
   },
+  // eslint-disable-next-line @next/next/no-img-element
   img: ({ src, alt }) => <img src={src} alt={alt ?? ""} className={styles.img} />,
 };
 

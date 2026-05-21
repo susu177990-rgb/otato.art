@@ -3,9 +3,11 @@ import { createHash } from "node:crypto";
 import { loadSystemPrompt, type LoadSystemPromptOptions } from "../lib/prompt-loader";
 
 const DIRECTION_ID = "bl-short-drama";
-const EXPECTED_DEFAULT_HASH = "a5768b615ed993685c5351fa3f22af0a1aff17d98815a93fe677c290be135dca";
-const EXPECTED_DEFAULT_LENGTH = 88902;
+const GENERAL_DIRECTION_ID = "general-screenplay";
+const EXPECTED_LEGACY_BL_HASH = "a5768b615ed993685c5351fa3f22af0a1aff17d98815a93fe677c290be135dca";
+const EXPECTED_LEGACY_BL_LENGTH = 88902;
 const REPORT_PATH = "agent/script-agent/PROMPT_MIGRATION_READINESS.md";
+const RULE_DIFF_REPORT_PATH = "agent/script-agent/PROMPT_DUPLICATE_RULE_DIFF.md";
 const CORE_MANIFEST_PATH = "agent/script-agent/core/core-manifest.json";
 const DIRECTION_CONFIG_PATH = "agent/script-agent/directions/bl-short-drama/direction.json";
 
@@ -18,6 +20,9 @@ const MARKERS = {
   knowledge: "<!-- file: agent/script-agent/knowledge/01_EPISODE_SPECS.md -->",
   skills: "<!-- file: agent/script-agent/skills/00_INDEX.md -->",
   templates: "<!-- template: agent/script-agent/templates/",
+  coreStable: "<!-- core-stable:",
+  shared: "<!-- shared:",
+  directionTemplate: "<!-- direction-template:",
 };
 
 interface CoreManifestModule {
@@ -32,7 +37,10 @@ interface CoreManifest {
 }
 
 interface DirectionConfig {
+  legacyPromptFiles?: string[];
+  sharedPromptFiles?: string[];
   promptFiles?: string[];
+  templateFiles?: string[];
   migrationShadowPromptFiles?: string[];
 }
 
@@ -51,25 +59,25 @@ const directionShadowMappings = [
     file: "directions/bl-short-drama/prompts/role.md",
     ruleArea: "BL 身份定位 / 总编剧角色",
     legacySources: ["prompts/main-agent-role.md"],
-    nextAction: "可作为 direction role 正本候选；删 legacy 前需确认 main_prompt 的总控调度未依赖原段落。",
+    nextAction: "已作为 BL modular stable prompt；删 legacy 前需确认 main_prompt 的总控调度未依赖原段落。",
   },
   {
     file: "directions/bl-short-drama/prompts/market-and-relationship.md",
     ruleArea: "海外市场 / 女性向情绪 / 双男主关系 / 人设默认",
     legacySources: ["prompts/main-agent-role.md", "prompts/rule.md", "prompts/flowchart.md"],
-    nextAction: "重复度高但风险中高；需要先把 short-drama shared 与 BL_DIRECTION 边界再拆细。",
+    nextAction: "已作为 BL modular stable prompt；需要继续把 short-drama shared 与 BL_DIRECTION 边界拆细。",
   },
   {
     file: "directions/bl-short-drama/prompts/dialogue.md",
     ruleArea: "BL 对白医生 / 去 AI 味 / 关系攻防",
     legacySources: ["prompts/lines-agent-role.md", "prompts/main-agent-role.md"],
-    nextAction: "可先做 direction dialogue addendum；暂不删 lines-agent-role。",
+    nextAction: "已作为 BL modular stable prompt；暂不删 lines-agent-role。",
   },
   {
     file: "directions/bl-short-drama/prompts/english-locale.md",
     ruleArea: "英语对白 / Locale 简报 / Chinglish 排雷",
     legacySources: ["prompts/english-lines-agent-role.md", "skills/skill-english-dialogue-localization.md"],
-    nextAction: "应等待 shared locale module 设计后再决定是否从 direction 抽出。",
+    nextAction: "已作为 BL modular stable prompt；等待 shared locale module 设计后再决定是否从 direction 抽出。",
   },
 ];
 
@@ -96,8 +104,14 @@ function assertBefore(a: number, b: number, message: string): void {
   if (!(a < b)) fail(message);
 }
 
-function loadVariant(id: string, label: string, options: LoadSystemPromptOptions, expectedOrder: string): PromptVariant {
-  const prompt = loadSystemPrompt(DIRECTION_ID, options);
+function loadVariant(
+  id: string,
+  label: string,
+  options: LoadSystemPromptOptions,
+  expectedOrder: string,
+  directionId = DIRECTION_ID
+): PromptVariant {
+  const prompt = loadSystemPrompt(directionId, options);
   return {
     id,
     label,
@@ -171,38 +185,68 @@ if (coreModules.length === 0) fail("core manifest has no modules");
 if (directionShadowFiles.length === 0) fail("direction has no migrationShadowPromptFiles");
 
 const variants = [
-  loadVariant("default", "Default production", {}, "legacy -> stable direction -> knowledge -> skills -> templates"),
+  loadVariant(
+    "legacy",
+    "Legacy BL baseline",
+    { assemblyMode: "legacy" },
+    "legacy -> stable direction -> knowledge -> skills -> templates"
+  ),
   loadVariant(
     "core-only",
     "Core shadow preview",
-    { coreMode: "shadow-preview" },
+    { assemblyMode: "legacy", coreMode: "shadow-preview" },
     "legacy -> core shadow -> stable direction -> knowledge -> skills -> templates"
   ),
   loadVariant(
     "direction-only",
     "Direction shadow preview",
-    { directionMode: "shadow-preview" },
+    { assemblyMode: "legacy", directionMode: "shadow-preview" },
     "legacy -> stable direction -> direction shadow -> knowledge -> skills -> templates"
   ),
   loadVariant(
     "combined",
     "Combined preview",
-    { coreMode: "shadow-preview", directionMode: "shadow-preview" },
+    { assemblyMode: "legacy", coreMode: "shadow-preview", directionMode: "shadow-preview" },
     "legacy -> core shadow -> stable direction -> direction shadow -> knowledge -> skills -> templates"
   ),
 ];
 
-const defaultVariant = variants[0];
-if (defaultVariant.hash !== EXPECTED_DEFAULT_HASH) {
-  fail(`default hash changed: ${defaultVariant.hash}`);
+const modularVariants = [
+  loadVariant(
+    "bl-modular",
+    "BL production modular prompt",
+    {},
+    "core stable -> shared short-drama -> BL direction prompts -> BL direction templates",
+    DIRECTION_ID
+  ),
+  loadVariant(
+    "general-modular",
+    "General production modular prompt",
+    {},
+    "core stable -> general direction prompts -> general direction templates",
+    GENERAL_DIRECTION_ID
+  ),
+];
+
+const legacyVariant = variants[0];
+if (legacyVariant.hash !== EXPECTED_LEGACY_BL_HASH) {
+  fail(`legacy BL hash changed: ${legacyVariant.hash}`);
 }
-if (defaultVariant.length !== EXPECTED_DEFAULT_LENGTH) {
-  fail(`default length changed: ${defaultVariant.length}`);
+if (legacyVariant.length !== EXPECTED_LEGACY_BL_LENGTH) {
+  fail(`legacy BL length changed: ${legacyVariant.length}`);
 }
 
 const markerIndexes = new Map<string, Record<string, number | null>>();
 for (const variant of variants) {
   markerIndexes.set(variant.id, validateVariantOrder(variant));
+}
+
+for (const variant of modularVariants) {
+  if (variant.prompt.includes(MARKERS.legacy)) {
+    fail(`${variant.id}: modular prompt must not include legacy marker`);
+  }
+  requiredIndex(variant.prompt, MARKERS.coreStable, `${variant.id} core stable`);
+  requiredIndex(variant.prompt, MARKERS.directionTemplate, `${variant.id} direction template`);
 }
 
 const report = `# Prompt Migration Readiness
@@ -211,27 +255,43 @@ Generated by \`npm run report:script-agent-migration\`. This report is determini
 
 ## Conclusion
 
-- The default production prompt is unchanged.
-- Core shadow and BL direction shadow can be previewed explicitly, but neither is loaded by default.
-- This infrastructure is ready for the next migration planning round.
-- Do not delete or trim legacy prompt rules in this round. Any legacy deletion must be a separate phase with an explainable default prompt hash change.
+- Default production assembly is modular for stable directions.
+- Legacy BL can still be replayed explicitly and through the \`SCRIPT_AGENT_FORCE_LEGACY_BL=1\` fallback.
+- Core stable modules are part of modular production; core-shadow and direction-shadow markers remain migration-preview modes.
+- The duplicate-rule diff report is the required precondition before deleting legacy prompt rules.
 
-## Production Baseline
+## Legacy BL Baseline
 
 | Field | Value |
 | --- | --- |
 | Creative direction | \`${DIRECTION_ID}\` |
-| Expected default hash | \`${EXPECTED_DEFAULT_HASH}\` |
-| Actual default hash | \`${defaultVariant.hash}\` |
-| Expected default length | \`${EXPECTED_DEFAULT_LENGTH}\` |
-| Actual default length | \`${defaultVariant.length}\` |
-| Default load order | ${variants[0].expectedOrder} |
+| Expected legacy hash | \`${EXPECTED_LEGACY_BL_HASH}\` |
+| Actual legacy hash | \`${legacyVariant.hash}\` |
+| Expected legacy length | \`${EXPECTED_LEGACY_BL_LENGTH}\` |
+| Actual legacy length | \`${legacyVariant.length}\` |
+| Legacy load order | ${variants[0].expectedOrder} |
 
 ## Prompt Variants
 
 | Variant | Options | Hash | Length | Expected order |
 | --- | --- | --- | --- | --- |
 ${variants
+  .map((variant) =>
+    tableRow([
+      variant.label,
+      `\`${JSON.stringify(variant.options)}\``,
+      `\`${variant.hash}\``,
+      variant.length,
+      variant.expectedOrder,
+    ])
+  )
+  .join("\n")}
+
+## Modular Prompt Baselines
+
+| Variant | Options | Hash | Length | Expected order |
+| --- | --- | --- | --- | --- |
+${modularVariants
   .map((variant) =>
     tableRow([
       variant.label,
@@ -263,7 +323,7 @@ ${variants
   })
   .join("\n")}
 
-## Core Shadow Modules
+## Core Modules
 
 | Module | Category | Path | Legacy sources |
 | --- | --- | --- | --- |
@@ -293,31 +353,49 @@ ${directionShadowMappings
   )
   .join("\n")}
 
+## Duplicate Rule Diff
+
+| Field | Value |
+| --- | --- |
+| Report | \`${RULE_DIFF_REPORT_PATH}\` |
+| Command | \`npm run report:script-agent-rule-diff\` |
+| Current first deletion candidate | BL identity and market positioning, after modular fixtures are accepted. |
+
+## Fallback
+
+| Field | Value |
+| --- | --- |
+| Temporary BL fallback | \`SCRIPT_AGENT_FORCE_LEGACY_BL=1\` |
+| Normal BL production | modular prompt \`${modularVariants[0].hash}\` |
+| Normal general production | modular prompt \`${modularVariants[1].hash}\` |
+
 ## Do Not Delete In This Round
 
 | Area | Reason |
 | --- | --- |
-| \`agent/script-agent/prompts/main_prompt.md\` | Still owns production loading contract, stage dispatch, mounted resource references, and hard template coordination. |
-| \`agent/script-agent/templates/*.md\` | Still owns parser-facing artifact shapes and STAGE output structures. |
-| \`agent/script-agent/knowledge/*.md\` | Still runtime-loaded production knowledge; short-drama and locale extraction needs a separate shared-module phase. |
-| \`agent/script-agent/skills/short-drama/references/*.md\` | Still reference-only and not auto-injected; do not change their loading semantics during prompt migration. |
-| \`agent/script-agent/context_assets/character_reference.md\` | Still mixed project-context and BL example material; needs a neutral replacement schema before trimming. |
+| \`agent/script-agent/legacy/prompts/main_prompt.md\` | Archived legacy production contract; replay only through explicit legacy mode. |
+| \`agent/script-agent/legacy/templates/*.md\` | Archived parser-facing artifact shapes. |
+| \`agent/script-agent/legacy/knowledge/*.md\` | Archived production knowledge; shared modules now own migrated reusable rules. |
+| \`agent/script-agent/legacy/skills/short-drama/references/*.md\` | Archived reference-only material. |
+| \`agent/script-agent/legacy/context_assets/character_reference.md\` | Archived mixed project-context and BL example material. |
 
 ## Stage Summary
 
 | Stage | Result |
 | --- | --- |
-| 1 | Creative direction registry and default \`bl-short-drama\` project field established. |
+| 1 | Creative direction registry established; new projects now default to \`general-screenplay\`, while legacy missing/invalid projects fall back to \`bl-short-drama\`. |
 | 2 | Boundary inventory and migration categories documented. |
-| 3 | \`core/\` shadow layer created, not production-loaded. |
+| 3 | \`core/\` layer created as a shadow copy for review. |
 | 4 | \`coreMode: "shadow-preview"\` added for explicit core preview. |
 | 5 | BL direction shadow files and \`migrationShadowPromptFiles\` metadata added. |
 | 6 | \`directionMode: "shadow-preview"\` added for explicit direction shadow preview. |
 | 7 | This readiness report captures prompt hashes, load order, duplicate-rule mapping, and deletion boundaries. |
+| Completion sweep | \`general-screenplay\` direction, modular assembly, duplicate-rule diff, and lint cleanup added without changing archived legacy BL hash. |
+| Perfect migration | Legacy resources archived; default production no longer scans legacy; fallback replay remains hash-locked. |
 
 ## Next Round Recommendation
 
-Start with a read-only duplicate-rule diff report. The first deletion-capable phase should target only one narrow area, carry prompt snapshots, and treat any default hash change as an intentional migration artifact requiring explicit review.
+The first deletion-capable phase should target only one narrow area, carry prompt snapshots, and treat any default hash change as an intentional migration artifact requiring explicit review.
 `;
 
 fs.writeFileSync(REPORT_PATH, report, "utf8");
@@ -328,6 +406,11 @@ console.log(
       ok: true,
       reportPath: REPORT_PATH,
       variants: variants.map((variant) => ({
+        id: variant.id,
+        hash: variant.hash,
+        length: variant.length,
+      })),
+      modularVariants: modularVariants.map((variant) => ({
         id: variant.id,
         hash: variant.hash,
         length: variant.length,

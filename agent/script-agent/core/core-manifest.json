@@ -1,8 +1,8 @@
 {
   "id": "script-agent-core",
-  "status": "shadow",
-  "runtimeLoaded": false,
-  "description": "Review-only shared screenplay workflow layer. Production prompt loading must not read this manifest automatically.",
+  "status": "stable",
+  "runtimeLoaded": true,
+  "description": "Stable direction-neutral screenplay workflow layer. Modular production prompt loading reads these modules in manifest order.",
   "modules": [
     {
       "id": "deliverable-markdown",
@@ -56,8 +56,8 @@
     }
   ],
   "loaderPolicy": {
-    "mayAutoLoad": false,
-    "requiresExplicitLoaderFlag": true,
-    "notes": "Future loader work must prove parity before enabling this layer for any creative direction."
+    "mayAutoLoad": true,
+    "requiresExplicitLoaderFlag": false,
+    "notes": "Default modular production loads these modules with core-stable markers. Legacy comparison may still load them with core-shadow markers through coreMode=shadow-preview."
   }
 }

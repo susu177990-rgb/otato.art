@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { GPT_IMAGE_QUALITY_LABELS, type ImageGalleryRecord } from "@/lib/image-workspace";
+import { mergeCachedImageUrls } from "@/lib/image-gallery-client-cache";
+import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
 import { fetchGalleryRecords, replaceGalleryRecordsApi } from "@/lib/workspace-api";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import shellStyles from "../../shared/shell.module.css";
@@ -16,15 +18,15 @@ export default function ImageGalleryPage() {
   useEffect(() => {
     if (!workspaceReady) return;
     void fetchGalleryRecords()
-      .then(setRecords)
+      .then((rows) => setRecords(mergeCachedImageUrls(rows)))
       .catch((e) => console.warn("[gallery] load failed", e));
   }, [workspaceReady]);
 
   async function updateRecords(next: ImageGalleryRecord[]) {
     setRecords(next);
     try {
-      const saved = await replaceGalleryRecordsApi(next);
-      setRecords(saved);
+      const saved = await replaceGalleryRecordsApi(next.map(sanitizeGalleryRecordForStorage));
+      setRecords(mergeCachedImageUrls(saved));
     } catch (e) {
       console.warn("[gallery] save failed", e);
     }

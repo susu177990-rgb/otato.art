@@ -1,0 +1,8 @@
+{
+  "id": "general-short-drama",
+  "label": "通用短剧项目",
+  "directionId": "general-screenplay",
+  "additionalSharedPromptFiles": ["shared/short-drama/pacing-and-hooks.md"],
+  "requiredTerms": ["通用编剧", "短剧节奏", "集尾钩子"],
+  "forbiddenTerms": ["女频 BL 短剧", "双男主", "Chinglish"]
+}

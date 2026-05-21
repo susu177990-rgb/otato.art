@@ -1,0 +1,8 @@
+{
+  "id": "adaptation",
+  "label": "通用改编项目",
+  "directionId": "general-screenplay",
+  "additionalSharedPromptFiles": ["shared/adaptation/workflow.md"],
+  "requiredTerms": ["通用编剧", "改编通用工作流", "原文分析"],
+  "forbiddenTerms": ["女频 BL", "双男主", "海外女性向"]
+}

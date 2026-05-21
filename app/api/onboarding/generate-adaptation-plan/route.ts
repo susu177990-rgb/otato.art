@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "请先完成改编讨论（至少一轮有效对话）" }, { status: 400 });
   }
 
-  const base = loadAdaptationPlannerPrompt();
+  const base = loadAdaptationPlannerPrompt(project.creativeDirectionId);
   if (!base.trim()) {
     return Response.json({ error: "规划师提示词未加载" }, { status: 500 });
   }

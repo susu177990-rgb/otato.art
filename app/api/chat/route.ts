@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { loadSystemPrompt } from "@/lib/prompt-loader";
+import { normalizeCreativeDirectionId } from "@/lib/creative-directions";
 import type { Message, Settings } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -30,7 +31,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const systemPrompt = loadSystemPrompt(creativeDirectionId);
+  const normalizedDirectionId = normalizeCreativeDirectionId(creativeDirectionId);
+  const systemPrompt = loadSystemPrompt(normalizedDirectionId);
   const systemContent =
     projectContext && projectContext.trim().length > 0
       ? `${systemPrompt}\n\n---\n【工程注入 · 须服从】\n${projectContext.trim()}`

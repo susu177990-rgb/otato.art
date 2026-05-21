@@ -15,6 +15,7 @@ const SKILL_MARKER = "<!-- file: agent/script-agent/skills/00_INDEX.md -->";
 const TEMPLATE_MARKER_PREFIX = "<!-- template: agent/script-agent/templates/";
 
 interface DirectionConfig {
+  legacyPromptFiles?: string[];
   promptFiles?: string[];
   migrationShadowPromptFiles?: string[];
 }
@@ -35,6 +36,7 @@ function markerIndex(prompt: string, marker: string): number {
 
 const direction = JSON.parse(fs.readFileSync(DIRECTION_CONFIG_PATH, "utf8")) as DirectionConfig;
 const promptFiles = new Set(direction.promptFiles ?? []);
+const legacyPromptFiles = new Set(direction.legacyPromptFiles ?? []);
 const shadowFiles = direction.migrationShadowPromptFiles ?? [];
 
 if (shadowFiles.length === 0) {
@@ -42,8 +44,8 @@ if (shadowFiles.length === 0) {
 }
 
 for (const relPath of shadowFiles) {
-  if (promptFiles.has(relPath)) {
-    fail(`shadow file must not be listed in promptFiles: ${relPath}`);
+  if (promptFiles.has(relPath) && legacyPromptFiles.has(relPath)) {
+    fail(`promoted shadow file must not be listed in legacyPromptFiles: ${relPath}`);
   }
 
   const absPath = `agent/script-agent/${relPath}`;
@@ -57,16 +59,28 @@ for (const relPath of shadowFiles) {
   }
 }
 
-const defaultPrompt = loadSystemPrompt(DIRECTION_ID);
-const coreOnlyPreviewPrompt = loadSystemPrompt(DIRECTION_ID, { coreMode: "shadow-preview" });
-const directionOnlyPreviewPrompt = loadSystemPrompt(DIRECTION_ID, { directionMode: "shadow-preview" });
+const productionPrompt = loadSystemPrompt(DIRECTION_ID);
+const legacyPrompt = loadSystemPrompt(DIRECTION_ID, { assemblyMode: "legacy" });
+const coreOnlyPreviewPrompt = loadSystemPrompt(DIRECTION_ID, {
+  assemblyMode: "legacy",
+  coreMode: "shadow-preview",
+});
+const directionOnlyPreviewPrompt = loadSystemPrompt(DIRECTION_ID, {
+  assemblyMode: "legacy",
+  directionMode: "shadow-preview",
+});
 const combinedPreviewPrompt = loadSystemPrompt(DIRECTION_ID, {
+  assemblyMode: "legacy",
   coreMode: "shadow-preview",
   directionMode: "shadow-preview",
 });
 
-if (!defaultPrompt.includes(DIRECTION_PROFILE_MARKER)) {
-  fail("default prompt does not include loaded direction profile marker");
+if (!productionPrompt.includes(DIRECTION_PROFILE_MARKER)) {
+  fail("production prompt does not include loaded direction profile marker");
+}
+
+if (!legacyPrompt.includes(DIRECTION_PROFILE_MARKER)) {
+  fail("legacy prompt does not include loaded direction profile marker");
 }
 
 if (!coreOnlyPreviewPrompt.includes(DIRECTION_PROFILE_MARKER)) {
@@ -84,8 +98,11 @@ if (!combinedPreviewPrompt.includes(DIRECTION_PROFILE_MARKER)) {
 for (const relPath of shadowFiles) {
   const loadedPathMarker = `agent/script-agent/${relPath}`;
   const promptMarker = `<!-- direction-shadow: ${DIRECTION_ID}; file: ${loadedPathMarker} -->`;
-  if (defaultPrompt.includes(loadedPathMarker) || defaultPrompt.includes(DIRECTION_SHADOW_MARKER)) {
-    fail(`default prompt unexpectedly includes direction shadow file: ${relPath}`);
+  if (productionPrompt.includes(DIRECTION_SHADOW_PROMPT_MARKER)) {
+    fail(`production prompt unexpectedly includes direction shadow marker: ${relPath}`);
+  }
+  if (legacyPrompt.includes(loadedPathMarker) || legacyPrompt.includes(DIRECTION_SHADOW_MARKER)) {
+    fail(`legacy prompt unexpectedly includes direction shadow file: ${relPath}`);
   }
   if (
     coreOnlyPreviewPrompt.includes(loadedPathMarker) ||
@@ -144,8 +161,10 @@ console.log(
   JSON.stringify(
     {
       ok: true,
-      defaultHash: sha256(defaultPrompt),
-      defaultLength: defaultPrompt.length,
+      productionHash: sha256(productionPrompt),
+      productionLength: productionPrompt.length,
+      legacyHash: sha256(legacyPrompt),
+      legacyLength: legacyPrompt.length,
       coreOnlyPreviewHash: sha256(coreOnlyPreviewPrompt),
       coreOnlyPreviewLength: coreOnlyPreviewPrompt.length,
       directionOnlyPreviewHash: sha256(directionOnlyPreviewPrompt),

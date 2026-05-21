@@ -23,11 +23,16 @@ import {
 } from "@/lib/image-workspace";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
+  mergeCachedImageUrls,
+  saveImageResultForRecord,
+} from "@/lib/image-gallery-client-cache";
+import {
   fetchGalleryRecords,
   fetchWorkspaceSnapshot,
   prependGalleryRecordApi,
   saveWorkspaceSnapshot,
 } from "@/lib/workspace-api";
+import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
@@ -143,7 +148,15 @@ function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
 
 function writeGenerationRuntimeState(next: ImageGenerationRuntimeState) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify(next));
+  try {
+    const lean =
+      next.imageUrl && next.imageUrl.startsWith("data:") && next.imageUrl.length > 200_000
+        ? { ...next, imageUrl: undefined }
+        : next;
+    window.localStorage.setItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify(lean));
+  } catch {
+    return;
+  }
   window.dispatchEvent(new CustomEvent<ImageGenerationRuntimeState>(IMAGE_GENERATION_RUNTIME_EVENT, { detail: next }));
 }
 
@@ -159,10 +172,14 @@ function readReferenceImageCache(): Record<string, ImageGalleryReferenceImage[]>
 
 function saveReferenceImagesForRecord(recordId: string, referenceImages: ImageGalleryReferenceImage[]) {
   if (typeof window === "undefined" || referenceImages.length === 0) return;
-  const cache = readReferenceImageCache();
-  cache[recordId] = referenceImages;
-  const entries = Object.entries(cache).slice(-80);
-  window.localStorage.setItem(IMAGE_REFERENCE_CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  try {
+    const cache = readReferenceImageCache();
+    cache[recordId] = referenceImages;
+    const entries = Object.entries(cache).slice(-24);
+    window.localStorage.setItem(IMAGE_REFERENCE_CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {
+    // localStorage 配额满时跳过，避免未捕获异常拖垮页面
+  }
 }
 
 function mergeCachedReferenceImages(records: ImageGalleryRecord[]): ImageGalleryRecord[] {
@@ -273,7 +290,11 @@ export default function ImagePage() {
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
+  /** 用户已手动改过参考图槽时，勿用 localStorage 里的旧 runtime 覆盖 */
+  const refSlotsUserEditedRef = useRef(false);
+  const promptsRef = useRef(settings.prompts);
   refSlotsRef.current = refSlots;
+  promptsRef.current = settings.prompts;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -337,7 +358,7 @@ export default function ImagePage() {
     async function refreshGallery() {
       try {
         const records = await fetchGalleryRecords();
-        setRecords(mergeCachedReferenceImages(records));
+        setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(records)));
       } catch (e) {
         console.warn("[image] gallery load failed", e);
       }
@@ -443,9 +464,14 @@ export default function ImagePage() {
     return () => window.removeEventListener("paste", handlePaste);
   }, []);
 
+  function markRefSlotsUserEdited() {
+    refSlotsUserEditedRef.current = true;
+  }
+
   function addRefImages(files: File[]) {
     const images = files.filter((file) => file.type.startsWith("image/"));
     if (images.length === 0) return;
+    markRefSlotsUserEdited();
     setRefSlots((prev) => {
       const next = normalizeRefSlots(prev);
       let imageIndex = 0;
@@ -463,6 +489,7 @@ export default function ImagePage() {
     if (!files) return;
     const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (images.length === 0) return;
+    markRefSlotsUserEdited();
     setRefSlots((prev) => {
       const next = normalizeRefSlots(prev);
       images.forEach((file, offset) => {
@@ -477,6 +504,7 @@ export default function ImagePage() {
   }
 
   function clearRefImage(index: number) {
+    markRefSlotsUserEdited();
     setRefSlots((prev) => {
       const next = normalizeRefSlots(prev);
       revokeRefPreview(next[index]);
@@ -504,42 +532,64 @@ export default function ImagePage() {
   }, []);
 
   function restoreReferenceImagesFromRecord(record: ImageGalleryRecord) {
+    refSlotsUserEditedRef.current = false;
     restoreReferenceImages(record.referenceImages);
   }
 
-  const applyGenerationRuntimeState = useCallback((state: ImageGenerationRuntimeState | null) => {
-    if (!state) return;
-    setSelectedModelId(state.modelId);
-    setSelectedModeId(state.modeId);
-    setAspectRatio(state.aspectRatio);
-    setImageSize(state.imageSize);
-    const tpl = settings.prompts[state.modeId] ?? "";
-    const n = composerSlotCountForTemplate(tpl, state.modeId);
-    setSlotInputs(normalizeSlotInputsToLength(state.slotInputs, n));
-    restoreReferenceImages(state.referenceImages);
-    setIsGenerating(state.status === "running");
-    if (state.status === "success") {
-      setResultUrl(state.imageUrl || "");
-      setError("");
-    } else if (state.status === "error") {
-      setError(state.error || "生图失败");
-    }
-    if (state.gptImageQuality) {
-      setSettings((prev) => ({ ...prev, gptImageQuality: state.gptImageQuality! }));
-    }
-  }, [restoreReferenceImages, settings.prompts]);
+  const applyGenerationRuntimeState = useCallback(
+    (state: ImageGenerationRuntimeState | null, options?: { restoreReferenceImages?: boolean }) => {
+      if (!state) return;
+      const shouldRestoreRefs = options?.restoreReferenceImages === true && !refSlotsUserEditedRef.current;
+
+      setSelectedModelId(state.modelId);
+      setSelectedModeId(state.modeId);
+      setAspectRatio(state.aspectRatio);
+      setImageSize(state.imageSize);
+      const tpl = promptsRef.current[state.modeId] ?? "";
+      const n = composerSlotCountForTemplate(tpl, state.modeId);
+      setSlotInputs(normalizeSlotInputsToLength(state.slotInputs, n));
+      if (shouldRestoreRefs) {
+        restoreReferenceImages(state.referenceImages);
+      }
+      setIsGenerating(state.status === "running");
+      if (state.status === "success") {
+        setResultUrl(state.imageUrl || "");
+        setError("");
+      } else if (state.status === "error") {
+        setError(state.error || "生图失败");
+      }
+      if (state.gptImageQuality) {
+        setSettings((prev) => ({ ...prev, gptImageQuality: state.gptImageQuality! }));
+      }
+    },
+    [restoreReferenceImages],
+  );
 
   useEffect(() => {
     if (!workspaceReady) return;
-    applyGenerationRuntimeState(readGenerationRuntimeState());
+
+    const initial = readGenerationRuntimeState();
+    if (initial?.status === "running") {
+      refSlotsUserEditedRef.current = false;
+      applyGenerationRuntimeState(initial, { restoreReferenceImages: true });
+    }
 
     function onRuntimeChange(e: Event) {
       const detail = e instanceof CustomEvent ? (e.detail as ImageGenerationRuntimeState | undefined) : undefined;
-      applyGenerationRuntimeState(detail ?? readGenerationRuntimeState());
+      const next = detail ?? readGenerationRuntimeState();
+      if (!next) return;
+      if (next.status === "running") {
+        refSlotsUserEditedRef.current = false;
+      }
+      applyGenerationRuntimeState(next, { restoreReferenceImages: next.status === "running" });
     }
 
     function onVisible() {
-      if (document.visibilityState === "visible") applyGenerationRuntimeState(readGenerationRuntimeState());
+      if (document.visibilityState !== "visible") return;
+      const next = readGenerationRuntimeState();
+      if (next?.status !== "running") return;
+      refSlotsUserEditedRef.current = false;
+      applyGenerationRuntimeState(next, { restoreReferenceImages: true });
     }
 
     window.addEventListener(IMAGE_GENERATION_RUNTIME_EVENT, onRuntimeChange);
@@ -579,10 +629,11 @@ export default function ImagePage() {
       error: message,
     };
     saveReferenceImagesForRecord(record.id, referenceImages ?? []);
-    const remoteRecord = { ...record, referenceImages: undefined };
+    if (imageUrl?.trim()) saveImageResultForRecord(record.id, imageUrl);
+    const remoteRecord = sanitizeGalleryRecordForStorage(record);
     try {
       const next = await prependGalleryRecordApi(remoteRecord);
-      if (mountedRef.current) setRecords(mergeCachedReferenceImages(next));
+      if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
     } catch (e) {
       console.warn("[image] gallery save failed", e);
       if (mountedRef.current) setRecords((prev) => [record, ...prev]);
@@ -622,6 +673,7 @@ export default function ImagePage() {
     try {
       const refSlotsSnapshot = normalizeRefSlots(refSlots);
       referenceImages = await snapshotReferenceImages(refSlotsSnapshot);
+      refSlotsUserEditedRef.current = false;
       runtimeState = {
         taskId: crypto.randomUUID(),
         status: "running",

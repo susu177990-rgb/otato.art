@@ -12,8 +12,22 @@
   },
   "requiresEnglishLocaleBrief": true,
   "contextSummary": "本方向默认围绕双男主关系、女性向情绪消费、短剧强钩子、高密度反转和海外本地化英语对白展开；后续 STAGE 1~7 均不得脱离该方向。",
-  "promptFiles": [
+  "legacyPromptFiles": [
     "directions/bl-short-drama/prompts/profile.md"
+  ],
+  "sharedPromptFiles": [
+    "shared/short-drama/pacing-and-hooks.md",
+    "shared/locale/english/dialogue-locale.md"
+  ],
+  "promptFiles": [
+    "directions/bl-short-drama/prompts/profile.md",
+    "directions/bl-short-drama/prompts/role.md",
+    "directions/bl-short-drama/prompts/market-and-relationship.md",
+    "directions/bl-short-drama/prompts/dialogue.md",
+    "directions/bl-short-drama/prompts/english-locale.md"
+  ],
+  "templateFiles": [
+    "directions/bl-short-drama/templates/stage-brief.md"
   ],
   "migrationShadowPromptFiles": [
     "directions/bl-short-drama/prompts/role.md",

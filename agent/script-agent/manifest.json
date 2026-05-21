@@ -1,8 +1,12 @@
 {
   "id": "script-agent",
   "label": "Gleam Media Studios Script Agent",
-  "defaultCreativeDirectionId": "bl-short-drama",
+  "defaultCreativeDirectionId": "general-screenplay",
   "directions": [
+    {
+      "id": "general-screenplay",
+      "configPath": "directions/general-screenplay/direction.json"
+    },
     {
       "id": "bl-short-drama",
       "configPath": "directions/bl-short-drama/direction.json"

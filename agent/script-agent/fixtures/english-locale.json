@@ -1,0 +1,8 @@
+{
+  "id": "english-locale",
+  "label": "英语本地化项目",
+  "directionId": "general-screenplay",
+  "additionalSharedPromptFiles": ["shared/locale/english/dialogue-locale.md"],
+  "requiredTerms": ["通用编剧", "英语对白", "Locale", "Chinglish"],
+  "forbiddenTerms": ["女频 BL", "双男主", "海外女性向"]
+}

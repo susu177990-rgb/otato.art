@@ -1,0 +1,8 @@
+{
+  "id": "general-long-series",
+  "label": "通用长剧项目",
+  "directionId": "general-screenplay",
+  "requiredTerms": ["通用编剧", "体量", "语言"],
+  "forbiddenTerms": ["女频 BL", "双男主", "海外女性向", "Chinglish"],
+  "forbiddenMarkers": ["agent/script-agent/shared/short-drama/pacing-and-hooks.md"]
+}

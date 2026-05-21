@@ -1,0 +1,24 @@
+{
+  "id": "general-screenplay",
+  "label": "通用编剧",
+  "shortLabel": "通用",
+  "status": "stable",
+  "description": "面向多类型、多市场、多语言、多体量项目的通用编剧方向。它只提供编剧流程、结构判断和项目级约束，不预设题材、受众、集数、语言或平台形态。",
+  "defaults": {
+    "episodeCount": "",
+    "episodeDurationMinutes": null,
+    "targetMarket": "",
+    "dialogueLanguage": ""
+  },
+  "requiresEnglishLocaleBrief": false,
+  "contextSummary": "本方向默认先理解项目资料、目标受众、媒介形态、语言和交付规格；信息不足时先提出可选创作路径与待确认项，不把任何特定类型、市场、关系结构或语言作为默认答案。",
+  "legacyPromptFiles": [],
+  "sharedPromptFiles": [],
+  "promptFiles": [
+    "directions/general-screenplay/prompts/profile.md"
+  ],
+  "templateFiles": [
+    "directions/general-screenplay/templates/stage-brief.md"
+  ],
+  "migrationShadowPromptFiles": []
+}
