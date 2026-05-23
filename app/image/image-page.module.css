@@ -3,8 +3,6 @@
  * 这里只放：stage 三栏画布、左 mode 条、右 history 缩略图列、参考图槽、composer 工具条等图片场景独有的部件。 */
 
 .stage {
-  --rail-thumb: 80px;
-  --rail-pad-x: 8px;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -464,52 +462,121 @@
   pointer-events: none;
 }
 
-/* 与 historyColumn 同系：侧栏一列 + 记录条同款轨道骨架 */
+/* 与 historyColumn 同系：侧栏一列 + 记录条同款轨道骨架（对话页 Skill/会话轨道共用） */
 .modeColumn {
-  --history-thumb: var(--rail-thumb, 80px);
+  --history-thumb: 80px;
   --history-gap: 12px;
-  /* 与右侧 history 一致：可视 7 条 + 间距 */
+  /* 与右侧 history 一致：可视 7 条 + 间距；行高与按钮 min-height 对齐 */
   --mode-visible: 7;
   --mode-gap: 10px;
-  --mode-row-height: var(--history-thumb, 80px);
+  --mode-row-height: 44px;
   /* 与右侧 history 渐变遮罩同高 */
   --history-fade: 22px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: calc(var(--history-thumb, 80px) + 2 * var(--rail-pad-x, 8px));
-  max-width: 100%;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 80px));
   flex-shrink: 0;
   pointer-events: auto;
 }
 
-/* 模式封面卡片；与右侧 history 缩略图同尺寸 */
+/* 横向长条；位置仍与右侧 historyPanel 对称（对话页轨道基类） */
 .modeButton {
   box-sizing: border-box;
-  width: var(--history-thumb, 80px);
-  height: var(--history-thumb, 80px);
-  min-width: 0;
-  min-height: var(--history-thumb, 80px);
+  width: max-content;
+  max-width: 100%;
+  min-width: var(--history-thumb, 80px);
+  min-height: var(--mode-row-height, 44px);
   margin: 0;
-  padding: 0;
-  border-radius: 20px;
+  padding: 10px 12px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(255, 255, 255, 0.035);
   box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(18px);
   color: inherit;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
   text-align: center;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
 }
 
 .modeButton:focus-visible {
   outline: 1px solid rgba(250, 250, 250, 0.35);
   outline-offset: 2px;
+}
+
+.modeName {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: #e4e4e7;
+  white-space: nowrap;
+}
+
+/* 仅 /image 左侧模式封面卡：勿影响对话页轨道 */
+.modePanelImage {
+  --image-mode-thumb: 80px;
+  --image-mode-pad-x: 8px;
+}
+
+.modePanelImage .modeColumn {
+  --mode-row-height: var(--image-mode-thumb);
+  width: calc(var(--image-mode-thumb) + 2 * var(--image-mode-pad-x));
+  max-width: 100%;
+}
+
+.modePanelImage .modeButton {
+  width: var(--image-mode-thumb);
+  height: var(--image-mode-thumb);
+  min-width: 0;
+  min-height: var(--image-mode-thumb);
+  padding: 0;
+  border-radius: 20px;
+  align-items: stretch;
+  position: relative;
+  overflow: hidden;
+}
+
+.modePanelImage .modeList {
+  align-items: center;
+  width: var(--image-mode-thumb);
+  flex-shrink: 0;
+}
+
+.modePanelImage .modeScrollWrap {
+  width: 100%;
+}
+
+.modePanelImage .modeScroll {
+  padding: 2px var(--image-mode-pad-x);
+}
+
+.modePanelImage .modeList .modeButton {
+  width: var(--image-mode-thumb);
+  min-width: 0;
+}
+
+.modePanelImage .modeButtonActive {
+  border: 2px solid #c4b5fd;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+  z-index: 1;
+}
+
+.modePanelImage .modeButtonActive .modeCoverFallback {
+  color: #e9d5ff;
+}
+
+.modePanelImage .modeButtonActive .modeMeta {
+  background: rgba(76, 29, 149, 0.72);
+  color: #f3e8ff;
 }
 
 .modeCoverImage {
@@ -550,10 +617,9 @@
 .modeList {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: var(--mode-gap, 10px);
-  width: var(--history-thumb, 80px);
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .modeScrollWrap {
@@ -563,7 +629,7 @@
     var(--mode-visible) * var(--mode-row-height) + (var(--mode-visible) - 1) * var(--mode-gap)
   );
   min-height: 0;
-  width: 100%;
+  width: fit-content;
   max-width: 100%;
 }
 
@@ -579,7 +645,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
-  padding: 2px var(--rail-pad-x, 8px);
+  padding: 2px 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -594,23 +660,20 @@
 }
 
 .modeList .modeButton {
-  width: var(--history-thumb, 80px);
+  width: 100%;
   min-width: 0;
 }
 
 .modeButtonActive {
-  border: 2px solid #c4b5fd;
-  box-shadow: none;
-  z-index: 1;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #fafafa;
+  color: #09090b;
+  box-shadow: 0 1px 8px rgba(255, 255, 255, 0.14);
+  backdrop-filter: none;
 }
 
-.modeButtonActive .modeCoverFallback {
-  color: #e9d5ff;
-}
-
-.modeButtonActive .modeMeta {
-  background: rgba(76, 29, 149, 0.72);
-  color: #f3e8ff;
+.modeButtonActive .modeName {
+  color: #09090b;
 }
 
 .historyPanel {
@@ -628,14 +691,14 @@
 }
 
 .historyColumn {
-  --history-thumb: var(--rail-thumb, 80px);
+  --history-thumb: 80px;
   --history-gap: 12px;
   --history-visible: 7;
   --history-fade: 22px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: calc(var(--history-thumb) + 2 * var(--rail-pad-x, 8px));
+  width: var(--history-thumb);
   max-width: 100%;
   flex-shrink: 0;
   pointer-events: auto;
@@ -694,7 +757,7 @@
     var(--history-visible) * var(--history-thumb) + (var(--history-visible) - 1) * var(--history-gap)
   );
   min-height: 0;
-  width: 100%;
+  width: fit-content;
   max-width: 100%;
 }
 
@@ -725,7 +788,7 @@
 
 .historyScroll {
   box-sizing: border-box;
-  width: 100%;
+  width: var(--history-thumb);
   max-width: 100%;
   max-height: calc(
     var(--history-visible) * var(--history-thumb) + (var(--history-visible) - 1) * var(--history-gap)
@@ -735,7 +798,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
-  padding: 2px var(--rail-pad-x, 8px);
+  padding: 2px 0;
   display: flex;
   flex-direction: column;
   justify-content: safe center;
@@ -767,8 +830,8 @@
 
 .emptyHistory,
 .historyItem {
-  width: var(--history-thumb, 80px);
-  height: var(--history-thumb, 80px);
+  width: 80px;
+  height: 80px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background: rgba(255, 255, 255, 0.035);

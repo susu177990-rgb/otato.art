@@ -763,7 +763,7 @@ export default function ImagePage() {
       </header>
 
       <section className={styles.stage}>
-        <aside className={styles.modePanel}>
+        <aside className={[styles.modePanel, styles.modePanelImage].join(" ")}>
           <div className={styles.modeColumn}>
             <div className={styles.modeRail}>
               <div className={styles.modeRailFrame}>
