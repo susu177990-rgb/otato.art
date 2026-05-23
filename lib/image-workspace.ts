@@ -141,6 +141,8 @@ export interface ImageWorkspaceSettings {
    * 某行留空则该槽仅显示「图n」。
    */
   refSlotHintsByMode: Record<string, string[]>;
+  /** 设置页为各作图模式配置的封面图（Supabase Storage 公开 URL） */
+  coverImageUrlByMode: Record<string, string>;
 }
 
 export interface ImageGalleryRecord {
@@ -196,6 +198,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   gptImageQuality: "auto",
   customModes: [],
   refSlotHintsByMode: {},
+  coverImageUrlByMode: {},
   prompts: {
     "real-character-asset": REAL_CHARACTER_ASSET_PROMPT,
     "photoreal-portrait-four-view": PHOTOREAL_PORTRAIT_FOUR_VIEW_PROMPT,
@@ -216,6 +219,14 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
 };
 
 const CUSTOM_MODE_ID_RE = /^custom_[a-zA-Z0-9_-]+$/;
+
+/** 设置页封面 / 自定义模式 id 校验（不含 free） */
+export function isKnownImageModeId(modeId: string, customModes: CustomImageMode[] = []): boolean {
+  const id = modeId.trim();
+  if (!id || id === "free") return false;
+  if (IMAGE_MODES.some((m) => m.id === id)) return true;
+  return CUSTOM_MODE_ID_RE.test(id) && customModes.some((m) => m.id === id);
+}
 
 function coerceCustomModes(raw: unknown): CustomImageMode[] {
   if (!Array.isArray(raw)) return [];
@@ -252,6 +263,16 @@ function coerceRefSlotHintsByMode(raw: unknown): Record<string, string[]> {
     let end = lines.length;
     while (end > 0 && !lines[end - 1]) end -= 1;
     if (end > 0) out[modeId] = lines.slice(0, end);
+  }
+  return out;
+}
+
+function coerceCoverImageUrlByMode(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
+    const url = String(val ?? "").trim();
+    if (url && /^https?:\/\//i.test(url)) out[modeId] = url;
   }
   return out;
 }
@@ -312,6 +333,7 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
     gptImageQuality: coerceGptImageQuality(source.gptImageQuality) ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
     customModes,
     refSlotHintsByMode: coerceRefSlotHintsByMode(source.refSlotHintsByMode),
+    coverImageUrlByMode: coerceCoverImageUrlByMode(source.coverImageUrlByMode),
     prompts: {
       ...DEFAULT_IMAGE_SETTINGS.prompts,
       ...sourcePrompts,

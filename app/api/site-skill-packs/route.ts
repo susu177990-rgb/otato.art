@@ -7,6 +7,7 @@ import {
   updateSiteSkillPack,
 } from "@/lib/db/site-skill-store";
 import { parseSkillZipBlob } from "@/lib/chat/skill-pack";
+import { canManageSiteSettings } from "@/lib/auth/site-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -17,8 +18,9 @@ export async function GET() {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
+    const canManage = await canManageSiteSettings(supabase);
     const skillPacks = await listSiteSkillPacks(supabase);
-    return NextResponse.json({ skillPacks, canManage: true });
+    return NextResponse.json({ skillPacks, canManage });
   } catch (e) {
     console.error("[site-skill-packs GET]", e);
     return NextResponse.json({ error: formatDbError(e) }, { status: 500 });
@@ -32,6 +34,9 @@ export async function POST(req: Request) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    if (!(await canManageSiteSettings(supabase))) {
+      return NextResponse.json({ error: "只有管理员可以导入全站 Skill 包" }, { status: 403 });
+    }
 
     const form = await req.formData();
     const file = form.get("file");
@@ -56,6 +61,9 @@ export async function PATCH(req: Request) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    if (!(await canManageSiteSettings(supabase))) {
+      return NextResponse.json({ error: "只有管理员可以修改全站 Skill 包" }, { status: 403 });
+    }
 
     const body = (await req.json()) as {
       id?: string;
@@ -88,6 +96,9 @@ export async function DELETE(req: Request) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    if (!(await canManageSiteSettings(supabase))) {
+      return NextResponse.json({ error: "只有管理员可以删除全站 Skill 包" }, { status: 403 });
+    }
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

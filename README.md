@@ -148,6 +148,7 @@ npm install
 NEXT_PUBLIC_SUPABASE_URL=https://你的项目.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=你的_anon_key
 SUPABASE_SERVICE_ROLE_KEY=你的_service_role_key   # 仅服务端与迁移脚本，勿泄露
+APP_ORIGIN=https://你的部署域名             # 用于注册邮件回调，不带末尾斜杠
 ```
 
 在 Supabase Dashboard：
@@ -163,6 +164,14 @@ supabase login
 supabase link --project-ref <你的 project-ref>
 supabase db push
 ```
+
+首次应用 `20260523090000_harden_workspace_schema.sql` 后，全站设置与 Skill 包由 `site_admins` 控制。管理员表为空时保持旧行为，便于迁移；登录后可在 SQL Editor 执行：
+
+```sql
+select public.claim_first_site_admin();
+```
+
+执行成功后，只有 `site_admins.email` 中的账号能修改全站配置、API Key、提示词和 Skill 包。项目、对话、图库仍按用户账号隔离。
 
 ### 3. 启动开发环境
 
@@ -194,10 +203,18 @@ npm run start
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 项目 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 浏览器端 anon / publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | 服务端与迁移脚本（**勿提交 Git**） |
+| `APP_ORIGIN` | 生产部署域名，用于 Supabase 注册邮件回调 |
 | `WATTPAD_API_URL` | Wattpad 子服务地址（可选，默认 `http://127.0.0.1:8765`） |
 | `PORT` | 容器 / PaaS 注入的 HTTP 端口 |
 
 LLM 与生图的具体 Endpoint、Key、模型名、提示词模版均在应用内 **设置** 维护，无需为每个模型单独写环境变量（默认值可参考 `lib/baked-api-defaults.ts`）。
+
+### 数据库结构约定
+
+- `projects.data` 保留完整项目快照；列表常用字段同步到真实列（如 `name`、`creative_direction_id`、`current_stage`），用于轻量查询和索引。
+- `chat_conversations.messages` 暂保留 JSON 快照；同步 `message_count`、`last_message_at` 作为列表与后续拆表迁移的过渡层。
+- `image_gallery_records.data` 只允许轻量元数据，图片像素必须进 Supabase Storage 的 `generated-images` 桶。
+- 全站配置表是 operator-managed 数据，不是用户私有数据；写权限必须经过 `site_admins`。
 
 ---
 

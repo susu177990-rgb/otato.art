@@ -375,7 +375,7 @@ export default function ImagePage() {
   }, [workspaceReady, refreshWorkspace]);
 
   const modes = useMemo(
-    () => [...IMAGE_MODES, ...(settings.customModes ?? [])],
+    () => [...IMAGE_MODES, ...(settings.customModes ?? [])].reverse(),
     [settings.customModes],
   );
 
@@ -779,14 +779,24 @@ export default function ImagePage() {
                     <div className={styles.modeList}>
                       {modes.map((mode) => {
                         const active = selectedModeId === mode.id;
+                        const coverUrl = settings.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
                         return (
                           <button
                             key={mode.id}
                             type="button"
                             onClick={() => setSelectedModeId(mode.id)}
                             className={[styles.modeButton, active ? styles.modeButtonActive : ""].filter(Boolean).join(" ")}
+                            aria-label={mode.label}
                           >
-                            <span className={styles.modeName}>{mode.label}</span>
+                            {coverUrl ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={coverUrl} alt="" className={styles.modeCoverImage} />
+                                <span className={styles.modeMeta}>{mode.label}</span>
+                              </>
+                            ) : (
+                              <span className={styles.modeCoverFallback}>{mode.label}</span>
+                            )}
                           </button>
                         );
                       })}

@@ -45,10 +45,12 @@ export function SkillPacksPanel() {
   const [editDraft, setEditDraft] = useState("");
   const [editingHintId, setEditingHintId] = useState<string | null>(null);
   const [hintDraft, setHintDraft] = useState("");
+  const [canManage, setCanManage] = useState(true);
 
   const reload = useCallback(async () => {
     const data = await fetchSiteSkillPacks();
     setSkillPacks(data.skillPacks);
+    setCanManage(data.canManage);
   }, []);
 
   useEffect(() => {
@@ -64,6 +66,10 @@ export function SkillPacksPanel() {
 
   const handleImport = async (file: File) => {
     setError(null);
+    if (!canManage) {
+      setError("只有管理员可以导入全站 Skill 包");
+      return;
+    }
     try {
       const pack = await importSiteSkillPack(file);
       setSkillPacks((prev) => [pack, ...prev.filter((p) => p.id !== pack.id)]);
@@ -74,13 +80,14 @@ export function SkillPacksPanel() {
   };
 
   const startEdit = (pack: SkillPackRecord) => {
+    if (!canManage) return;
     setEditingHintId(null);
     setEditingId(pack.id);
     setEditDraft(skillPackDisplayLabel(pack));
   };
 
   const commitEdit = async () => {
-    if (!editingId) return;
+    if (!editingId || !canManage) return;
     const label = editDraft.trim();
     if (!label) {
       setError("显示名不能为空");
@@ -98,13 +105,14 @@ export function SkillPacksPanel() {
   };
 
   const startEditHint = (pack: SkillPackRecord) => {
+    if (!canManage) return;
     setEditingId(null);
     setEditingHintId(pack.id);
     setHintDraft(pack.chatUsageHint ?? "");
   };
 
   const commitHint = async () => {
-    if (!editingHintId) return;
+    if (!editingHintId || !canManage) return;
     setError(null);
     try {
       const updated = await updateSiteSkillPackApi(editingHintId, { chatUsageHint: hintDraft });
@@ -118,6 +126,10 @@ export function SkillPacksPanel() {
 
   const handleDelete = async (id: string) => {
     setError(null);
+    if (!canManage) {
+      setError("只有管理员可以删除全站 Skill 包");
+      return;
+    }
     try {
       await deleteSiteSkillPackApi(id);
       setSkillPacks((prev) => prev.filter((p) => p.id !== id));
@@ -136,7 +148,9 @@ export function SkillPacksPanel() {
         可修改<strong>左侧显示名</strong>，并在下方填写<strong>对话页说明</strong>（Markdown，空对话时居中展示）。
       </p>
 
-      <SkillZipUploader maxZipBytes={MAX_SKILL_ZIP_BYTES} onImportZip={handleImport} />
+      {!canManage ? <p className={shellStyles.banner}>当前账号只有读取权限，不能修改全站 Skill 包。</p> : null}
+
+      {canManage ? <SkillZipUploader maxZipBytes={MAX_SKILL_ZIP_BYTES} onImportZip={handleImport} /> : null}
 
       {status ? <p className={styles.statusOk}>{status}</p> : null}
       {error ? <p className={shellStyles.bannerError}>{error}</p> : null}
@@ -185,6 +199,7 @@ export function SkillPacksPanel() {
                           type="button"
                           className={styles.editBtn}
                           aria-label="编辑显示名"
+                          disabled={!canManage}
                           onClick={() => startEdit(p)}
                         >
                           <PencilIcon />
@@ -193,11 +208,17 @@ export function SkillPacksPanel() {
                       <button
                         type="button"
                         className={styles.hintBtn}
+                        disabled={!canManage}
                         onClick={() => (editingHint ? setEditingHintId(null) : startEditHint(p))}
                       >
                         {editingHint ? "收起说明" : "对话页说明"}
                       </button>
-                      <button type="button" className={styles.deleteBtn} onClick={() => void handleDelete(p.id)}>
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        disabled={!canManage}
+                        onClick={() => void handleDelete(p.id)}
+                      >
                         删除
                       </button>
                     </div>

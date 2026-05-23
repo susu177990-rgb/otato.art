@@ -20,9 +20,45 @@ export async function saveWorkspaceSnapshot(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error("无法保存工作区设置");
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error?.trim() || "无法保存工作区设置");
   }
   return (await res.json()) as WorkspaceSnapshot;
+}
+
+export async function uploadImageModeCover(
+  modeId: string,
+  file: File,
+): Promise<{ coverImageUrl: string; imageWorkspace: ImageWorkspaceSettings }> {
+  const fd = new FormData();
+  fd.set("modeId", modeId);
+  fd.set("file", file);
+  const res = await fetch("/api/image-mode-covers", { method: "POST", body: fd });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    coverImageUrl?: string;
+    imageWorkspace?: ImageWorkspaceSettings;
+  };
+  if (!res.ok) throw new Error(data.error?.trim() || "无法上传模式封面");
+  if (!data.coverImageUrl || !data.imageWorkspace) throw new Error("上传封面响应不完整");
+  return { coverImageUrl: data.coverImageUrl, imageWorkspace: data.imageWorkspace };
+}
+
+export async function deleteImageModeCover(
+  modeId: string,
+): Promise<{ imageWorkspace: ImageWorkspaceSettings }> {
+  const res = await fetch("/api/image-mode-covers", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modeId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    imageWorkspace?: ImageWorkspaceSettings;
+  };
+  if (!res.ok) throw new Error(data.error?.trim() || "无法删除模式封面");
+  if (!data.imageWorkspace) throw new Error("删除封面响应不完整");
+  return { imageWorkspace: data.imageWorkspace };
 }
 
 export async function fetchGalleryRecords() {

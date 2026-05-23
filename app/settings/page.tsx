@@ -10,7 +10,7 @@ import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { saveWorkspaceSnapshot } from "@/lib/workspace-api";
+import { deleteImageModeCover, saveWorkspaceSnapshot, uploadImageModeCover } from "@/lib/workspace-api";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
@@ -105,7 +105,11 @@ function SettingsPageInner() {
       </header>
 
       <div className={shellStyles.body}>
-        <div className={shellStyles.shell}>
+        <div
+          className={[shellStyles.shell, tab === "imagePrompts" ? styles.promptModeShell : ""]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <p className={styles.workspacePersistNotice}>
             <strong>全站配置</strong>保存在 Supabase。这里修改的 LLM / 生图 API Key、提示词与 Skill 包是 SaaS 全局设置，
             所有登录账号与设备都会读取同一份配置；项目、对话会话与画廊仍按用户账号隔离。
@@ -137,6 +141,7 @@ function SettingsPageInner() {
               value={imageSettings}
               onChange={setImageSettings}
               persistMergeRef={imagePromptsPersistMergeRef}
+              onRefreshWorkspace={refreshWorkspace}
               onPersistImage={async (next) => {
                 setImageSettings(next);
                 await persistWorkspace(llmSettings, next);
@@ -228,11 +233,13 @@ function ImagePromptsPanel({
   onChange,
   persistMergeRef,
   onPersistImage,
+  onRefreshWorkspace,
 }: {
   value: ImageWorkspaceSettings;
   onChange: (next: ImageWorkspaceSettings) => void;
   persistMergeRef?: MutableRefObject<(() => ImageWorkspaceSettings) | null>;
   onPersistImage: (next: ImageWorkspaceSettings) => Promise<void>;
+  onRefreshWorkspace?: () => Promise<void>;
 }) {
   const builtinRows: ModePromptRow[] = IMAGE_MODES.filter((m) => m.id !== "free").map((m) => ({
     id: m.id,
@@ -244,12 +251,64 @@ function ImagePromptsPanel({
     label: m.label,
     isCustom: true,
   }));
-  const allRows = [...builtinRows, ...customRows];
+  const allRows = [...builtinRows, ...customRows].reverse();
 
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
   const [draftRefHintRows, setDraftRefHintRows] = useState<Partial<Record<string, string[]>>>({});
+  const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
+  const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
+
+  async function handleUploadCover(modeId: string, file: File) {
+    setCoverBusyModeId(modeId);
+    setCoverErrorByMode((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    try {
+      const result = await uploadImageModeCover(modeId, file);
+      onChange(result.imageWorkspace);
+      await onRefreshWorkspace?.();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "上传封面失败";
+      setCoverErrorByMode((prev) => ({ ...prev, [modeId]: message }));
+    } finally {
+      setCoverBusyModeId((cur) => (cur === modeId ? null : cur));
+    }
+  }
+
+  async function handleDeleteCover(modeId: string) {
+    if (!value.coverImageUrlByMode?.[modeId]) return;
+    if (!window.confirm("确定删除该模式的封面图？")) return;
+    setCoverBusyModeId(modeId);
+    setCoverErrorByMode((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    try {
+      const result = await deleteImageModeCover(modeId);
+      onChange(result.imageWorkspace);
+      await onRefreshWorkspace?.();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "删除封面失败";
+      setCoverErrorByMode((prev) => ({ ...prev, [modeId]: message }));
+    } finally {
+      setCoverBusyModeId((cur) => (cur === modeId ? null : cur));
+    }
+  }
+
+  async function removeStoredModeCover(modeId: string): Promise<Record<string, string>> {
+    if (!value.coverImageUrlByMode?.[modeId]) {
+      const copy = { ...value.coverImageUrlByMode };
+      delete copy[modeId];
+      return copy;
+    }
+    const result = await deleteImageModeCover(modeId);
+    return result.imageWorkspace.coverImageUrlByMode;
+  }
 
   useEffect(() => {
     const ref = persistMergeRef;
@@ -376,34 +435,44 @@ function ImagePromptsPanel({
 
   function handleDeleteCustomMode(modeId: string) {
     if (!modeId.startsWith("custom_")) return;
-    const restPrompts = { ...value.prompts };
-    delete restPrompts[modeId];
-    const restHints = { ...value.refSlotHintsByMode };
-    delete restHints[modeId];
-    const next: ImageWorkspaceSettings = {
-      ...value,
-      customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
-      prompts: restPrompts,
-      refSlotHintsByMode: restHints,
-    };
-    onChange(next);
-    void onPersistImage(next);
-    setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
-    setDraftPrompts((prev) => {
-      const copy = { ...prev };
-      delete copy[modeId];
-      return copy;
-    });
-    setDraftLabels((prev) => {
-      const copy = { ...prev };
-      delete copy[modeId];
-      return copy;
-    });
-    setDraftRefHintRows((prev) => {
-      const copy = { ...prev };
-      delete copy[modeId];
-      return copy;
-    });
+    void (async () => {
+      let coverImageUrlByMode: Record<string, string>;
+      try {
+        coverImageUrlByMode = await removeStoredModeCover(modeId);
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "删除封面失败");
+        return;
+      }
+      const restPrompts = { ...value.prompts };
+      delete restPrompts[modeId];
+      const restHints = { ...value.refSlotHintsByMode };
+      delete restHints[modeId];
+      const next: ImageWorkspaceSettings = {
+        ...value,
+        customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
+        prompts: restPrompts,
+        refSlotHintsByMode: restHints,
+        coverImageUrlByMode,
+      };
+      onChange(next);
+      void onPersistImage(next);
+      setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
+      setDraftPrompts((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftLabels((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftRefHintRows((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+    })();
   }
 
   function handleDeletePromptRow(mode: ModePromptRow) {
@@ -413,32 +482,42 @@ function ImagePromptsPanel({
     }
     if (
       !window.confirm(
-        `「${mode.label}」将恢复为内置默认提示词，并清空该模式的参考图槽说明（当前模版修改会丢失），确定？`,
+        `「${mode.label}」将恢复为内置默认提示词，并清空该模式的参考图槽说明与封面图（当前模版修改会丢失），确定？`,
       )
     ) {
       return;
     }
-    const defaultPrompt = defaultImageModePrompt(mode.id as ImageModeId);
-    const restHints = { ...value.refSlotHintsByMode };
-    delete restHints[mode.id];
-    const next: ImageWorkspaceSettings = {
-      ...value,
-      prompts: { ...value.prompts, [mode.id]: defaultPrompt },
-      refSlotHintsByMode: restHints,
-    };
-    onChange(next);
-    void onPersistImage(next);
-    setEditingPromptModeId((cur) => (cur === mode.id ? null : cur));
-    setDraftPrompts((prev) => {
-      const copy = { ...prev };
-      delete copy[mode.id];
-      return copy;
-    });
-    setDraftRefHintRows((prev) => {
-      const copy = { ...prev };
-      delete copy[mode.id];
-      return copy;
-    });
+    void (async () => {
+      let coverImageUrlByMode: Record<string, string>;
+      try {
+        coverImageUrlByMode = await removeStoredModeCover(mode.id);
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "删除封面失败");
+        return;
+      }
+      const defaultPrompt = defaultImageModePrompt(mode.id as ImageModeId);
+      const restHints = { ...value.refSlotHintsByMode };
+      delete restHints[mode.id];
+      const next: ImageWorkspaceSettings = {
+        ...value,
+        prompts: { ...value.prompts, [mode.id]: defaultPrompt },
+        refSlotHintsByMode: restHints,
+        coverImageUrlByMode,
+      };
+      onChange(next);
+      void onPersistImage(next);
+      setEditingPromptModeId((cur) => (cur === mode.id ? null : cur));
+      setDraftPrompts((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+      setDraftRefHintRows((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+    })();
   }
 
   function handleAddRefHintRow(modeId: string) {
@@ -473,7 +552,7 @@ function ImagePromptsPanel({
           <div>
             <h2 className={shellStyles.cardTitle}>生图模式 · 固定提示词</h2>
             <p className={shellStyles.cardSubtitle}>
-              3 列宫格对应作图页各模式（内置 + 你添加的自定义模式）。默认只读；点「编辑」或点击模版文本框进入编辑，「保存」后写入本机。模版中每出现一处{" "}
+              4 列宫格对应作图页各模式（内置 + 你添加的自定义模式）。默认只读；点「编辑」或点击模版文本框进入编辑，「保存」后写入本机。模版中每出现一处{" "}
               <code className={shellStyles.mono}>{"{{…}}"}</code>{" "}
               占位符，作图页会对应多一栏输入（从左到右依次填入）；输入框内的灰色说明文字取自对应占位符「括号里的内容」，请在{" "}
               <code className={shellStyles.mono}>{"{{此处写提示}}"}</code>{" "}
@@ -482,7 +561,7 @@ function ImagePromptsPanel({
                 下方「参考图槽」按「图1」「图2」逐栏填写说明：每栏一个小输入框；在最后一栏输入框右侧点「+」可增加一栏（最多 {IMAGE_REF_SLOT_COUNT}{" "}
                 栏）。未填的槽在作图页仅显示「图n」。不再尝试从正文自动识别。
               </strong>
-              超过 6 处占位时窄屏可能较挤。每张卡片均有「删除」：自定义模式为移除该模式；内置模式为恢复默认模版（含清空该模式参考图说明）。顶部「保存」会并入正在编辑中的草稿。
+              超过 6 处占位时窄屏可能较挤。编辑态可在右侧上传模式封面（PNG / JPG / WebP / GIF，最大 5MB）；系统会先按原比例缩小为缩略图并转为 WebP 再上传至 Supabase Storage。每张卡片均有「删除」：自定义模式为移除该模式；内置模式为恢复默认模版（含清空该模式参考图说明与封面）。顶部「保存」会并入正在编辑中的草稿。
             </p>
             <div className={styles.promptIntroActions}>
               <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
@@ -502,6 +581,9 @@ function ImagePromptsPanel({
           const refRowsForMode = isEditing
             ? (draftRefHintRows[mode.id] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]))
             : refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]);
+          const coverUrl = value.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
+          const coverBusy = coverBusyModeId === mode.id;
+          const coverError = coverErrorByMode[mode.id];
 
           return (
             <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
@@ -542,30 +624,107 @@ function ImagePromptsPanel({
               {occCount > 6 ? (
                 <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，作图页将显示 {occCount} 栏输入。</p>
               ) : null}
-              <textarea
-                className={[
-                  shellStyles.textarea,
-                  shellStyles.mono,
-                  styles.promptModeTextarea,
-                  !isEditing ? styles.promptModeTextareaReadOnly : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                value={textareaValue}
-                readOnly={!isEditing}
-                spellCheck={false}
-                aria-readonly={!isEditing}
-                onClick={() => {
-                  if (!isEditing) handleEditPrompt(mode.id);
-                }}
-                onFocus={() => {
-                  if (!isEditing) handleEditPrompt(mode.id);
-                }}
-                onChange={(e) => {
-                  if (!isEditing) return;
-                  setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
-                }}
-              />
+              <div className={styles.promptModeEditBody}>
+                <textarea
+                  className={[
+                    shellStyles.textarea,
+                    shellStyles.mono,
+                    styles.promptModeTextarea,
+                    !isEditing ? styles.promptModeTextareaReadOnly : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  value={textareaValue}
+                  readOnly={!isEditing}
+                  spellCheck={false}
+                  aria-readonly={!isEditing}
+                  onClick={() => {
+                    if (!isEditing) handleEditPrompt(mode.id);
+                  }}
+                  onFocus={() => {
+                    if (!isEditing) handleEditPrompt(mode.id);
+                  }}
+                  onChange={(e) => {
+                    if (!isEditing) return;
+                    setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
+                  }}
+                />
+                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 模式封面`}>
+                  <div
+                    className={[
+                      styles.promptModeCoverFrame,
+                      coverUrl ? styles.promptModeCoverFrameFilled : "",
+                      coverBusy ? styles.promptModeCoverFrameBusy : "",
+                      !isEditing && !coverUrl ? styles.promptModeCoverFrameReadOnly : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {coverUrl ? (
+                      <>
+                        {isEditing ? (
+                          <label className={styles.promptModeCoverReplaceHit} aria-label="点击更换封面">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={coverUrl} alt={`${mode.label} 封面`} className={styles.promptModeCoverImage} />
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className={styles.promptModeCoverFileInput}
+                              disabled={coverBusy}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (file) void handleUploadCover(mode.id, file);
+                              }}
+                            />
+                          </label>
+                        ) : (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={coverUrl} alt={`${mode.label} 封面`} className={styles.promptModeCoverImage} />
+                        )}
+                        {isEditing ? (
+                          <button
+                            type="button"
+                            className={styles.promptModeCoverDelete}
+                            disabled={coverBusy}
+                            aria-label="删除封面"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleDeleteCover(mode.id);
+                            }}
+                          >
+                            ×
+                          </button>
+                        ) : null}
+                      </>
+                    ) : isEditing ? (
+                      <label className={styles.promptModeCoverUploadLabel}>
+                        <span className={styles.promptModeCoverLabel}>上传封面</span>
+                        <span className={styles.promptModeCoverHint}>原比例缩略 · 自动转 WebP · 最大 5MB</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className={styles.promptModeCoverFileInput}
+                          disabled={coverBusy}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void handleUploadCover(mode.id, file);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <span className={styles.promptModeCoverLabel}>模式封面</span>
+                        <span className={styles.promptModeCoverHint}>未设置</span>
+                      </>
+                    )}
+                    {coverBusy ? <span className={styles.promptModeCoverBusy}>处理中…</span> : null}
+                  </div>
+                  {coverError ? <p className={styles.promptModeCoverError}>{coverError}</p> : null}
+                </div>
+              </div>
               <div className={styles.promptModeRefHintsWrap}>
                 <span className={styles.promptModeRefHintsLabel}>
                   参考图槽说明（每栏对应作图页「图1」「图2」…，最多 {IMAGE_REF_SLOT_COUNT} 栏）
