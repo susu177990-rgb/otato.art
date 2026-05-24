@@ -38,6 +38,8 @@ export type SkillJsonSchema = Record<string, unknown>;
 
 export interface SkillFormRunResult {
   master_prompt?: string;
+  /** 与 master_prompt 相同；兼容 output.json 使用 master_prompt_markdown 的 Skill */
+  master_prompt_markdown?: string;
   generated_image_url?: string;
   error?: string;
 }

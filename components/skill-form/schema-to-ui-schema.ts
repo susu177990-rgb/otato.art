@@ -57,13 +57,15 @@ export function buildUiSchemaFromInputSchema(inputSchema: SkillJsonSchema): UiSc
   return uiSchema;
 }
 
-/** 移除非标准 ui_component，避免干扰 AJV */
+const NON_STANDARD_KEYS = ["ui_component", "ui_order", "propertyOrdering"] as const;
+
+/** 移除非标准 Skill 扩展字段，避免干扰 AJV */
 export function sanitizeJsonSchema(schema: SkillJsonSchema): SkillJsonSchema {
   const clone = JSON.parse(JSON.stringify(schema)) as SchemaNode;
 
   function strip(node: SchemaNode | undefined): void {
     if (!node || typeof node !== "object") return;
-    delete node.ui_component;
+    for (const key of NON_STANDARD_KEYS) delete node[key];
     if (node.properties) {
       for (const child of Object.values(node.properties)) strip(child);
     }
@@ -72,4 +74,16 @@ export function sanitizeJsonSchema(schema: SkillJsonSchema): SkillJsonSchema {
 
   strip(clone);
   return clone;
+}
+
+/** 将 RJSF 校验错误整理为页面可读的短句 */
+export function formatRjsfValidationErrors(errors: Array<{ message?: string; property?: string }>): string {
+  return errors
+    .slice(0, 5)
+    .map((error) => {
+      const label = error.property?.replace(/^\./, "").replace(/\./g, " › ") || "表单";
+      const message = error.message?.trim() || "填写不符合要求";
+      return `${label}：${message}`;
+    })
+    .join("；");
 }

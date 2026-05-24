@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import shellStyles from "@/app/shared/shell.module.css";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { MarkdownOutputViewer } from "@/components/skill-form/widgets/MarkdownOutputViewer";
@@ -11,16 +12,57 @@ type OutputProperty = {
   ui_component?: string;
 };
 
+const OUTPUT_VALUE_ALIASES: Record<string, (result: SkillFormRunResult) => string | undefined> = {
+  master_prompt_markdown: (result) => result.master_prompt_markdown ?? result.master_prompt,
+  master_prompt: (result) => result.master_prompt ?? result.master_prompt_markdown,
+  generated_image_url: (result) => result.generated_image_url,
+};
+
+function readOutputString(result: SkillFormRunResult, key: string): string | undefined {
+  const resolver = OUTPUT_VALUE_ALIASES[key];
+  const value = resolver ? resolver(result) : result[key as keyof SkillFormRunResult];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 function ImageViewer({ url, title }: { url: string; title?: string }) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `generated-${Date.now()}.${ext}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // 静默失败：降级为在新标签页打开
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloading(false);
+    }
+  }, [url]);
+
   return (
     <section className={styles.outputBlock}>
       {title ? <h4 className={styles.outputBlockTitle}>{title}</h4> : null}
       <a href={url} target="_blank" rel="noopener noreferrer" className={styles.imageLink}>
         <img src={url} alt={title || "生成结果"} className={styles.outputImage} />
       </a>
-      <a href={url} download className={[shellStyles.dockTextLink, styles.downloadLink].join(" ")}>
-        下载图片
-      </a>
+      <button
+        type="button"
+        className={[shellStyles.dockTextLink, styles.downloadLink].join(" ")}
+        onClick={() => void handleDownload()}
+        disabled={downloading}
+      >
+        {downloading ? "下载中…" : "下载图片"}
+      </button>
     </section>
   );
 }
@@ -47,8 +89,8 @@ export function DynamicSkillOutput({
   return (
     <div className={styles.outputWrap}>
       {Object.entries(properties).map(([key, prop]) => {
-        const value = result[key as keyof SkillFormRunResult];
-        if (typeof value !== "string" || !value.trim()) return null;
+        const value = readOutputString(result, key);
+        if (!value) return null;
         const title = prop.title || key;
 
         if (prop.ui_component === "markdown_viewer") {

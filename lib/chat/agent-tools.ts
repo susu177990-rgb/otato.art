@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateImage } from "@/lib/image-generate";
 import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import {
   buildImageModelCatalog,
   effectiveAgentImageModelId,
@@ -11,6 +12,7 @@ import type { ConversationAttachmentEntry } from "@/lib/chat/types";
 import type {
   GptImageQuality,
   ImageAspectRatio,
+  ImageGalleryRecord,
   ImageModelId,
   ImageSizeTier,
   ImageWorkspaceSettings,
@@ -172,13 +174,34 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
     refImages,
   });
 
+  const imageId = randomUUID();
   let mediaUrl = imageUrl;
   if (ctx.supabase && ctx.userId) {
     mediaUrl = await persistGeneratedImageToStorage(
       ctx.supabase,
       ctx.userId,
       imageUrl,
-      randomUUID(),
+      imageId,
+    );
+
+    const galleryRecord: ImageGalleryRecord = {
+      id: imageId,
+      createdAt: new Date().toISOString(),
+      modeId: "chat-agent",
+      modeName: "对话生图",
+      modelId: presetId as ImageModelId,
+      modelName: model.modelName,
+      finalPrompt: prompt,
+      userInput: prompt,
+      aspectRatio: args.aspect_ratio || "auto",
+      imageSize: args.image_size || "1K",
+      gptImageQuality,
+      imageUrl: mediaUrl,
+      refImageCount: rawRefs.length,
+      status: "success",
+    };
+    prependGalleryRecord(ctx.supabase, galleryRecord).catch((e) =>
+      console.warn("[chat/agent gallery save]", e),
     );
   }
 

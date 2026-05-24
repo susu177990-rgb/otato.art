@@ -6,25 +6,26 @@ import type { ChatApiConfig, ChatMessage, SkillFormRunResult, SkillPackRecord } 
 import { generateImage } from "@/lib/image-generate";
 import { effectiveAgentImageModelId, resolveImageModelSettings } from "@/lib/chat/image-model-catalog";
 import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
-import type { ImageAspectRatio, ImageModelId } from "@/lib/image-workspace";
-import { validateSkillPayload, type StoryboardFormPayload } from "@/lib/skills/validate-skill-payload";
+import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
+import type { ImageAspectRatio, ImageGalleryRecord, ImageModelId } from "@/lib/image-workspace";
+import { validateSkillPayload, type SkillFormPayload } from "@/lib/skills/validate-skill-payload";
 
 function mapAspectRatio(raw?: string): ImageAspectRatio {
-  const map: Record<string, ImageAspectRatio> = {
-    "16:9": "16:9",
-    "9:16": "9:16",
-    "1:1": "1:1",
-    "4:3": "4:3",
-    "2.35:1": "21:9",
-  };
-  return map[raw ?? ""] ?? "16:9";
+  const text = raw ?? "";
+  if (text.includes("16:9")) return "16:9";
+  if (text.includes("9:16")) return "9:16";
+  if (text.includes("1:1")) return "1:1";
+  if (text.includes("4:3")) return "4:3";
+  if (text.includes("2.35:1") || text.includes("21:9")) return "21:9";
+  return "16:9";
 }
 
 async function generateMasterPrompt(
   chatApiConfig: ChatApiConfig,
   systemPrompt: string,
-  payload: StoryboardFormPayload,
+  payload: SkillFormPayload,
 ): Promise<string> {
   const systemMsg: ChatMessage = {
     id: "sys-form",
@@ -85,7 +86,11 @@ export async function runSkillForm(params: {
   if (!model) {
     throw new Error(`生图模型未配置完整: ${modelId}`);
   }
-  const aspectRatio = mapAspectRatio(formPayload.optional_parameters?.aspect_ratio);
+  const aspectRatio = mapAspectRatio(
+    typeof formPayload.optional_parameters?.aspect_ratio === "string"
+      ? formPayload.optional_parameters.aspect_ratio
+      : undefined,
+  );
   const refImages = formPayload.provided_assets.map((a) => a.asset_url).filter(Boolean);
 
   const masterPrompt = await generateMasterPrompt(
@@ -93,6 +98,8 @@ export async function runSkillForm(params: {
     pack.optimizedSystemPrompt,
     formPayload,
   );
+
+  const imageId = randomUUID();
 
   const imageResult = await generateImage({
     model,
@@ -105,11 +112,31 @@ export async function runSkillForm(params: {
     supabase,
     userId,
     imageResult.imageUrl,
-    randomUUID(),
+    imageId,
+  );
+
+  const galleryRecord: ImageGalleryRecord = {
+    id: imageId,
+    createdAt: new Date().toISOString(),
+    modeId: `skill-form:${pack.id}`,
+    modeName: `Skill · ${skillPackDisplayLabel(pack)}`,
+    modelId: modelId,
+    modelName: model.modelName,
+    finalPrompt: masterPrompt,
+    userInput: formPayload.story_request?.story_framework ?? "",
+    aspectRatio,
+    imageSize: "2K",
+    imageUrl: generatedImageUrl,
+    refImageCount: refImages.length,
+    status: "success",
+  };
+  prependGalleryRecord(supabase, galleryRecord).catch((e) =>
+    console.warn("[skills/run gallery save]", e),
   );
 
   return {
     master_prompt: masterPrompt,
+    master_prompt_markdown: masterPrompt,
     generated_image_url: generatedImageUrl,
   };
 }

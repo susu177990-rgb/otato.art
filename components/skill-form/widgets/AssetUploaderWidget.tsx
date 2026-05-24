@@ -1,23 +1,32 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { WidgetProps } from "@rjsf/utils";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "../skill-form.module.css";
 
-const ROLE_OPTIONS = [
-  { value: "Character", label: "角色 (Character)" },
-  { value: "Scene", label: "场景 (Scene)" },
-  { value: "Prop", label: "道具 (Prop)" },
-  { value: "Costume", label: "服装 (Costume)" },
-  { value: "Style", label: "风格 (Style)" },
-];
-
 type AssetRow = {
+  asset_id: string;
   role_tag: string;
   asset_url: string;
   description?: string;
 };
+
+type ItemSchema = {
+  properties?: {
+    role_tag?: {
+      enum?: string[];
+      default?: string;
+    };
+  };
+};
+
+function newAssetId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export function AssetUploaderWidget(props: WidgetProps) {
   const { id, value, disabled, readonly, onChange, schema } = props;
@@ -26,9 +35,23 @@ export function AssetUploaderWidget(props: WidgetProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const roleOptions = useMemo(() => {
+    const itemSchema = (schema.items ?? {}) as ItemSchema;
+    const enumValues = itemSchema.properties?.role_tag?.enum;
+    if (Array.isArray(enumValues) && enumValues.length > 0) {
+      return enumValues;
+    }
+    return ["角色", "场景", "道具", "服装", "风格"];
+  }, [schema.items]);
+
+  const defaultRoleTag = useMemo(() => {
+    const itemSchema = (schema.items ?? {}) as ItemSchema;
+    return itemSchema.properties?.role_tag?.default ?? roleOptions[0] ?? "角色";
+  }, [roleOptions, schema.items]);
+
   const setRows = useCallback(
     (next: AssetRow[]) => {
-      onChange(next.length ? next : undefined);
+      onChange(next);
     },
     [onChange],
   );
@@ -52,7 +75,8 @@ export function AssetUploaderWidget(props: WidgetProps) {
         }
         const data = (await res.json()) as { url: string };
         next.push({
-          role_tag: "Character",
+          asset_id: newAssetId(),
+          role_tag: defaultRoleTag,
           asset_url: data.url,
           description: file.name.replace(/\.[^.]+$/, ""),
         });
@@ -82,7 +106,7 @@ export function AssetUploaderWidget(props: WidgetProps) {
       {rows.length > 0 ? (
         <div className={styles.assetList}>
           {rows.map((row, index) => (
-            <div key={`${row.asset_url}-${index}`} className={styles.assetRow}>
+            <div key={`${row.asset_id}-${index}`} className={styles.assetRow}>
               <img src={row.asset_url} alt="" className={styles.assetThumb} />
               <div className={styles.assetFields}>
                 <label className={shellStyles.field}>
@@ -93,9 +117,9 @@ export function AssetUploaderWidget(props: WidgetProps) {
                     disabled={disabled || readonly}
                     onChange={(e) => updateRow(index, { role_tag: e.target.value })}
                   >
-                    {ROLE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
                       </option>
                     ))}
                   </select>
