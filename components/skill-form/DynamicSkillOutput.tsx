@@ -12,10 +12,21 @@ type OutputProperty = {
   ui_component?: string;
 };
 
+const DEFAULT_OUTPUT_ORDER = [
+  "master_prompt_markdown",
+  "master_prompt",
+  "confirmation_action",
+  "generated_image_url",
+  "image_error",
+  "error",
+];
+
 const OUTPUT_VALUE_ALIASES: Record<string, (result: SkillFormRunResult) => string | undefined> = {
   master_prompt_markdown: (result) => result.master_prompt_markdown ?? result.master_prompt,
   master_prompt: (result) => result.master_prompt ?? result.master_prompt_markdown,
   generated_image_url: (result) => result.generated_image_url,
+  image_error: (result) => result.error,
+  error: (result) => result.error,
 };
 
 function readOutputString(result: SkillFormRunResult, key: string): string | undefined {
@@ -71,10 +82,14 @@ export function DynamicSkillOutput({
   outputSchema,
   result,
   emptyHint,
+  onAction,
+  actionLoading,
 }: {
   outputSchema?: SkillJsonSchema | null;
   result: SkillFormRunResult | null;
   emptyHint?: string;
+  onAction?: () => void;
+  actionLoading?: boolean;
 }) {
   if (!result) {
     return (
@@ -85,19 +100,67 @@ export function DynamicSkillOutput({
   }
 
   const properties = (outputSchema?.properties ?? {}) as Record<string, OutputProperty>;
+  const outputKeys = Array.from(new Set([...DEFAULT_OUTPUT_ORDER, ...Object.keys(properties)]));
 
   return (
     <div className={styles.outputWrap}>
-      {Object.entries(properties).map(([key, prop]) => {
+      {outputKeys.map((key) => {
+        const prop = properties[key] ?? {};
+        const title =
+          prop.title ||
+          (key === "confirmation_action"
+            ? "确认生图操作"
+            : key === "generated_image_url"
+              ? "故事板图片输出"
+              : key === "master_prompt_markdown" || key === "master_prompt"
+                ? "Prompt 输出"
+                : key);
+        if (prop.ui_component === "action_button") {
+          if (!result.confirmation_action || result.generated_image_url || !onAction) return null;
+          return (
+            <section key={key} className={styles.outputBlock}>
+              <button
+                type="button"
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+                onClick={onAction}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "生图中…" : result.confirmation_action.label || title}
+              </button>
+            </section>
+          );
+        }
+        if (key === "confirmation_action") {
+          if (!result.confirmation_action || result.generated_image_url || !onAction) return null;
+          return (
+            <section key={key} className={styles.outputBlock}>
+              <button
+                type="button"
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+                onClick={onAction}
+                disabled={actionLoading}
+              >
+                {actionLoading ? "生图中…" : result.confirmation_action.label || "确认生图"}
+              </button>
+            </section>
+          );
+        }
+
         const value = readOutputString(result, key);
         if (!value) return null;
-        const title = prop.title || key;
+        if (key === "master_prompt" && readOutputString(result, "master_prompt_markdown")) return null;
 
         if (prop.ui_component === "markdown_viewer") {
           return <MarkdownOutputViewer key={key} title={title} value={value} />;
         }
+        if (key === "master_prompt_markdown" || key === "master_prompt") {
+          return <MarkdownOutputViewer key={key} title={title} value={value} />;
+        }
 
         if (prop.ui_component === "image_viewer") {
+          return <ImageViewer key={key} url={value} title={title} />;
+        }
+        if (key === "generated_image_url") {
           return <ImageViewer key={key} url={value} title={title} />;
         }
 

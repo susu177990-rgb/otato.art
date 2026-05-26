@@ -64,11 +64,12 @@ export async function runSkillFormApi(
   packId: string,
   payload: unknown,
   preferredImageModelId?: ImageModelId,
+  options?: { action?: "prompt" | "generate"; masterPrompt?: string },
 ): Promise<SkillFormRunResult> {
   const res = await fetch("/api/skills/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ packId, payload, preferredImageModelId }),
+    body: JSON.stringify({ packId, payload, preferredImageModelId, ...options }),
   });
   if (!res.ok) {
     throw new Error(await readApiError(res, "Skill 表单执行失败"));

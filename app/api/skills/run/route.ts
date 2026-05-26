@@ -9,6 +9,8 @@ type RunBody = {
   packId?: string;
   payload?: unknown;
   preferredImageModelId?: ImageModelId;
+  action?: "prompt" | "generate";
+  masterPrompt?: string;
 };
 
 export const maxDuration = 300;
@@ -37,6 +39,8 @@ export async function POST(req: Request) {
       pack,
       payload: body.payload,
       preferredImageModelId: body.preferredImageModelId,
+      action: body.action,
+      masterPrompt: body.masterPrompt,
     });
 
     return NextResponse.json(result);

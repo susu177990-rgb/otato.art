@@ -193,6 +193,7 @@ export function ChatWorkspace() {
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [skillRunResult, setSkillRunResult] = useState<SkillFormRunResult | null>(null);
   const [isRunningSkillForm, setIsRunningSkillForm] = useState(false);
+  const [lastSkillPayload, setLastSkillPayload] = useState<unknown>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<string | null>(null);
 
@@ -332,9 +333,29 @@ export function ChatWorkspace() {
     setIsRunningSkillForm(true);
     try {
       const result = await runSkillFormApi(selectedPack.id, payload, selectedImageModelId);
+      setLastSkillPayload(payload);
       setSkillRunResult(result);
     } catch (e) {
       setSkillRunResult(null);
+      setError(e instanceof Error ? e.message : "生成分镜失败");
+    } finally {
+      setIsRunningSkillForm(false);
+    }
+  };
+
+  const handleSkillFormConfirmImage = async () => {
+    if (!selectedPack?.inputSchema || isRunningSkillForm || !lastSkillPayload) return;
+    const masterPrompt = skillRunResult?.master_prompt_markdown ?? skillRunResult?.master_prompt;
+    if (!masterPrompt?.trim()) return;
+    setError(null);
+    setIsRunningSkillForm(true);
+    try {
+      const result = await runSkillFormApi(selectedPack.id, lastSkillPayload, selectedImageModelId, {
+        action: "generate",
+        masterPrompt,
+      });
+      setSkillRunResult(result);
+    } catch (e) {
       setError(e instanceof Error ? e.message : "生成分镜失败");
     } finally {
       setIsRunningSkillForm(false);
@@ -536,6 +557,7 @@ export function ChatWorkspace() {
               loading={isRunningSkillForm}
               error={error}
               onSubmit={(payload) => void handleSkillFormSubmit(payload)}
+              onConfirmImage={() => void handleSkillFormConfirmImage()}
             />
           ) : activeId ? (
             <p className={styles.sending}>加载会话…</p>

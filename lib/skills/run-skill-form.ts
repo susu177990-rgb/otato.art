@@ -23,6 +23,30 @@ function mapAspectRatio(raw?: string): ImageAspectRatio {
   return "16:9";
 }
 
+function hasOutputProperty(pack: SkillPackRecord, key: string): boolean {
+  if (!pack.outputSchema || typeof pack.outputSchema !== "object" || !("properties" in pack.outputSchema)) {
+    return false;
+  }
+  return Boolean((pack.outputSchema.properties as Record<string, unknown> | undefined)?.[key]);
+}
+
+function shouldUsePromptConfirmation(pack: SkillPackRecord): boolean {
+  if (hasOutputProperty(pack, "confirmation_action")) return true;
+  if (hasOutputProperty(pack, "master_prompt_markdown") && hasOutputProperty(pack, "generated_image_url")) {
+    return true;
+  }
+
+  const searchable = [
+    pack.title,
+    pack.displayLabel,
+    pack.skills.map((skill) => `${skill.name}\n${skill.markdown.slice(0, 1200)}`).join("\n"),
+  ]
+    .join("\n")
+    .toLowerCase();
+
+  return /storyboard|故事板|分镜|导演板/.test(searchable);
+}
+
 async function generateMasterPrompt(
   chatApiConfig: ChatApiConfig,
   systemPrompt: string,
@@ -64,8 +88,10 @@ export async function runSkillForm(params: {
   pack: SkillPackRecord;
   payload: unknown;
   preferredImageModelId?: ImageModelId;
+  action?: "prompt" | "generate";
+  masterPrompt?: string;
 }): Promise<SkillFormRunResult> {
-  const { supabase, userId, pack, payload, preferredImageModelId } = params;
+  const { supabase, userId, pack, payload, preferredImageModelId, action, masterPrompt } = params;
 
   if (!pack.inputSchema) {
     throw new Error("该 Skill 未配置表单 interface");
@@ -82,6 +108,27 @@ export async function runSkillForm(params: {
 
   const snapshot = await getWorkspaceSnapshot(supabase);
   const chatApiConfig = llmToChatApiConfig(snapshot.llm);
+  const shouldConfirmImage = shouldUsePromptConfirmation(pack);
+
+  const resolvedMasterPrompt =
+    action === "generate" && masterPrompt?.trim()
+      ? masterPrompt.trim()
+      : await generateMasterPrompt(chatApiConfig, pack.optimizedSystemPrompt, formPayload);
+
+  if (shouldConfirmImage && action !== "generate") {
+    return {
+      master_prompt: resolvedMasterPrompt,
+      master_prompt_markdown: resolvedMasterPrompt,
+      image_generation_status: "awaiting_confirmation",
+      confirmation_action: {
+        label: "确认生图",
+        generation_mode: "generate_image",
+        uses_prompt_field: "master_prompt_markdown",
+      },
+      generated_image_url: undefined,
+    };
+  }
+
   const modelId = effectiveAgentImageModelId(preferredImageModelId, "gpt-image-2");
   const model = resolveImageModelSettings(snapshot.imageWorkspace, modelId);
   if (!model) {
@@ -95,17 +142,11 @@ export async function runSkillForm(params: {
   const imageSize = resolveImageSizeFromUnknownRecord(formPayload.optional_parameters, "2K");
   const refImages = formPayload.provided_assets.map((a) => a.asset_url).filter(Boolean);
 
-  const masterPrompt = await generateMasterPrompt(
-    chatApiConfig,
-    pack.optimizedSystemPrompt,
-    formPayload,
-  );
-
   const imageId = randomUUID();
 
   const imageResult = await generateImage({
     model,
-    prompt: masterPrompt,
+    prompt: resolvedMasterPrompt,
     aspectRatio,
     imageSize,
     refImages,
@@ -125,7 +166,7 @@ export async function runSkillForm(params: {
     modeName: `Skill · ${skillPackDisplayLabel(pack)}`,
     modelId: modelId,
     modelName: model.modelName,
-    finalPrompt: masterPrompt,
+    finalPrompt: resolvedMasterPrompt,
     userInput: formPayload.story_request?.story_framework ?? "",
     aspectRatio,
     imageSize,
@@ -138,8 +179,10 @@ export async function runSkillForm(params: {
   );
 
   return {
-    master_prompt: masterPrompt,
-    master_prompt_markdown: masterPrompt,
+    master_prompt: resolvedMasterPrompt,
+    master_prompt_markdown: resolvedMasterPrompt,
+    image_generation_status: "ready",
+    confirmation_action: null,
     generated_image_url: generatedImageUrl,
   };
 }

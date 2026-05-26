@@ -40,6 +40,12 @@ export interface SkillFormRunResult {
   master_prompt?: string;
   /** 与 master_prompt 相同；兼容 output.json 使用 master_prompt_markdown 的 Skill */
   master_prompt_markdown?: string;
+  image_generation_status?: "awaiting_confirmation" | "ready" | "failed";
+  confirmation_action?: {
+    label?: string;
+    generation_mode?: "generate_image";
+    uses_prompt_field?: string;
+  } | null;
   generated_image_url?: string;
   error?: string;
 }
