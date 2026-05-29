@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gleam-media-studios.local/schemas/ai-live-action/redraw-output.schema.json",
+  "title": "首帧转绘师输出",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "usedAssets",
+    "aspectRatio",
+    "referenceUsage",
+    "finalPrompt",
+    "negativePrompt",
+    "preGenerationChecklist",
+    "needsReview"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "needs_review",
+        "blocked"
+      ]
+    },
+    "usedAssets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "structureReference",
+        "sceneReference",
+        "placementReference",
+        "characterReferences",
+        "propReferences"
+      ],
+      "properties": {
+        "structureReference": {
+          "type": "string"
+        },
+        "sceneReference": {
+          "type": "string"
+        },
+        "placementReference": {
+          "type": "string"
+        },
+        "characterReferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "propReferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "aspectRatio": {
+      "type": "string"
+    },
+    "referenceUsage": {
+      "type": "string"
+    },
+    "finalPrompt": {
+      "type": "string"
+    },
+    "negativePrompt": {
+      "type": "string"
+    },
+    "preGenerationChecklist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needsReview": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

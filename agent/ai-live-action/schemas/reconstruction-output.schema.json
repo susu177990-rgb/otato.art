@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gleam-media-studios.local/schemas/ai-live-action/reconstruction-output.schema.json",
+  "title": "镜头重构师输出",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode",
+    "keepFromSource",
+    "discardFromSource",
+    "position",
+    "aspectRatio",
+    "characterBindings",
+    "propBindings",
+    "targetSetReconstruction",
+    "contactRelationships",
+    "depthLayers",
+    "failureAvoidance",
+    "finalFirstFrameDescription"
+  ],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "const": "Target Set Reconstruction Mode"
+    },
+    "keepFromSource": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "discardFromSource": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "position": {
+      "type": "string",
+      "description": "人物在目标场景中的落位，必须引用位置标注图或说明推断依据"
+    },
+    "aspectRatio": {
+      "type": "string",
+      "description": "例如 9:16（按照原实拍首帧图的比例确定）"
+    },
+    "characterBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/characterBinding"
+      }
+    },
+    "propBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/propBinding"
+      }
+    },
+    "targetSetReconstruction": {
+      "type": "string"
+    },
+    "contactRelationships": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "depthLayers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "foreground",
+        "midground",
+        "background"
+      ],
+      "properties": {
+        "foreground": {
+          "type": "string"
+        },
+        "midground": {
+          "type": "string"
+        },
+        "background": {
+          "type": "string"
+        }
+      }
+    },
+    "failureAvoidance": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "finalFirstFrameDescription": {
+      "type": "string"
+    },
+    "needsReview": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "$defs": {
+    "characterBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "assetId",
+        "sourceSubject",
+        "lockedTraits"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "sourceSubject": {
+          "type": "string"
+        },
+        "lockedTraits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "propBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "assetId",
+        "usage"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "assetId": {
+          "type": "string"
+        },
+        "boundCharacterName": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "string"
+        },
+        "contactRelationship": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

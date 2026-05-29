@@ -1,0 +1,180 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.uploadGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.uploadBox {
+  min-height: 168px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.028);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.uploadLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #d4d4d8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.uploadHint {
+  color: #71717a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fileInput {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.uploadButton {
+  width: fit-content;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: #fafafa;
+  color: #09090b;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(255, 255, 255, 0.1);
+  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.uploadButton:hover {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.uploadButton:active {
+  transform: translateY(1px);
+}
+
+.uploadButtonSecondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
+
+.uploadButtonSecondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.fileName {
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.itemList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assetItem {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.026);
+}
+
+.thumb {
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.assetFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.resultImage {
+  width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.outputBlock {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d4d4d8;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.statusLine {
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.error {
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1020px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

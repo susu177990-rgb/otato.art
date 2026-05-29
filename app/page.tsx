@@ -85,6 +85,20 @@ function ModeHomeInner() {
             <p className={shellStyles.tileMeta}>模式化生图 · 画廊</p>
           </button>
 
+          <button type="button" onClick={() => router.push("/ai-live-action")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.75 6.75h16.5m-16.5 0v10.5A2.25 2.25 0 0 0 6 19.5h12a2.25 2.25 0 0 0 2.25-2.25V6.75m-16.5 0A2.25 2.25 0 0 1 6 4.5h12a2.25 2.25 0 0 1 2.25 2.25M8.25 14.25l2.25-2.25 1.5 1.5 2.25-3 1.5 2.25"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>AI+实拍</p>
+            <p className={shellStyles.tileMeta}>首帧重构 · 转绘</p>
+          </button>
+
           <button type="button" onClick={() => router.push("/chat")} className={shellStyles.tile}>
             <span className={shellStyles.tileIcon}>
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
