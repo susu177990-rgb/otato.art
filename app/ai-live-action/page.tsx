@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
   GPT_IMAGE_QUALITY_LABELS,
@@ -14,8 +14,8 @@ import shellStyles from "../shared/shell.module.css";
 import styles from "./ai-live-action-page.module.css";
 
 type UploadState = { file: File; previewUrl: string } | null;
-type CharacterInput = { id: string; name: string; notes: string; image: UploadState };
-type PropInput = { id: string; name: string; boundCharacterName: string; notes: string; image: UploadState };
+type CharacterInput = { id: string; name: string; image: UploadState };
+type PropInput = { id: string; name: string; boundCharacterName: string; image: UploadState };
 
 type ReconstructResponse = {
   assetReview: string;
@@ -84,27 +84,24 @@ function inferImageRatio(file: File): Promise<ImageAspectRatio> {
 
 function UploadBox({
   title,
-  hint,
   value,
   onChange,
+  children,
 }: {
   title: string;
-  hint: string;
   value: UploadState;
   onChange: (next: UploadState) => void;
+  children?: ReactNode;
 }) {
   return (
-    <div className={styles.uploadBox}>
-      <div>
+    <div className={[styles.uploadBox, value ? styles.uploadBoxFilled : ""].filter(Boolean).join(" ")}>
+      <div className={styles.uploadCopy}>
         <div className={styles.uploadLabel}>
           <span>{title}</span>
-          <span>{value ? "已选择" : "未选择"}</span>
+          <span className={styles.uploadState}>{value ? "已上传" : "待上传"}</span>
         </div>
-        <p className={styles.uploadHint}>{hint}</p>
       </div>
-      {value ? <img src={value.previewUrl} alt={title} className={styles.preview} /> : null}
-      <label className={styles.uploadButton}>
-        上传图片
+      <label className={styles.previewFrame}>
         <input
           className={styles.fileInput}
           type="file"
@@ -116,8 +113,10 @@ function UploadBox({
             e.currentTarget.value = "";
           }}
         />
+        {value ? <img src={value.previewUrl} alt={title} className={styles.preview} /> : <span className={styles.previewEmpty}>选择图片</span>}
       </label>
       {value?.file.name ? <span className={styles.fileName}>{value.file.name}</span> : null}
+      {children}
     </div>
   );
 }
@@ -137,8 +136,8 @@ export default function AiLiveActionPage() {
   const [sceneGrid, setSceneGrid] = useState<UploadState>(null);
   const [markedSceneGrid, setMarkedSceneGrid] = useState<UploadState>(null);
   const [sourceFirstFrame, setSourceFirstFrame] = useState<UploadState>(null);
-  const [characters, setCharacters] = useState<CharacterInput[]>([]);
-  const [props, setProps] = useState<PropInput[]>([]);
+  const [characters, setCharacters] = useState<CharacterInput[]>(() => [{ id: makeId("character"), name: "", image: null }]);
+  const [props, setProps] = useState<PropInput[]>(() => [{ id: makeId("prop"), name: "", boundCharacterName: "", image: null }]);
   const [userIntent, setUserIntent] = useState("");
   const [modelId, setModelId] = useState<ImageModelId>("nano-banana-pro");
   const [imageSize, setImageSize] = useState<ImageSizeTier>("2K");
@@ -181,7 +180,7 @@ export default function AiLiveActionPage() {
       .map((item, index) => {
         const fileField = `characterImage_${index}`;
         appendUpload(fd, fileField, item.image);
-        return { id: item.id, name: item.name.trim(), notes: item.notes.trim(), fileField };
+        return { id: item.id, name: item.name.trim(), fileField };
       });
     fd.set("charactersMeta", JSON.stringify(charactersMeta));
 
@@ -194,7 +193,6 @@ export default function AiLiveActionPage() {
           id: item.id,
           name: item.name.trim(),
           boundCharacterName: item.boundCharacterName.trim(),
-          notes: item.notes.trim(),
           fileField,
         };
       });
@@ -274,11 +272,26 @@ export default function AiLiveActionPage() {
                     <h1 className={shellStyles.cardTitle}>输入素材</h1>
                     <p className={shellStyles.cardSubtitle}>一次上传，后续 Agent 自动调取素材包。</p>
                   </div>
+                  <div className={styles.headActions}>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      onClick={() => setCharacters((prev) => [...prev, { id: makeId("character"), name: "", image: null }])}
+                    >
+                      添加角色
+                    </button>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      onClick={() => setProps((prev) => [...prev, { id: makeId("prop"), name: "", boundCharacterName: "", image: null }])}
+                    >
+                      添加道具
+                    </button>
+                  </div>
                 </div>
                 <div className={styles.uploadGrid}>
                   <UploadBox
                     title="目标场景资产宫格图"
-                    hint="提供场景、美术、材质、光线和空间结构。"
                     value={sceneGrid}
                     onChange={(next) => {
                       revokeUpload(sceneGrid);
@@ -287,7 +300,6 @@ export default function AiLiveActionPage() {
                   />
                   <UploadBox
                     title="位置角色标识图"
-                    hint="在目标场景图上标出角色位置、接触点和遮挡关系。"
                     value={markedSceneGrid}
                     onChange={(next) => {
                       revokeUpload(markedSceneGrid);
@@ -296,65 +308,30 @@ export default function AiLiveActionPage() {
                   />
                   <UploadBox
                     title="原实拍视频首帧图"
-                    hint="锁定动作、镜头角度、构图比例和人物轮廓。"
                     value={sourceFirstFrame}
                     onChange={(next) => void setSourceUpload(next)}
                   />
-                </div>
-              </div>
-
-              <div className={shellStyles.card}>
-                <div className={shellStyles.cardHead}>
-                  <div>
-                    <h2 className={shellStyles.cardTitle}>目标角色图</h2>
-                    <p className={shellStyles.cardSubtitle}>可添加多个角色，每个角色必须绑定名称。</p>
-                  </div>
-                  <button
-                    type="button"
-                    className={shellStyles.buttonSubtle}
-                    onClick={() => setCharacters((prev) => [...prev, { id: makeId("character"), name: "", notes: "", image: null }])}
-                  >
-                    添加角色
-                  </button>
-                </div>
-                <div className={styles.itemList}>
-                  {characters.length === 0 ? <p className={styles.statusLine}>暂无角色图。没有角色图也可先跑，但身份一致性会更弱。</p> : null}
                   {characters.map((item) => (
-                    <div key={item.id} className={styles.assetItem}>
-                      {item.image ? <img src={item.image.previewUrl} alt={item.name || "角色图"} className={styles.thumb} /> : <div className={styles.thumb} />}
+                    <UploadBox
+                      key={item.id}
+                      title={item.name.trim() || "角色图"}
+                      value={item.image}
+                      onChange={(next) =>
+                        setCharacters((prev) =>
+                          prev.map((x) => {
+                            if (x.id !== item.id) return x;
+                            revokeUpload(x.image);
+                            return { ...x, image: next };
+                          }),
+                        )
+                      }
+                    >
                       <div className={styles.assetFields}>
                         <input
                           className={shellStyles.input}
                           placeholder="角色名称，例如：女主"
                           value={item.name}
                           onChange={(e) => setCharacters((prev) => prev.map((x) => (x.id === item.id ? { ...x, name: e.target.value } : x)))}
-                        />
-                        <label className={[styles.uploadButton, styles.uploadButtonSecondary].join(" ")}>
-                          上传角色图
-                          <input
-                            className={styles.fileInput}
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              setCharacters((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== item.id) return x;
-                                  revokeUpload(x.image);
-                                  return { ...x, image: uploadFromFile(file) };
-                                }),
-                              );
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        {item.image?.file.name ? <span className={styles.fileName}>{item.image.file.name}</span> : null}
-                        <input
-                          className={shellStyles.input}
-                          placeholder="角色备注，可选"
-                          value={item.notes}
-                          onChange={(e) => setCharacters((prev) => prev.map((x) => (x.id === item.id ? { ...x, notes: e.target.value } : x)))}
                         />
                         <button
                           type="button"
@@ -367,30 +344,23 @@ export default function AiLiveActionPage() {
                           删除
                         </button>
                       </div>
-                    </div>
+                    </UploadBox>
                   ))}
-                </div>
-              </div>
-
-              <div className={shellStyles.card}>
-                <div className={shellStyles.cardHead}>
-                  <div>
-                    <h2 className={shellStyles.cardTitle}>目标道具图</h2>
-                    <p className={shellStyles.cardSubtitle}>可添加多个道具，并可绑定关联角色。</p>
-                  </div>
-                  <button
-                    type="button"
-                    className={shellStyles.buttonSubtle}
-                    onClick={() => setProps((prev) => [...prev, { id: makeId("prop"), name: "", boundCharacterName: "", notes: "", image: null }])}
-                  >
-                    添加道具
-                  </button>
-                </div>
-                <div className={styles.itemList}>
-                  {props.length === 0 ? <p className={styles.statusLine}>暂无道具图。没有强制道具时可以留空。</p> : null}
                   {props.map((item) => (
-                    <div key={item.id} className={styles.assetItem}>
-                      {item.image ? <img src={item.image.previewUrl} alt={item.name || "道具图"} className={styles.thumb} /> : <div className={styles.thumb} />}
+                    <UploadBox
+                      key={item.id}
+                      title={item.name.trim() || "道具图"}
+                      value={item.image}
+                      onChange={(next) =>
+                        setProps((prev) =>
+                          prev.map((x) => {
+                            if (x.id !== item.id) return x;
+                            revokeUpload(x.image);
+                            return { ...x, image: next };
+                          }),
+                        )
+                      }
+                    >
                       <div className={styles.assetFields}>
                         <input
                           className={shellStyles.input}
@@ -404,33 +374,6 @@ export default function AiLiveActionPage() {
                           value={item.boundCharacterName}
                           onChange={(e) => setProps((prev) => prev.map((x) => (x.id === item.id ? { ...x, boundCharacterName: e.target.value } : x)))}
                         />
-                        <label className={[styles.uploadButton, styles.uploadButtonSecondary].join(" ")}>
-                          上传道具图
-                          <input
-                            className={styles.fileInput}
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              setProps((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== item.id) return x;
-                                  revokeUpload(x.image);
-                                  return { ...x, image: uploadFromFile(file) };
-                                }),
-                              );
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        {item.image?.file.name ? <span className={styles.fileName}>{item.image.file.name}</span> : null}
-                        <input
-                          className={shellStyles.input}
-                          placeholder="道具备注，可选"
-                          value={item.notes}
-                          onChange={(e) => setProps((prev) => prev.map((x) => (x.id === item.id ? { ...x, notes: e.target.value } : x)))}
-                        />
                         <button
                           type="button"
                           className={shellStyles.buttonSubtle}
@@ -442,7 +385,7 @@ export default function AiLiveActionPage() {
                           删除
                         </button>
                       </div>
-                    </div>
+                    </UploadBox>
                   ))}
                 </div>
               </div>
@@ -457,36 +400,42 @@ export default function AiLiveActionPage() {
                     placeholder="可选。例如：女主抓着豪华游艇侧边栏杆，身体像挂在游艇一侧，镜头从下往上拍... 不填时 Agent 会根据图片自行分析。"
                   />
                 </label>
-                <div className={shellStyles.row}>
-                  <label className={shellStyles.field}>
-                    <span className={shellStyles.fieldLabel}>生图模型</span>
-                    <select className={shellStyles.select} value={modelId} onChange={(e) => setModelId(e.target.value as ImageModelId)}>
-                      {modelOptions.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.label} · {model.modelName}
-                        </option>
-                      ))}
-                    </select>
+                <div className={styles.controlGrid}>
+                  <label className={styles.controlField}>
+                    <span className={styles.controlLabel}>生图模型</span>
+                    <span className={styles.selectWrap}>
+                      <select className={styles.controlSelect} value={modelId} onChange={(e) => setModelId(e.target.value as ImageModelId)}>
+                        {modelOptions.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.label} · {model.modelName}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
                   </label>
-                  <label className={shellStyles.field}>
-                    <span className={shellStyles.fieldLabel}>尺寸档位</span>
-                    <select className={shellStyles.select} value={imageSize} onChange={(e) => setImageSize(e.target.value as ImageSizeTier)}>
-                      {IMAGE_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
+                  <label className={styles.controlField}>
+                    <span className={styles.controlLabel}>尺寸档位</span>
+                    <span className={styles.selectWrap}>
+                      <select className={styles.controlSelect} value={imageSize} onChange={(e) => setImageSize(e.target.value as ImageSizeTier)}>
+                        {IMAGE_SIZES.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
                   </label>
-                  <label className={shellStyles.field}>
-                    <span className={shellStyles.fieldLabel}>图片比例</span>
-                    <select className={shellStyles.select} value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as ImageAspectRatio)}>
-                      {ASPECT_RATIOS.map((ratio) => (
-                        <option key={ratio} value={ratio}>
-                          {ratio === "auto" ? "auto（自动）" : ratio}
-                        </option>
-                      ))}
-                    </select>
+                  <label className={styles.controlField}>
+                    <span className={styles.controlLabel}>图片比例</span>
+                    <span className={styles.selectWrap}>
+                      <select className={styles.controlSelect} value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as ImageAspectRatio)}>
+                        {ASPECT_RATIOS.map((ratio) => (
+                          <option key={ratio} value={ratio}>
+                            {ratio === "auto" ? "auto（自动）" : ratio}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
                   </label>
                 </div>
                 <p className={styles.statusLine}>
