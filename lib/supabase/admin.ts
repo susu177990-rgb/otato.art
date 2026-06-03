@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from "./env";
+import { getSupabaseServiceRoleKey, getSupabaseUrl, hasSupabaseServiceRoleKey } from "./env";
 
 let adminClient: SupabaseClient | null = null;
 
@@ -10,4 +10,9 @@ export function createSupabaseAdminClient(): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return adminClient;
+}
+
+export function maybeCreateSupabaseAdminClient(): SupabaseClient | null {
+  if (!hasSupabaseServiceRoleKey()) return null;
+  return createSupabaseAdminClient();
 }

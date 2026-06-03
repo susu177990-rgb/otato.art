@@ -1,10 +1,23 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { maybeCreateSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getWorkspaceSnapshot,
   upsertWorkspaceSnapshot,
 } from "@/lib/db/workspace-settings-store";
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message.trim();
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message.trim();
+  }
+  return "";
+}
 
 export async function GET() {
   try {
@@ -28,8 +41,8 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as { llm?: unknown; imageWorkspace?: unknown; videoWorkspace?: unknown };
-    // 全站配置是共享单例，但当前产品约定允许任意已登录账号通过受控接口修改。
-    const snapshot = await upsertWorkspaceSnapshot(createSupabaseAdminClient(), {
+    const writeClient = maybeCreateSupabaseAdminClient() ?? supabase;
+    const snapshot = await upsertWorkspaceSnapshot(writeClient, {
       llm: body.llm as Parameters<typeof upsertWorkspaceSnapshot>[1]["llm"],
       imageWorkspace: body.imageWorkspace,
       videoWorkspace: body.videoWorkspace,
@@ -37,6 +50,7 @@ export async function POST(req: Request) {
     return NextResponse.json(snapshot);
   } catch (e) {
     console.error("[workspace-settings POST]", e);
-    return NextResponse.json({ error: "write_failed" }, { status: 500 });
+    const message = describeError(e);
+    return NextResponse.json({ error: message || "write_failed" }, { status: 500 });
   }
 }

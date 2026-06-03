@@ -41,3 +41,6 @@ export function getSupabaseServiceRoleKey(): string {
   return key;
 }
 
+export function hasSupabaseServiceRoleKey(): boolean {
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
