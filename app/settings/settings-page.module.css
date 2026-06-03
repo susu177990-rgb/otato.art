@@ -324,6 +324,21 @@
   line-height: 1.35;
 }
 
+.promptPreviewBlock {
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  color: #e4e4e7;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .promptModeRefHintsList {
   display: flex;
   flex-direction: column;

@@ -71,6 +71,39 @@ function ModeHomeInner() {
             <p className={shellStyles.tileMeta}>项目列表 · 立项 · 编剧室</p>
           </button>
 
+          <button type="button" onClick={() => router.push("/chat")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3.75 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3.75 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM8.25 6.75h7.5v10.5h-7.5V6.75ZM6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>对话</p>
+            <p className={shellStyles.tileMeta}>Agent · Skill · 多会话</p>
+          </button>
+
+          <button type="button" onClick={() => router.push("/image/gallery")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.75 8.25A2.25 2.25 0 0 1 6 6h7.5a2.25 2.25 0 0 1 2.25 2.25v7.5A2.25 2.25 0 0 1 13.5 18H6a2.25 2.25 0 0 1-2.25-2.25v-7.5Z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.25 10.5h3.75M8.25 13.5h5.25M16.5 8.25h1.5A2.25 2.25 0 0 1 20.25 10.5v7.5A2.25 2.25 0 0 1 18 20.25h-7.5A2.25 2.25 0 0 1 8.25 18v-1.5"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>画廊</p>
+            <p className={shellStyles.tileMeta}>查看生图记录</p>
+          </button>
+
           <button type="button" onClick={() => router.push("/image")} className={shellStyles.tile}>
             <span className={shellStyles.tileIcon}>
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -85,6 +118,34 @@ function ModeHomeInner() {
             <p className={shellStyles.tileMeta}>模式化生图 · 画廊</p>
           </button>
 
+          <button type="button" onClick={() => router.push("/video")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 6.75v10.5m0 0L19.5 15m-3.75 2.25L12 15m-7.5-7.5h9A2.25 2.25 0 0 1 15.75 9.75v4.5A2.25 2.25 0 0 1 13.5 16.5h-9A2.25 2.25 0 0 1 2.25 14.25v-4.5A2.25 2.25 0 0 1 4.5 7.5Z"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>视频</p>
+            <p className={shellStyles.tileMeta}>模式化生视频 · 记录</p>
+          </button>
+
+          <button type="button" onClick={() => router.push("/canvas")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.5 7.5h4.75v4.75H4.5V7.5Zm10.25 0h4.75v4.75h-4.75V7.5ZM4.5 16.25h4.75v4.75H4.5v-4.75Zm10.25 0h4.75v4.75h-4.75v-4.75ZM9.25 9.875h5.5M9.25 18.625h5.5M6.875 12.25v4M17.125 12.25v4"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>无限画布</p>
+            <p className={shellStyles.tileMeta}>素材编排 · 分镜关系 · 灵感板</p>
+          </button>
+
           <button type="button" onClick={() => router.push("/ai-live-action")} className={shellStyles.tile}>
             <span className={shellStyles.tileIcon}>
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -97,20 +158,6 @@ function ModeHomeInner() {
             </span>
             <p className={shellStyles.tileTitle}>AI+实拍</p>
             <p className={shellStyles.tileMeta}>首帧重构 · 转绘</p>
-          </button>
-
-          <button type="button" onClick={() => router.push("/chat")} className={shellStyles.tile}>
-            <span className={shellStyles.tileIcon}>
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3.75 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm3.75 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM8.25 6.75h7.5v10.5h-7.5V6.75ZM6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z"
-                />
-              </svg>
-            </span>
-            <p className={shellStyles.tileTitle}>对话</p>
-            <p className={shellStyles.tileMeta}>Agent · Skill · 多会话</p>
           </button>
         </div>
       </div>

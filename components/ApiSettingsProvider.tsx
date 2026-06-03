@@ -12,6 +12,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { DEFAULT_IMAGE_SETTINGS } from "@/lib/image-workspace";
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
+import { DEFAULT_VIDEO_SETTINGS, type VideoWorkspaceSettings } from "@/lib/video-workspace";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
@@ -19,6 +20,7 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
 type ApiSettingsContextValue = {
   settings: Settings;
   imageWorkspace: ImageWorkspaceSettings;
+  videoWorkspace: VideoWorkspaceSettings;
   workspaceReady: boolean;
   refreshWorkspace: () => Promise<void>;
   openSettings: () => void;
@@ -39,6 +41,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [imageWorkspace, setImageWorkspace] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [videoWorkspace, setVideoWorkspace] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const isPublicAuthPath =
     pathname === "/login" || pathname.startsWith("/auth/") || pathname.startsWith("/api/auth/");
@@ -47,6 +50,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
     if (isPublicAuthPath) {
       setSettings(DEFAULT_SETTINGS);
       setImageWorkspace(DEFAULT_IMAGE_SETTINGS);
+      setVideoWorkspace(DEFAULT_VIDEO_SETTINGS);
       setWorkspaceReady(false);
       return;
     }
@@ -55,6 +59,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
       const snapshot = await fetchWorkspaceSnapshot();
       setSettings(snapshot.llm);
       setImageWorkspace(snapshot.imageWorkspace);
+      setVideoWorkspace(snapshot.videoWorkspace);
     } catch (e) {
       console.error("[ApiSettingsProvider] refresh failed", e);
     } finally {
@@ -71,8 +76,8 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const value = useMemo(
-    () => ({ settings, imageWorkspace, workspaceReady, refreshWorkspace, openSettings }),
-    [settings, imageWorkspace, workspaceReady, refreshWorkspace, openSettings],
+    () => ({ settings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace, openSettings }),
+    [settings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace, openSettings],
   );
 
   return <ApiSettingsContext.Provider value={value}>{children}</ApiSettingsContext.Provider>;

@@ -270,7 +270,7 @@ async function downloadGeneratedImage(url: string): Promise<void> {
 }
 
 export default function ImagePage() {
-  const { settings: llmSettings, imageWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
+  const { settings: llmSettings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
   const [selectedModeId, setSelectedModeId] = useState<string>("real-character-asset");
@@ -413,7 +413,7 @@ export default function ImagePage() {
   function persistGptImageQuality(q: GptImageQuality) {
     setSettings((prev) => {
       const next = { ...prev, gptImageQuality: q };
-      void saveWorkspaceSnapshot({ llm: llmSettings, imageWorkspace: next }).then(() => refreshWorkspace());
+      void saveWorkspaceSnapshot({ llm: llmSettings, imageWorkspace: next, videoWorkspace }).then(() => refreshWorkspace());
       return next;
     });
   }
@@ -894,6 +894,7 @@ export default function ImagePage() {
                                   void saveWorkspaceSnapshot({
                                     llm: llmSettings,
                                     imageWorkspace: next,
+                                    videoWorkspace,
                                   }).then(() => refreshWorkspace());
                                   return next;
                                 });

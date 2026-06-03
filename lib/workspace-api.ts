@@ -1,4 +1,5 @@
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
+import type { VideoWorkspaceSettings } from "@/lib/video-workspace";
 import type { Settings } from "@/lib/types";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 
@@ -13,6 +14,7 @@ export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
 export async function saveWorkspaceSnapshot(payload: {
   llm: Settings;
   imageWorkspace: ImageWorkspaceSettings;
+  videoWorkspace: VideoWorkspaceSettings;
 }): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", {
     method: "POST",
@@ -65,6 +67,46 @@ export async function fetchGalleryRecords() {
   const res = await fetch("/api/image/gallery", { cache: "no-store" });
   if (!res.ok) throw new Error("无法加载画廊");
   const data = (await res.json()) as { records: import("@/lib/image-workspace").ImageGalleryRecord[] };
+  return data.records;
+}
+
+export async function fetchVideoGalleryRecords() {
+  const res = await fetch("/api/video/gallery", { cache: "no-store" });
+  if (!res.ok) throw new Error("无法加载生视频记录");
+  const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
+  return data.records;
+}
+
+export async function prependVideoGalleryRecordApi(record: import("@/lib/video-gallery").VideoGalleryRecord) {
+  const res = await fetch("/api/video/gallery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "prepend", record }),
+  });
+  if (!res.ok) throw new Error("无法保存生视频记录");
+  const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
+  return data.records;
+}
+
+export async function replaceVideoGalleryRecordsApi(records: import("@/lib/video-gallery").VideoGalleryRecord[]) {
+  const res = await fetch("/api/video/gallery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "replace", records }),
+  });
+  if (!res.ok) throw new Error("无法更新生视频记录");
+  const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
+  return data.records;
+}
+
+export async function importVideoGalleryRecordsApi(records: import("@/lib/video-gallery").VideoGalleryRecord[]) {
+  const res = await fetch("/api/video/gallery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "import", records }),
+  });
+  if (!res.ok) throw new Error("无法导入生视频记录");
+  const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
   return data.records;
 }
 

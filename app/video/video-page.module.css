@@ -1,0 +1,502 @@
+/* /video 工作台：沿用 /image 的 stage 三栏舞台与轨道视觉语言 */
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding: 16px 24px 24px;
+}
+
+.canvas {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding-top: clamp(22px, 4vh, 48px);
+  padding-bottom: clamp(14px, 2.6vh, 32px);
+  container-type: inline-size;
+  container-name: videoCanvas;
+}
+
+.canvasInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+}
+
+.resultSafeFrame {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  padding-inline: calc(min(196px, calc(100vw - 56px)) + 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  container-name: resultViewport;
+}
+
+.resultClip {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 30px;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resultVideo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 30px;
+  background: #000;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.38);
+}
+
+@supports (width: 1cqh) {
+  .resultVideo {
+    max-width: 100cqw;
+    max-height: 100cqh;
+  }
+}
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.bigSpinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fafafa;
+  animation: videoSpin 0.75s linear infinite;
+  filter: drop-shadow(0 1px 10px rgba(0, 0, 0, 0.65));
+}
+
+@keyframes videoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.statusLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fafafa;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.75);
+}
+
+/* 左侧模式轨道 + 右侧历史轨道：复刻 /image 的定位（42% 视平线） */
+.modePanel,
+.historyPanel {
+  position: absolute;
+  top: 42%;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-height: min(calc(100vh - 32px), calc(2 * 42vh - 32px));
+  pointer-events: none;
+}
+
+.modePanel {
+  left: 24px;
+}
+
+.historyPanel {
+  right: 24px;
+}
+
+.modeColumn {
+  --thumb: 80px;
+  --gap: 12px;
+  --visible: 7;
+  --fade: 22px;
+  width: calc(var(--thumb) + 16px);
+  pointer-events: auto;
+}
+
+.historyColumn {
+  --thumb: 80px;
+  --gap: 12px;
+  --visible: 7;
+  --fade: 22px;
+  width: var(--thumb);
+  pointer-events: auto;
+}
+
+.railFrame {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.railFrame::before,
+.railFrame::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 12px;
+  height: 6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0.58;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 6'%3E%3Cpath d='M6 0.85 L1.4 5.25 M6 0.85 L10.6 5.25' fill='none' stroke='%2371717a' stroke-width='0.75' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.railFrame::before {
+  top: -15px;
+}
+
+.railFrame::after {
+  bottom: -15px;
+  transform: translateX(-50%) scaleY(-1);
+}
+
+.scrollWrap {
+  position: relative;
+  max-height: calc(var(--visible) * var(--thumb) + (var(--visible) - 1) * var(--gap));
+}
+
+.scrollWrapFaded::before,
+.scrollWrapFaded::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--fade);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.scrollWrapFaded::before {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(7, 7, 8, 0.96), rgba(7, 7, 8, 0));
+}
+
+.scrollWrapFaded::after {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(7, 7, 8, 0.96), rgba(7, 7, 8, 0));
+}
+
+.scroll {
+  width: var(--thumb);
+  max-height: calc(var(--visible) * var(--thumb) + (var(--visible) - 1) * var(--gap));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+  width: var(--thumb);
+}
+
+.modeItem,
+.historyItem,
+.emptyRail {
+  width: var(--thumb);
+  height: var(--thumb);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.emptyRail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 10px;
+  line-height: 14px;
+  color: #52525b;
+  border-style: dashed;
+}
+
+.modeItem {
+  cursor: pointer;
+  position: relative;
+}
+
+.modeItemActive {
+  border: 2px solid #c4b5fd;
+}
+
+.modeLabel {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 4px 3px;
+  background: rgba(0, 0, 0, 0.68);
+  color: #e4e4e7;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historyItem {
+  cursor: pointer;
+  position: relative;
+}
+
+.historyItem video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.historyMeta {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 4px 3px;
+  background: rgba(0, 0, 0, 0.68);
+  color: #e4e4e7;
+  opacity: 0;
+  font-size: 9px;
+  transition: opacity 160ms ease;
+}
+
+.historyItem:hover .historyMeta {
+  opacity: 1;
+}
+
+.composerWrap {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  z-index: 35;
+  position: relative;
+  width: 100%;
+  max-width: 840px;
+  margin: 0 auto;
+  padding-top: 8px;
+}
+
+.error {
+  margin-bottom: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  border-radius: 16px;
+  background: rgba(127, 29, 29, 0.32);
+  padding: 9px 14px;
+  color: #fecaca;
+  font-size: 12px;
+  box-shadow: 0 16px 70px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.composer {
+  overflow-x: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 30px;
+  background: rgba(8, 8, 9, 0.94);
+  box-shadow: 0 30px 120px rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(26px);
+}
+
+.promptSlotGrid {
+  display: grid;
+  grid-template-rows: 112px;
+  height: 112px;
+  gap: 0;
+  align-items: stretch;
+}
+
+.promptSlotPane {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 112px;
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.promptSlotPane:last-child {
+  border-right: none;
+}
+
+.promptInput {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 16px 20px;
+  color: #f4f4f5;
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.promptInput::placeholder {
+  color: #52525b;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 34px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+}
+
+.composerSelect {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 34px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  background-color: rgba(255, 255, 255, 0.035);
+  padding: 0 24px 0 10px;
+  color: #e4e4e7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 9px 9px;
+}
+
+.composerSelect:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.warning {
+  flex-shrink: 0;
+  align-self: center;
+  white-space: nowrap;
+  line-height: 1.35;
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.viewPrompt {
+  margin-left: auto;
+  box-sizing: border-box;
+  height: 34px;
+  min-width: 78px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #e4e4e7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.viewPrompt:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.075);
+  color: #fafafa;
+}
+
+.generate {
+  box-sizing: border-box;
+  height: 34px;
+  min-width: 72px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 15px;
+  background: #fafafa;
+  color: #09090b;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.2;
+  box-shadow: 0 12px 38px rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+
+.generate:disabled {
+  cursor: not-allowed;
+  background: #3f3f46;
+  color: #71717a;
+}
+
+@media (max-width: 1100px) {
+  .stage {
+    padding: 12px 16px 20px;
+  }
+
+  .modePanel {
+    left: 16px;
+    max-height: calc(100vh - 24px);
+  }
+
+  .historyPanel {
+    right: 16px;
+    max-height: calc(100vh - 24px);
+  }
+}
+

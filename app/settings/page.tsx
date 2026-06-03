@@ -24,30 +24,60 @@ import {
   type ImageModeId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
+import {
+  DEFAULT_VIDEO_SETTINGS,
+  VIDEO_MODEL_ORDER,
+  VIDEO_MODES,
+  buildVideoPromptFromSlots,
+  composerSlotCountForTemplate,
+  defaultVideoModePrompt,
+  extractPromptPlaceholderOccurrences as extractVideoPromptPlaceholderOccurrences,
+  placeholderInnerHint as videoPlaceholderInnerHint,
+  type VideoWorkspaceSettings,
+} from "@/lib/video-workspace";
 
-type Tab = "llmApi" | "imageApi" | "imagePrompts" | "skillPacks";
+type Tab = "llmApi" | "imageApi" | "imagePrompts" | "videoApi" | "videoPrompts" | "skillPacks";
 
 const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: "llmApi", label: "LLM API" },
   { id: "imageApi", label: "生图 API" },
   { id: "imagePrompts", label: "生图 提示词" },
+  { id: "videoApi", label: "生视频 API" },
+  { id: "videoPrompts", label: "生视频 提示词" },
   { id: "skillPacks", label: "Skill" },
 ];
 
 function tabFromSearchParam(raw: string | null): Tab | null {
-  if (raw === "llmApi" || raw === "imageApi" || raw === "imagePrompts" || raw === "skillPacks") return raw;
+  if (
+    raw === "llmApi" ||
+    raw === "imageApi" ||
+    raw === "imagePrompts" ||
+    raw === "videoApi" ||
+    raw === "videoPrompts" ||
+    raw === "skillPacks"
+  ) {
+    return raw;
+  }
   return null;
 }
 
 function SettingsPageInner() {
   const searchParams = useSearchParams();
-  const { settings: loadedLlm, imageWorkspace: loadedImage, workspaceReady, refreshWorkspace } = useApiSettings();
+  const {
+    settings: loadedLlm,
+    imageWorkspace: loadedImage,
+    videoWorkspace: loadedVideo,
+    workspaceReady,
+    refreshWorkspace,
+  } = useApiSettings();
   const initialTab = tabFromSearchParam(searchParams.get("tab")) ?? "llmApi";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
   const imagePromptsPersistMergeRef = useRef<(() => ImageWorkspaceSettings) | null>(null);
+  const videoPromptsPersistMergeRef = useRef<(() => VideoWorkspaceSettings) | null>(null);
 
   useEffect(() => {
     const fromUrl = tabFromSearchParam(searchParams.get("tab"));
@@ -58,11 +88,12 @@ function SettingsPageInner() {
     if (!workspaceReady) return;
     setLlmSettings(loadedLlm);
     setImageSettings(loadedImage);
-  }, [workspaceReady, loadedLlm, loadedImage]);
+    setVideoSettings(loadedVideo);
+  }, [workspaceReady, loadedLlm, loadedImage, loadedVideo]);
 
-  async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings) {
+  async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings, video: VideoWorkspaceSettings) {
     const normalizedLlm = { ...llm, model: normalizeModel(llm.model) };
-    await saveWorkspaceSnapshot({ llm: normalizedLlm, imageWorkspace: image });
+    await saveWorkspaceSnapshot({ llm: normalizedLlm, imageWorkspace: image, videoWorkspace: video });
     await refreshWorkspace();
   }
 
@@ -71,9 +102,14 @@ function SettingsPageInner() {
       typeof imagePromptsPersistMergeRef.current === "function"
         ? imagePromptsPersistMergeRef.current()
         : imageSettings;
+    const mergedVideo =
+      typeof videoPromptsPersistMergeRef.current === "function"
+        ? videoPromptsPersistMergeRef.current()
+        : videoSettings;
     setImageSettings(mergedImage);
+    setVideoSettings(mergedVideo);
     try {
-      await persistWorkspace(llmSettings, mergedImage);
+      await persistWorkspace(llmSettings, mergedImage, mergedVideo);
       setSavedMessage("已保存到云端");
     } catch {
       setSavedMessage("保存失败");
@@ -111,7 +147,7 @@ function SettingsPageInner() {
             .join(" ")}
         >
           <p className={styles.workspacePersistNotice}>
-            <strong>全站配置</strong>保存在 Supabase。这里修改的 LLM / 生图 API Key、提示词与 Skill 包是 SaaS 全局设置，
+            <strong>全站配置</strong>保存在 Supabase。这里修改的 LLM / 生图 / 生视频 API Key、提示词与 Skill 包是 SaaS 全局设置，
             所有登录账号与设备都会读取同一份配置；项目、对话会话与画廊仍按用户账号隔离。
           </p>
           <div className={styles.tabBar}>
@@ -144,13 +180,29 @@ function SettingsPageInner() {
               onRefreshWorkspace={refreshWorkspace}
               onPersistImage={async (next) => {
                 setImageSettings(next);
-                await persistWorkspace(llmSettings, next);
+                await persistWorkspace(llmSettings, next, videoSettings);
               }}
             />
           ) : null}
 
           {tab === "imageApi" ? (
             <ImageApiPanel value={imageSettings} onChange={setImageSettings} />
+          ) : null}
+
+          {tab === "videoPrompts" ? (
+            <VideoPromptsPanel
+              value={videoSettings}
+              onChange={setVideoSettings}
+              persistMergeRef={videoPromptsPersistMergeRef}
+              onPersistVideo={async (next) => {
+                setVideoSettings(next);
+                await persistWorkspace(llmSettings, imageSettings, next);
+              }}
+            />
+          ) : null}
+
+          {tab === "videoApi" ? (
+            <VideoApiPanel value={videoSettings} onChange={setVideoSettings} />
           ) : null}
 
           {tab === "skillPacks" ? <SkillPacksPanel /> : null}
@@ -872,6 +924,324 @@ function ImageApiPanel({
           </div>
         );
       })}
+    </section>
+  );
+}
+
+function VideoApiPanel({
+  value,
+  onChange,
+}: {
+  value: VideoWorkspaceSettings;
+  onChange: (next: VideoWorkspaceSettings) => void;
+}) {
+  return (
+    <section className={styles.panel}>
+      {VIDEO_MODEL_ORDER.map((id) => {
+        const model = value.models[id];
+        return (
+          <div key={id} className={shellStyles.card}>
+            <div className={shellStyles.cardHead}>
+              <div>
+                <h2 className={shellStyles.cardTitle}>{model.label}</h2>
+                <p className={shellStyles.cardSubtitle}>Seedance/即梦 v2：提交 / 轮询任务</p>
+              </div>
+            </div>
+
+            <div className={shellStyles.row}>
+              <label className={[shellStyles.field, shellStyles.rowFull].join(" ")}>
+                <span className={shellStyles.fieldLabel}>Base URL</span>
+                <input
+                  className={[shellStyles.input, shellStyles.mono].join(" ")}
+                  value={model.baseUrl}
+                  placeholder="https://seedanceapi.org/v2"
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [id]: { ...value.models[id], baseUrl: e.target.value },
+                      },
+                    })
+                  }
+                />
+              </label>
+
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>API Key</span>
+                <input
+                  type="password"
+                  className={[shellStyles.input, shellStyles.mono].join(" ")}
+                  value={model.apiKey}
+                  placeholder="sk-..."
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [id]: { ...value.models[id], apiKey: e.target.value },
+                      },
+                    })
+                  }
+                />
+              </label>
+
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>模型名</span>
+                <input
+                  className={[shellStyles.input, shellStyles.mono].join(" ")}
+                  value={model.modelName}
+                  placeholder="seedance-2.0 或 seedance-2.0-fast"
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [id]: {
+                          ...value.models[id],
+                          modelName: e.target.value.trim() === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
+                        },
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+type VideoModePromptRow = { id: string; label: string; isCustom: boolean };
+
+function VideoPromptsPanel({
+  value,
+  onChange,
+  persistMergeRef,
+  onPersistVideo,
+}: {
+  value: VideoWorkspaceSettings;
+  onChange: (next: VideoWorkspaceSettings) => void;
+  persistMergeRef?: MutableRefObject<(() => VideoWorkspaceSettings) | null>;
+  onPersistVideo: (next: VideoWorkspaceSettings) => Promise<void>;
+}) {
+  const builtinRows: VideoModePromptRow[] = VIDEO_MODES.map((m) => ({ id: m.id, label: m.label, isCustom: false }));
+  const customRows: VideoModePromptRow[] = (value.customModes ?? []).map((m) => ({ id: m.id, label: m.label, isCustom: true }));
+  const allRows = [...builtinRows, ...customRows].reverse();
+
+  const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
+  const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
+  const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
+
+  useEffect(() => {
+    const ref = persistMergeRef;
+    if (!ref) return;
+    ref.current = () => {
+      if (editingPromptModeId === null) return value;
+      const id = editingPromptModeId;
+      const text = draftPrompts[id] ?? value.prompts[id] ?? "";
+      let merged: VideoWorkspaceSettings = { ...value, prompts: { ...value.prompts, [id]: text } };
+      if (id.startsWith("custom_")) {
+        const labelRaw = draftLabels[id] ?? value.customModes?.find((m) => m.id === id)?.label ?? id;
+        const label = String(labelRaw).trim() || id;
+        merged = { ...merged, customModes: (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)) };
+      }
+      return merged;
+    };
+    return () => {
+      ref.current = null;
+    };
+  }, [persistMergeRef, value, editingPromptModeId, draftPrompts, draftLabels]);
+
+  function handleSavePrompt(modeId: string) {
+    const text = draftPrompts[modeId] ?? value.prompts[modeId] ?? "";
+    let next: VideoWorkspaceSettings = { ...value, prompts: { ...value.prompts, [modeId]: text } };
+    if (modeId.startsWith("custom_")) {
+      const labelRaw = draftLabels[modeId] ?? value.customModes?.find((m) => m.id === modeId)?.label ?? modeId;
+      const label = String(labelRaw).trim() || modeId;
+      next = { ...next, customModes: (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)) };
+    }
+    onChange(next);
+    void onPersistVideo(next);
+    setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
+    setDraftPrompts((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    setDraftLabels((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+  }
+
+  function handleEditPrompt(modeId: string) {
+    setDraftPrompts((prev) => {
+      const copy = { ...prev };
+      if (editingPromptModeId !== null && editingPromptModeId !== modeId) delete copy[editingPromptModeId];
+      copy[modeId] = value.prompts[modeId] ?? "";
+      return copy;
+    });
+    if (modeId.startsWith("custom_")) {
+      setDraftLabels((prev) => ({ ...prev, [modeId]: value.customModes?.find((m) => m.id === modeId)?.label ?? "" }));
+    }
+    setEditingPromptModeId(modeId);
+  }
+
+  function handleAddCustomMode() {
+    const id = `custom_${crypto.randomUUID()}`;
+    const next: VideoWorkspaceSettings = {
+      ...value,
+      customModes: [...(value.customModes ?? []), { id, label: `自定义模式 ${(value.customModes?.length ?? 0) + 1}` }],
+      prompts: { ...value.prompts, [id]: "" },
+    };
+    onChange(next);
+    void onPersistVideo(next);
+    handleEditPrompt(id);
+  }
+
+  function handleDeletePromptRow(mode: VideoModePromptRow) {
+    if (mode.isCustom) {
+      const restPrompts = { ...value.prompts };
+      delete restPrompts[mode.id];
+      const next: VideoWorkspaceSettings = {
+        ...value,
+        customModes: (value.customModes ?? []).filter((m) => m.id !== mode.id),
+        prompts: restPrompts,
+      };
+      onChange(next);
+      void onPersistVideo(next);
+      return;
+    }
+    if (!window.confirm(`「${mode.label}」将恢复为内置默认提示词（当前修改会丢失），确定？`)) return;
+    if (
+      mode.id !== "free" &&
+      mode.id !== "cinematic-text-to-video" &&
+      mode.id !== "storyboard-shot" &&
+      mode.id !== "product-ad"
+    ) {
+      return;
+    }
+    const next: VideoWorkspaceSettings = {
+      ...value,
+      prompts: { ...value.prompts, [mode.id]: defaultVideoModePrompt(mode.id) },
+    };
+    onChange(next);
+    void onPersistVideo(next);
+  }
+
+  function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): string {
+    const tok = occ[slotIndex];
+    if (tok) {
+      const hint = videoPlaceholderInnerHint(tok);
+      if (hint) return hint;
+      return `槽位 ${slotIndex + 1}`;
+    }
+    if (modeId === "free") return "直接输入完整提示词（自由模式无固定模版）";
+    return "输入内容";
+  }
+
+  return (
+    <section className={styles.panel}>
+      <div className={shellStyles.card}>
+        <div className={shellStyles.cardHead}>
+          <div>
+            <h2 className={shellStyles.cardTitle}>生视频模式 · 固定提示词</h2>
+            <p className={shellStyles.cardSubtitle}>
+              与作图页一致：模版内每出现一处 <code className={shellStyles.mono}>{"{{…}}"}</code> 占位符，视频页会对应多一栏输入（从左到右依次填入）。
+            </p>
+            <div className={styles.promptIntroActions}>
+              <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
+                添加自定义模式
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.promptModeGrid}>
+        {allRows.map((mode) => {
+          const isEditing = editingPromptModeId === mode.id;
+          const savedText = value.prompts[mode.id] ?? "";
+          const textareaValue = isEditing ? (draftPrompts[mode.id] ?? savedText) : savedText;
+          const occ = extractVideoPromptPlaceholderOccurrences(savedText);
+          const slotCount = composerSlotCountForTemplate(savedText, mode.id);
+          const demoSlots = Array.from({ length: slotCount }, (_, i) => composerPlaceholder(mode.id, occ, i));
+          const preview = buildVideoPromptFromSlots(savedText, demoSlots);
+
+          return (
+            <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
+              <header className={[shellStyles.cardHead, styles.promptModeCardHead].join(" ")}>
+                {mode.isCustom && isEditing ? (
+                  <label className={styles.promptModeLabelEdit}>
+                    <span className={styles.visuallyHidden}>模式名称</span>
+                    <input
+                      className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                      value={draftLabels[mode.id] ?? mode.label}
+                      onChange={(e) => setDraftLabels((prev) => ({ ...prev, [mode.id]: e.target.value }))}
+                      aria-label="自定义模式名称"
+                    />
+                  </label>
+                ) : (
+                  <h3 className={styles.promptModeCardTitle}>{mode.label}</h3>
+                )}
+                <div className={styles.promptModeCardActions}>
+                  <button
+                    type="button"
+                    className={shellStyles.buttonSubtle}
+                    onClick={() => handleDeletePromptRow(mode)}
+                    aria-label={mode.isCustom ? `删除自定义模式 ${mode.label}` : `恢复 ${mode.label} 默认提示词`}
+                  >
+                    删除
+                  </button>
+                  <button
+                    type="button"
+                    className={shellStyles.buttonSubtle}
+                    onClick={() => (isEditing ? handleSavePrompt(mode.id) : handleEditPrompt(mode.id))}
+                  >
+                    {isEditing ? "保存" : "编辑"}
+                  </button>
+                </div>
+              </header>
+
+              <div className={styles.promptModeEditBody}>
+                <textarea
+                  className={[
+                    shellStyles.textarea,
+                    shellStyles.mono,
+                    styles.promptModeTextarea,
+                    !isEditing ? styles.promptModeTextareaReadOnly : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  value={textareaValue}
+                  readOnly={!isEditing}
+                  spellCheck={false}
+                  aria-readonly={!isEditing}
+                  onClick={() => {
+                    if (!isEditing) handleEditPrompt(mode.id);
+                  }}
+                  onFocus={() => {
+                    if (!isEditing) handleEditPrompt(mode.id);
+                  }}
+                  onChange={(e) => {
+                    if (!isEditing) return;
+                    setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
+                  }}
+                />
+              </div>
+
+              <div className={styles.promptModeRefHintsWrap}>
+                <span className={styles.promptModeRefHintsLabel}>预览（占位符会被替换为槽位输入）</span>
+                <pre className={[styles.promptPreviewBlock, shellStyles.mono].join(" ")}>{preview || "（空）"}</pre>
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }

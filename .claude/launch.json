@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "next-dev (port 4000)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:web:webpack"],
+      "port": 4000
+    },
+    {
+      "name": "wattpad-api (port 8765)",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["scripts/start-wattpad-api.sh"],
+      "port": 8765
+    }
+  ]
+}
