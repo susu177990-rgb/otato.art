@@ -111,8 +111,9 @@ function SettingsPageInner() {
     try {
       await persistWorkspace(llmSettings, mergedImage, mergedVideo);
       setSavedMessage("已保存到云端");
-    } catch {
-      setSavedMessage("保存失败");
+    } catch (error) {
+      const message = error instanceof Error ? error.message.trim() : "";
+      setSavedMessage(message || "保存失败");
     }
     window.setTimeout(() => setSavedMessage(""), 1400);
   }
