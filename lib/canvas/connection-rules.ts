@@ -1,0 +1,109 @@
+import type { CanvasConnection, CanvasNode, CanvasTargetPort } from "@/lib/canvas/types";
+
+export const CANVAS_SOURCE_PORT = "output" as const;
+
+export const TARGET_PORT_LABELS: Record<CanvasTargetPort, string> = {
+  source: "来源",
+  prompt: "提示词",
+  imageReference: "参考图",
+  firstFrame: "首帧",
+  lastFrame: "尾帧",
+  videoReference: "视频参考",
+};
+
+export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
+  switch (node.type) {
+    case "text":
+      return [];
+    case "image":
+      return node.metadata?.source === "upload" ? [] : ["prompt", "imageReference"];
+    case "video":
+      return node.metadata?.source === "upload" ? [] : ["prompt", "firstFrame", "lastFrame", "videoReference"];
+    default:
+      return [];
+  }
+}
+
+export function canStartConnection(node: CanvasNode): boolean {
+  return node.type !== "group";
+}
+
+export function isConnectionAllowed(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort): boolean {
+  if (from.id === to.id || from.type === "group" || to.type === "group") return false;
+  if (targetPort === "source") return true;
+  if (!getTargetPorts(to).includes(targetPort)) return false;
+  if (targetPort === "prompt") return from.type === "text";
+  if (targetPort === "imageReference") return from.type === "image";
+  if (targetPort === "firstFrame" || targetPort === "lastFrame") return from.type === "image";
+  if (targetPort === "videoReference") return from.type === "video";
+  return false;
+}
+
+export function connectionExists(
+  connections: CanvasConnection[],
+  fromNodeId: string,
+  toNodeId: string,
+  targetPort: CanvasTargetPort
+): boolean {
+  return connections.some((conn) => conn.fromNodeId === fromNodeId && conn.toNodeId === toNodeId && conn.targetPort === targetPort);
+}
+
+export function inferTargetPort(
+  from: CanvasNode,
+  to: CanvasNode,
+  connections: CanvasConnection[] = []
+): { targetPort: CanvasTargetPort | null; reason?: string } {
+  if (from.id === to.id) return { targetPort: null, reason: "不能连接到自身" };
+  if (from.type === "group" || to.type === "group") return { targetPort: null, reason: "素材组暂不参与连线" };
+
+  if (to.type === "image" && to.metadata?.source !== "upload") {
+    const targetPort = from.type === "text" ? "prompt" : from.type === "image" ? "imageReference" : null;
+    if (!targetPort) return { targetPort: null, reason: "图片节点只接受文本提示词或图片参考" };
+    return connectionExists(connections, from.id, to.id, targetPort)
+      ? { targetPort: null, reason: `${TARGET_PORT_LABELS[targetPort]}已连接` }
+      : { targetPort };
+  }
+
+  if (to.type === "video" && to.metadata?.source !== "upload") {
+    if (from.type === "text") {
+      return connectionExists(connections, from.id, to.id, "prompt")
+        ? { targetPort: null, reason: "提示词已连接" }
+        : { targetPort: "prompt" };
+    }
+    if (from.type === "image") {
+      if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "firstFrame")) return { targetPort: "firstFrame" };
+      if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "lastFrame")) return { targetPort: "lastFrame" };
+      return { targetPort: null, reason: "首帧和尾帧已占用" };
+    }
+    if (from.type === "video") {
+      return connectionExists(connections, from.id, to.id, "videoReference")
+        ? { targetPort: null, reason: "视频参考已连接" }
+        : { targetPort: "videoReference" };
+    }
+    return { targetPort: null, reason: "视频节点只接受文本、图片或视频输入" };
+  }
+
+  return { targetPort: null, reason: "目标节点不能接收输入" };
+}
+
+export function normalizeConnectionPorts(
+  conn: Pick<CanvasConnection, "id" | "fromNodeId" | "toNodeId"> & Partial<CanvasConnection>,
+  from: CanvasNode,
+  to: CanvasNode,
+  existing: CanvasConnection[] = []
+): CanvasConnection | null {
+  const explicitPort = conn.targetPort && isConnectionAllowed(from, to, conn.targetPort) ? conn.targetPort : null;
+  const targetPort = explicitPort ?? inferTargetPort(from, to, existing).targetPort ?? "source";
+  if (!isConnectionAllowed(from, to, targetPort)) return null;
+  return {
+    id: conn.id,
+    fromNodeId: conn.fromNodeId,
+    toNodeId: conn.toNodeId,
+    sourcePort: CANVAS_SOURCE_PORT,
+    targetPort,
+  };
+}
+
+export function makeCanvasConnection(id: string, fromNodeId: string, toNodeId: string, targetPort: CanvasTargetPort): CanvasConnection {
+  return { id, fromNodeId, toNodeId, sourcePort: CANVAS_SOURCE_PORT, targetPort };
+}

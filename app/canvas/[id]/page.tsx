@@ -5,13 +5,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import {
+  fetchWorkspaceSnapshot,
   fetchGalleryRecords,
   fetchVideoGalleryRecords,
   prependGalleryRecordApi,
   prependVideoGalleryRecordApi,
 } from "@/lib/workspace-api";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { ImageGalleryRecord } from "@/lib/image-workspace";
+import {
+  DEFAULT_IMAGE_SETTINGS,
+  GPT_IMAGE_QUALITY_LABELS,
+  GPT_IMAGE_QUALITY_ORDER,
+  IMAGE_MODEL_ORDER,
+  type GptImageQuality,
+  type ImageAspectRatio,
+  type ImageGalleryRecord,
+  type ImageModelId,
+  type ImageSizeTier,
+  type ImageWorkspaceSettings,
+} from "@/lib/image-workspace";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import type {
   CanvasBoard,
@@ -20,8 +32,15 @@ import type {
   CanvasNode,
   CanvasNodeType,
   CanvasPosition,
+  CanvasTargetPort,
   CanvasViewport,
 } from "@/lib/canvas/types";
+import {
+  canStartConnection,
+  getTargetPorts,
+  inferTargetPort,
+  makeCanvasConnection,
+} from "@/lib/canvas/connection-rules";
 import { DEFAULT_CANVAS_VIEWPORT } from "@/lib/canvas/types";
 import styles from "../canvas-page.module.css";
 
@@ -44,6 +63,7 @@ type AssetKind = "text" | "image" | "video";
 type MenuState =
   | { kind: "canvas"; x: number; y: number; world: CanvasPosition }
   | { kind: "node"; x: number; y: number; nodeId: string }
+  | { kind: "connection"; x: number; y: number; connectionId: string }
   | null;
 
 type AssetDrawerState = { open: boolean; insertAt: CanvasPosition | null };
@@ -65,15 +85,20 @@ type AssetItem = {
   source: "gallery" | "canvas" | "local";
 };
 
+type CanvasImageGenerateResponse = {
+  sourceNode: CanvasNode;
+  galleryRecord: ImageGalleryRecord;
+};
+
 type ConnectionDraft = {
-  fromNodeId: string;
-  /** Port the drag started from */
-  fromSide: "left" | "right";
+  mode: "fromOutput" | "toInput";
+  anchorNodeId: string;
+  fromNodeId: string | null;
   /** Current cursor position in world coordinates (snapped to target port when near) */
   current: CanvasPosition;
   targetNodeId: string | null;
-  /** Closest port on the target node */
-  targetSide: "left" | "right" | null;
+  targetPort: CanvasTargetPort | null;
+  message: string | null;
 };
 
 type SelectBoxScreen = {
@@ -154,54 +179,96 @@ function normWheelDelta(e: WheelEvent) {
   return { dx: e.deltaX * factor, dy: e.deltaY * factor };
 }
 
-function bezierPath(from: CanvasNode, to: CanvasNode) {
-  const dir = to.position.x + to.width / 2 >= from.position.x + from.width / 2 ? 1 : -1;
-  const x1 = dir > 0 ? from.position.x + from.width : from.position.x;
-  const y1 = from.position.y + from.height / 2;
-  const x2 = dir > 0 ? to.position.x : to.position.x + to.width;
-  const y2 = to.position.y + to.height / 2;
+function bezierPath(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort) {
+  const start = getOutputPortPos(from);
+  const end = getInputPortPos(to, targetPort);
+  const dir = end.x >= start.x ? 1 : -1;
+  const x1 = start.x;
+  const y1 = start.y;
+  const x2 = end.x;
+  const y2 = end.y;
   const dx = Math.max(80, Math.abs(x2 - x1) * 0.45);
   return `M ${x1} ${y1} C ${x1 + dx * dir} ${y1}, ${x2 - dx * dir} ${y2}, ${x2} ${y2}`;
 }
 
-function draftBezierPath(from: CanvasNode, fromSide: "left" | "right", to: CanvasPosition) {
-  const x1 = fromSide === "right" ? from.position.x + from.width : from.position.x;
-  const y1 = from.position.y + from.height / 2;
+function draftBezierPath(start: CanvasPosition, to: CanvasPosition) {
+  const x1 = start.x;
+  const y1 = start.y;
   const dir = to.x > x1 ? 1 : -1;
   const dx = Math.max(80, Math.abs(to.x - x1) * 0.45);
   return `M ${x1} ${y1} C ${x1 + dx * dir} ${y1}, ${to.x - dx * dir} ${to.y}, ${to.x} ${to.y}`;
 }
 
-/** Return the world position of a node's connection port */
-function getPortPos(node: CanvasNode, side: "left" | "right"): CanvasPosition {
+function connectionCenterPos(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort): CanvasPosition {
+  const start = getOutputPortPos(from);
+  const end = getInputPortPos(to, targetPort);
   return {
-    x: side === "right" ? node.position.x + node.width : node.position.x,
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  };
+}
+
+function getOutputPortPos(node: CanvasNode): CanvasPosition {
+  return {
+    x: node.position.x + node.width,
     y: node.position.y + node.height / 2,
   };
 }
 
-/**
- * Find the closest port within PORT_SNAP_RADIUS of the given world point.
- * Returns the node + side, or null if nothing is close enough.
- */
-function nodeNear(
+function getInputPortPos(node: CanvasNode, targetPort: CanvasTargetPort): CanvasPosition {
+  void targetPort;
+  return {
+    x: node.position.x,
+    y: node.position.y + node.height / 2,
+  };
+}
+
+function getDraftStartPos(draft: ConnectionDraft, anchor: CanvasNode): CanvasPosition {
+  return draft.mode === "toInput" ? getInputPortPos(anchor, "prompt") : getOutputPortPos(anchor);
+}
+
+function findConnectionTarget(
   nodes: CanvasNode[],
   point: CanvasPosition,
-  exceptId?: string
-): { nodeId: string; side: "left" | "right" } | null {
-  let best: { nodeId: string; side: "left" | "right"; dist: number } | null = null;
+  fromNodeId: string,
+  connections: CanvasConnection[]
+): { nodeId: string; targetPort: CanvasTargetPort; dist: number } | null {
+  const from = nodes.find((n) => n.id === fromNodeId);
+  if (!from) return null;
+  let best: { nodeId: string; targetPort: CanvasTargetPort; dist: number } | null = null;
   for (const n of nodes) {
-    if (n.id === exceptId || n.type === "group") continue;
-    const cy = n.position.y + n.height / 2;
-    const dl = Math.hypot(point.x - n.position.x, point.y - cy);
-    const dr = Math.hypot(point.x - (n.position.x + n.width), point.y - cy);
-    const side = dl <= dr ? "left" : "right";
-    const dist = Math.min(dl, dr);
+    if (n.id === fromNodeId || n.type === "group") continue;
+    const inferred = inferTargetPort(from, n, connections);
+    if (!inferred.targetPort) continue;
+    const portPos = getInputPortPos(n, inferred.targetPort);
+    const dist = Math.hypot(point.x - portPos.x, point.y - portPos.y);
     if (dist < PORT_SNAP_RADIUS && (!best || dist < best.dist)) {
-      best = { nodeId: n.id, side, dist };
+      best = { nodeId: n.id, targetPort: inferred.targetPort, dist };
     }
   }
-  return best ? { nodeId: best.nodeId, side: best.side } : null;
+  return best;
+}
+
+function findConnectionSource(
+  nodes: CanvasNode[],
+  point: CanvasPosition,
+  targetNodeId: string,
+  connections: CanvasConnection[]
+): { nodeId: string; targetPort: CanvasTargetPort; dist: number } | null {
+  const target = nodes.find((n) => n.id === targetNodeId);
+  if (!target) return null;
+  let best: { nodeId: string; targetPort: CanvasTargetPort; dist: number } | null = null;
+  for (const n of nodes) {
+    if (n.id === targetNodeId || n.type === "group") continue;
+    const inferred = inferTargetPort(n, target, connections);
+    if (!inferred.targetPort) continue;
+    const portPos = getOutputPortPos(n);
+    const dist = Math.hypot(point.x - portPos.x, point.y - portPos.y);
+    if (dist < PORT_SNAP_RADIUS && (!best || dist < best.dist)) {
+      best = { nodeId: n.id, targetPort: inferred.targetPort, dist };
+    }
+  }
+  return best;
 }
 
 function fitMediaSize(size: { width: number; height: number }, maxW = 360, maxH = 300) {
@@ -219,8 +286,46 @@ function makeTextNode(pos: CanvasPosition): CanvasNode {
   return { id: newNodeId("text"), type: "text", title: "文本", position: { x: pos.x - 140, y: pos.y - 85 }, width: 280, height: 170, metadata: { text: "" } };
 }
 
-function makeGenerationNode(type: "imageGen" | "videoGen", pos: CanvasPosition): CanvasNode {
-  return { id: newNodeId(type), type, title: type === "imageGen" ? "生图节点" : "生视频节点", position: { x: pos.x - 150, y: pos.y - 90 }, width: 300, height: 180, metadata: { prompt: "" } };
+function makeEmptyImageNode(
+  pos: CanvasPosition,
+  imageDefaults?: {
+    modelId: ImageModelId;
+    aspectRatio: ImageAspectRatio;
+    imageSize: ImageSizeTier;
+    gptImageQuality: GptImageQuality;
+  },
+): CanvasNode {
+  return {
+    id: newNodeId("image"),
+    type: "image",
+    title: "图片",
+    position: { x: pos.x - 140, y: pos.y - 140 },
+    width: 280,
+    height: 280,
+    metadata: {
+      prompt: "",
+      modelId: imageDefaults?.modelId ?? "gpt-image-2",
+      aspectRatio: imageDefaults?.aspectRatio ?? "4:3",
+      imageSize: imageDefaults?.imageSize ?? "1K",
+      gptImageQuality: imageDefaults?.gptImageQuality ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
+      status: "idle",
+    },
+  };
+}
+
+function makeEmptyVideoNode(pos: CanvasPosition): CanvasNode {
+  return {
+    id: newNodeId("video"),
+    type: "video",
+    title: "视频",
+    position: { x: pos.x - 140, y: pos.y - 140 },
+    width: 280,
+    height: 280,
+    metadata: {
+      prompt: "",
+      status: "idle",
+    },
+  };
 }
 
 function makeMediaNode(pos: CanvasPosition, kind: UploadKind, media: { url: string; width: number; height: number; mimeType: string, filename?: string }): CanvasNode {
@@ -247,8 +352,7 @@ function nodeTypeIcon(type: CanvasNodeType) {
   if (type === "group") return "🗂️";
   if (type === "image") return "🖼️";
   if (type === "video") return "🎬";
-  if (type === "imageGen") return "✨";
-  if (type === "videoGen") return "🎥";
+
   return "✏️";
 }
 
@@ -256,8 +360,7 @@ function nodeTypeColor(type: CanvasNodeType) {
   if (type === "group") return "#a1a1aa";
   if (type === "image") return "#60a5fa";
   if (type === "video") return "#f472b6";
-  if (type === "imageGen") return "#facc15";
-  if (type === "videoGen") return "#a78bfa";
+
   return "#6ee7b7";
 }
 
@@ -287,6 +390,7 @@ export default function CanvasBoardPage() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const uploadTargetNodeRef = useRef<string | null>(null);
 
   // Interaction refs — never trigger re-render
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -334,6 +438,7 @@ export default function CanvasBoardPage() {
   const [imageAssets, setImageAssets] = useState<ImageGalleryRecord[]>([]);
   const [videoAssets, setVideoAssets] = useState<VideoGalleryRecord[]>([]);
   const [textAssets, setTextAssets] = useState<TextAsset[]>([]);
+  const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState("");
   const [assetNotice, setAssetNotice] = useState("");
@@ -405,6 +510,13 @@ export default function CanvasBoardPage() {
     setQuickAddBar(null);
     setEditingNodeTitleId(null);
   }, []);
+
+  const currentImageNodeDefaults = useCallback(() => ({
+    modelId: "gpt-image-2" as ImageModelId,
+    aspectRatio: "4:3" as ImageAspectRatio,
+    imageSize: "1K" as ImageSizeTier,
+    gptImageQuality: imageSettings.gptImageQuality,
+  }), [imageSettings.gptImageQuality]);
 
   const loadTextAssets = useCallback(() => {
     try {
@@ -507,6 +619,20 @@ export default function CanvasBoardPage() {
   }, [loadTextAssets]);
 
   useEffect(() => {
+    let cancelled = false;
+    void fetchWorkspaceSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) setImageSettings(snapshot.imageWorkspace);
+      })
+      .catch(() => {
+        if (!cancelled) setImageSettings(DEFAULT_IMAGE_SETTINGS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!assetDrawer.open) return;
     let cancelled = false;
     setAssetLoading(true);
@@ -549,15 +675,27 @@ export default function CanvasBoardPage() {
     const onPointerMove = (e: PointerEvent) => {
       // Connection draft — update position and snap to nearest port
       if (connectionDraftRef.current) {
+        const draft = connectionDraftRef.current;
         const rawWorld = screenToWorld(e.clientX, e.clientY);
-        const snap = nodeNear(nodesRef.current, rawWorld, connectionDraftRef.current.fromNodeId);
+        const snap =
+          draft.mode === "fromOutput"
+            ? draft.fromNodeId
+              ? findConnectionTarget(nodesRef.current, rawWorld, draft.fromNodeId, connectionsRef.current)
+              : null
+            : findConnectionSource(nodesRef.current, rawWorld, draft.anchorNodeId, connectionsRef.current);
         const snapNode = snap ? nodesRef.current.find((n) => n.id === snap.nodeId) : null;
-        const snappedPos = snapNode ? getPortPos(snapNode, snap!.side) : rawWorld;
+        const snappedPos = snapNode && snap
+          ? draft.mode === "fromOutput"
+            ? getInputPortPos(snapNode, snap.targetPort)
+            : getOutputPortPos(snapNode)
+          : rawWorld;
         const next: ConnectionDraft = {
-          ...connectionDraftRef.current,
+          ...draft,
           current: snappedPos,
-          targetNodeId: snap?.nodeId ?? null,
-          targetSide: snap?.side ?? null,
+          fromNodeId: draft.mode === "fromOutput" ? draft.fromNodeId : snap?.nodeId ?? null,
+          targetNodeId: draft.mode === "fromOutput" ? snap?.nodeId ?? null : draft.anchorNodeId,
+          targetPort: snap?.targetPort ?? null,
+          message: snap?.targetPort ? "将建立连线" : draft.mode === "toInput" ? "拖到素材或生成节点输出点" : "拖到生成节点输入点",
         };
         connectionDraftRef.current = next;
         setConnectionDraft(next);
@@ -572,7 +710,7 @@ export default function CanvasBoardPage() {
         let dy = (e.clientY - d.startY) / vp.k;
         if (Math.abs(dx) > 1 || Math.abs(dy) > 1) d.moved = true;
 
-        let newGuides: SmartGuide[] = [];
+        const newGuides: SmartGuide[] = [];
         const draggedNode = nodesRef.current.find(n => n.id === d.nodeId);
         
         if (draggedNode && d.moved) {
@@ -682,11 +820,16 @@ export default function CanvasBoardPage() {
       setSmartGuides([]);
       // Finish connection
       const draft = connectionDraftRef.current;
-      if (draft?.targetNodeId) {
-        const exists = connectionsRef.current.some((c) => c.fromNodeId === draft.fromNodeId && c.toNodeId === draft.targetNodeId);
-        if (!exists) {
+      if (draft?.fromNodeId && draft.targetNodeId && draft.targetPort) {
+        const fromNodeId = draft.fromNodeId;
+        const targetNodeId = draft.targetNodeId;
+        const targetPort = draft.targetPort;
+        const from = nodesRef.current.find((n) => n.id === fromNodeId);
+        const to = nodesRef.current.find((n) => n.id === targetNodeId);
+        const inferred = from && to ? inferTargetPort(from, to, connectionsRef.current) : { targetPort: null, reason: "节点不存在" };
+        if (inferred.targetPort === targetPort) {
           historyRef.current = [...historyRef.current.slice(-(MAX_HISTORY - 1)), { nodes: [...nodesRef.current], connections: [...connectionsRef.current] }];
-          setConnections((items) => [...items, { id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, fromNodeId: draft.fromNodeId, toNodeId: draft.targetNodeId! }]);
+          setConnections((items) => [...items, makeCanvasConnection(`conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, fromNodeId, targetNodeId, targetPort)]);
           markDirty();
         }
       }
@@ -859,7 +1002,37 @@ export default function CanvasBoardPage() {
     markDirty();
   }, [pushHistory, markDirty]);
 
-  const uploadMedia = async (file?: File, position = menuWorldRef.current ?? worldCenter()) => {
+  const appendImageNodeWithSelection = useCallback((position: CanvasPosition) => {
+    const node = makeEmptyImageNode(position, currentImageNodeDefaults());
+    pushHistory();
+    const nextNode = snapToGridRef.current ? snapNode(node) : node;
+    const selectedSources = nodesRef.current.filter((item) => selectedNodeIds.has(item.id));
+    const newConnections: CanvasConnection[] = [];
+    const simulatedConnections = [...connectionsRef.current];
+    for (const source of selectedSources) {
+      const inferred = inferTargetPort(source, nextNode, simulatedConnections);
+      if (!inferred.targetPort) continue;
+      const conn = makeCanvasConnection(
+        `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        source.id,
+        nextNode.id,
+        inferred.targetPort,
+      );
+      simulatedConnections.push(conn);
+      newConnections.push(conn);
+    }
+    setNodes((items) => [...items, nextNode]);
+    if (newConnections.length > 0) {
+      setConnections((items) => [...items, ...newConnections]);
+    }
+    setSelectedNodeIds(new Set([nextNode.id]));
+    setSelectedConnectionId(null);
+    setConnectionDraft(null);
+    setQuickAddBar(null);
+    markDirty();
+  }, [currentImageNodeDefaults, markDirty, pushHistory, selectedNodeIds]);
+
+  const uploadMedia = async (file?: File, position = menuWorldRef.current ?? worldCenter(), targetNodeId?: string | null) => {
     if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/"))) return;
     const kind: UploadKind = file.type.startsWith("video/") ? "video" : "image";
     setUploading(true); setSaveStatus("saving");
@@ -875,7 +1048,31 @@ export default function CanvasBoardPage() {
       const objectUrl = URL.createObjectURL(file);
       const size = kind === "video" ? await readVideoSize(objectUrl) : await readImageSize(objectUrl);
       URL.revokeObjectURL(objectUrl);
-      appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: file.type || (kind === "video" ? "video/mp4" : "image/png"), filename: file.name }));
+      
+      if (targetNodeId) {
+        pushHistory();
+        const displaySize = fitMediaSize(size, 360, 300);
+        setNodes((items) => items.map((n) => n.id === targetNodeId ? {
+          ...n,
+          title: file.name,
+          width: displaySize.width,
+          height: displaySize.height,
+          metadata: {
+            ...n.metadata,
+            source: "upload",
+            filename: file.name,
+            imageUrl: kind === "image" ? data.publicUrl : n.metadata?.imageUrl,
+            videoUrl: kind === "video" ? data.publicUrl : n.metadata?.videoUrl,
+            naturalWidth: size.width,
+            naturalHeight: size.height,
+            mimeType: file.type || (kind === "video" ? "video/mp4" : "image/png"),
+            status: "success",
+          }
+        } : n));
+        markDirty();
+      } else {
+        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: file.type || (kind === "video" ? "video/mp4" : "image/png"), filename: file.name }));
+      }
     } catch { setSaveStatus("error"); }
     finally {
       setUploading(false);
@@ -885,19 +1082,51 @@ export default function CanvasBoardPage() {
     }
   };
 
-  const updateNodeMetadata = (nodeId: string, key: "text" | "prompt", value: string) => {
-    setNodes((items) => items.map((n) => (n.id === nodeId ? { ...n, metadata: { ...n.metadata, [key]: value } } : n)));
+  const patchNode = useCallback((nodeId: string, updater: (node: CanvasNode) => CanvasNode) => {
+    setNodes((items) => items.map((node) => (node.id === nodeId ? updater(node) : node)));
     markDirty();
+  }, [markDirty]);
+
+  const updateNodeMetadata = (
+    nodeId: string,
+    key: "text" | "prompt",
+    value: string,
+  ) => {
+    patchNode(nodeId, (node) => ({ ...node, metadata: { ...node.metadata, [key]: value } }));
   };
+
+  const updateImageGenNodeSettings = useCallback((
+    nodeId: string,
+    patch: Partial<NonNullable<CanvasNode["metadata"]>>,
+  ) => {
+    patchNode(nodeId, (node) => {
+      const nextMetadata = { ...node.metadata, ...patch };
+      if (patch.modelId && patch.modelId !== "gpt-image-2") {
+        delete nextMetadata.gptImageQuality;
+      }
+      if (patch.modelId === "gpt-image-2" && !nextMetadata.gptImageQuality) {
+        nextMetadata.gptImageQuality = imageSettings.gptImageQuality;
+      }
+      return { ...node, metadata: nextMetadata };
+    });
+  }, [imageSettings.gptImageQuality, patchNode]);
 
   const updateNodeTitle = (nodeId: string, value: string) => {
     setNodes((items) => items.map((n) => (n.id === nodeId ? { ...n, title: value.trim() || "未命名" } : n)));
     markDirty();
   };
 
+  const deleteConnectionById = useCallback((connectionId: string) => {
+    pushHistory();
+    setConnections((items) => items.filter((x) => x.id !== connectionId));
+    setSelectedConnectionId(null);
+    setMenu(null);
+    markDirty();
+  }, [pushHistory, markDirty]);
+
   const deleteSelected = useCallback(() => {
     if (selectedConnectionId) {
-      pushHistory(); setConnections((c) => c.filter((x) => x.id !== selectedConnectionId)); setSelectedConnectionId(null); markDirty(); return;
+      deleteConnectionById(selectedConnectionId); return;
     }
     if (selectedNodeIds.size > 0) {
       pushHistory();
@@ -906,7 +1135,7 @@ export default function CanvasBoardPage() {
       setConnections((c) => c.filter((x) => !ids.has(x.fromNodeId) && !ids.has(x.toNodeId)));
       setSelectedNodeIds(new Set()); markDirty();
     }
-  }, [selectedConnectionId, selectedNodeIds, pushHistory, markDirty]);
+  }, [deleteConnectionById, selectedConnectionId, selectedNodeIds, pushHistory, markDirty]);
 
   const deleteNodeById = useCallback((nodeId: string) => {
     pushHistory();
@@ -944,7 +1173,7 @@ export default function CanvasBoardPage() {
     const newConns: CanvasConnection[] = [];
     for (const conn of connectionsRef.current) {
       const nf = idMap.get(conn.fromNodeId), nt = idMap.get(conn.toNodeId);
-      if (nf && nt) newConns.push({ id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, fromNodeId: nf, toNodeId: nt });
+      if (nf && nt) newConns.push(makeCanvasConnection(`conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, nf, nt, conn.targetPort));
     }
     setNodes((items) => [...items, ...newNodes]);
     if (newConns.length) setConnections((items) => [...items, ...newConns]);
@@ -981,7 +1210,7 @@ export default function CanvasBoardPage() {
     const newConns: CanvasConnection[] = [];
     for (const conn of connectionsRef.current) {
       const nf = idMap.get(conn.fromNodeId), nt = idMap.get(conn.toNodeId);
-      if (nf && nt) newConns.push({ id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, fromNodeId: nf, toNodeId: nt });
+      if (nf && nt) newConns.push(makeCanvasConnection(`conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, nf, nt, conn.targetPort));
     }
     setNodes((items) => [...items, ...newNodes]);
     if (newConns.length) setConnections((items) => [...items, ...newConns]);
@@ -1156,6 +1385,55 @@ export default function CanvasBoardPage() {
     }
   }, [saveTextAssets, textAssets]);
 
+  const runImageGenNode = useCallback(async (nodeId: string) => {
+    const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+    if (!targetNode || targetNode.type !== "image") return;
+    updateImageGenNodeSettings(nodeId, {
+      status: "running",
+      lastError: undefined,
+    });
+    try {
+      const res = await fetch("/api/canvas/image-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boardId, nodeId }),
+      });
+      let rawText = "";
+      try {
+        rawText = await res.text();
+      } catch (e) {
+        rawText = "Failed to read response body";
+      }
+
+      let data: Partial<CanvasImageGenerateResponse> & { error?: string } = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (e) {
+        // Not JSON
+      }
+
+      if (!res.ok || !data.sourceNode || !data.galleryRecord) {
+        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+      }
+      // Update the image node with the generated result
+      const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
+      setNodes(nextNodes);
+      nodesRef.current = nextNodes;
+      setImageAssets((items) => [data.galleryRecord!, ...items.filter((item) => item.id !== data.galleryRecord!.id)].slice(0, 24));
+      setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionId(null);
+      setAssetNotice("生图成功，已同步到图库");
+      markDirty();
+    } catch (error) {
+      updateImageGenNodeSettings(nodeId, {
+        status: "error",
+        lastRunAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : "无线画布生图失败",
+      });
+      setAssetNotice("");
+    }
+  }, [boardId, markDirty, updateImageGenNodeSettings]);
+
   const exportCanvas = useCallback(() => {
     const payload = {
       version: CANVAS_EXPORT_VERSION,
@@ -1235,7 +1513,7 @@ export default function CanvasBoardPage() {
           URL.revokeObjectURL(a.href);
         })
         .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
-    } else if (node.type === "text" || node.type === "imageGen" || node.type === "videoGen") {
+    } else if (node.type === "text" || (!node.metadata?.source && node.metadata?.prompt !== undefined)) {
       const text = node.type === "text" ? node.metadata?.text : node.metadata?.prompt;
       if (!text) return;
       const blob = new Blob([text], { type: "text/plain" });
@@ -1271,11 +1549,23 @@ export default function CanvasBoardPage() {
     markDirty();
   }, [setViewportBoth, markDirty]);
 
-  const startConnectionDrag = (nodeId: string, side: "left" | "right", e: React.PointerEvent) => {
+  const startOutputConnectionDrag = (nodeId: string, e: React.PointerEvent) => {
     e.stopPropagation();
     const fromNode = nodesRef.current.find((n) => n.id === nodeId);
-    const current = fromNode ? getPortPos(fromNode, side) : screenToWorld(e.clientX, e.clientY);
-    const draft: ConnectionDraft = { fromNodeId: nodeId, fromSide: side, current, targetNodeId: null, targetSide: null };
+    if (!fromNode || !canStartConnection(fromNode)) return;
+    const current = getOutputPortPos(fromNode);
+    const draft: ConnectionDraft = { mode: "fromOutput", anchorNodeId: nodeId, fromNodeId: nodeId, current, targetNodeId: null, targetPort: null, message: "拖到合法输入槽" };
+    connectionDraftRef.current = draft;
+    setConnectionDraft(draft);
+    setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionId(null);
+  };
+
+  const startInputConnectionDrag = (nodeId: string, e: React.PointerEvent) => {
+    e.stopPropagation();
+    const targetNode = nodesRef.current.find((n) => n.id === nodeId);
+    if (!targetNode || targetNode.type === "group" || getTargetPorts(targetNode).length === 0) return;
+    const current = getInputPortPos(targetNode, getTargetPorts(targetNode)[0]);
+    const draft: ConnectionDraft = { mode: "toInput", anchorNodeId: nodeId, fromNodeId: null, current, targetNodeId: nodeId, targetPort: null, message: "拖到素材或生成节点输出点" };
     connectionDraftRef.current = draft;
     setConnectionDraft(draft);
     setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionId(null);
@@ -1322,6 +1612,8 @@ export default function CanvasBoardPage() {
   const zoomPct = Math.round(viewport.k * 100);
   const canGroup = [...selectedNodeIds].filter((id) => nodeMap.get(id)?.type !== "group").length >= 2;
   const canUngroup = [...selectedNodeIds].some((id) => nodeMap.get(id)?.type === "group");
+  const connectedOutputs = useMemo(() => new Set(connections.map((conn) => conn.fromNodeId)), [connections]);
+  const connectedInputs = useMemo(() => new Set(connections.map((conn) => `${conn.toNodeId}:${conn.targetPort}`)), [connections]);
 
   const selectedNodes = useMemo(() => nodes.filter(n => selectedNodeIds.has(n.id)), [nodes, selectedNodeIds]);
   const hasMultiSelection = selectedNodes.length > 1;
@@ -1556,18 +1848,11 @@ export default function CanvasBoardPage() {
               <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeTextNode(quickAddBar.world))}>
                 <span className={styles.quickAddBtnIcon}>✏️</span>文本
               </button>
-              <button type="button" className={styles.quickAddBtn} onClick={() => { menuWorldRef.current = quickAddBar.world; setQuickAddBar(null); imageInputRef.current?.click(); }}>
+              <button type="button" className={styles.quickAddBtn} onClick={() => appendImageNodeWithSelection(quickAddBar.world)}>
                 <span className={styles.quickAddBtnIcon}>🖼️</span>图片
               </button>
-              <button type="button" className={styles.quickAddBtn} onClick={() => { menuWorldRef.current = quickAddBar.world; setQuickAddBar(null); videoInputRef.current?.click(); }}>
+              <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world))}>
                 <span className={styles.quickAddBtnIcon}>🎬</span>视频
-              </button>
-              <div className={styles.quickAddDivider} />
-              <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeGenerationNode("imageGen", quickAddBar.world))}>
-                <span className={styles.quickAddBtnIcon}>✨</span>生图
-              </button>
-              <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeGenerationNode("videoGen", quickAddBar.world))}>
-                <span className={styles.quickAddBtnIcon}>🎥</span>生视频
               </button>
             </div>
           )}
@@ -1579,17 +1864,43 @@ export default function CanvasBoardPage() {
               {connections.map((conn) => {
                 const from = nodeMap.get(conn.fromNodeId), to = nodeMap.get(conn.toNodeId);
                 if (!from || !to) return null;
+                const centerPos = connectionCenterPos(from, to, conn.targetPort);
                 return (
-                  <path key={conn.id}
-                    className={[styles.connectionPath, selectedConnectionId === conn.id ? styles.connectionPathActive : ""].join(" ")}
-                    d={bezierPath(from, to)}
-                    onPointerDown={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); setSelectedNodeIds(new Set()); setConnectionDraft(null); }}
-                  />
+                  <g key={conn.id} className={styles.connectionItem}>
+                    <path
+                      className={[styles.connectionPath, selectedConnectionId === conn.id ? styles.connectionPathActive : ""].join(" ")}
+                      d={bezierPath(from, to, conn.targetPort)}
+                      onPointerDown={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); setSelectedNodeIds(new Set()); setConnectionDraft(null); }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedConnectionId(conn.id);
+                        setSelectedNodeIds(new Set());
+                        setConnectionDraft(null);
+                        setMenu({ kind: "connection", x: e.clientX, y: e.clientY, connectionId: conn.id });
+                      }}
+                    />
+                    <g
+                      className={[styles.connectionBreakButton, selectedConnectionId === conn.id ? styles.connectionBreakButtonActive : ""].join(" ")}
+                      transform={`translate(${centerPos.x} ${centerPos.y})`}
+                      onPointerDown={(e) => { e.stopPropagation(); deleteConnectionById(conn.id); }}
+                      aria-label="断开连线"
+                    >
+                      <circle r="12" />
+                      <path d="M -5 -5 L 5 5 M 5 -5 L -5 5" />
+                    </g>
+                  </g>
                 );
               })}
-              {connectionDraft && nodeMap.get(connectionDraft.fromNodeId) && (
-                <path className={[styles.connectionPath, styles.connectionPathDraft].join(" ")} d={draftBezierPath(nodeMap.get(connectionDraft.fromNodeId)!, connectionDraft.fromSide, connectionDraft.current)} />
-              )}
+              {connectionDraft && nodeMap.get(connectionDraft.anchorNodeId) && (() => {
+                const anchor = nodeMap.get(connectionDraft.anchorNodeId)!;
+                return (
+                  <path
+                    className={[styles.connectionPath, styles.connectionPathDraft].join(" ")}
+                    d={draftBezierPath(getDraftStartPos(connectionDraft, anchor), connectionDraft.current)}
+                  />
+                );
+              })()}
             </svg>
 
             {/* Smart Guides */}
@@ -1685,8 +1996,36 @@ export default function CanvasBoardPage() {
                           <button type="button" title="创建副本" onClick={(e) => { e.stopPropagation(); duplicateSelected(); }}>复制</button>
                           <button type="button" title="删除组及内容" onClick={(e) => { e.stopPropagation(); deleteGroupWithChildren(node.id); }}>删除</button>
                         </>
+                      ) : (node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
+                        <>
+                          <button
+                            type="button"
+                            title="上传本地文件"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              uploadTargetNodeRef.current = node.id;
+                              if (node.type === "image") imageInputRef.current?.click();
+                              else videoInputRef.current?.click();
+                            }}
+                          >
+                            上传
+                          </button>
+                          <button
+                            type="button"
+                            title="执行生成"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void runImageGenNode(node.id);
+                            }}
+                            disabled={node.metadata?.status === "running"}
+                          >
+                            {node.metadata?.status === "success" ? "重新生成" : "生成"}
+                          </button>
+                          <button type="button" title="导出提示词" onClick={() => downloadNodeMedia(node)}>导出</button>
+                        </>
                       ) : (
                         <>
+                          <button type="button" title="加入素材库" onClick={() => void saveNodeToAssets(node.id)}>入库</button>
                           <button type="button" title="下载" onClick={() => downloadNodeMedia(node)}>下载</button>
                           <button type="button" title="放大" onClick={() => openNodeMedia(node)}>放大</button>
                         </>
@@ -1694,60 +2033,224 @@ export default function CanvasBoardPage() {
                     </div>
                   )}
 
-                  {/* Inner visual container — clips content to border-radius */}
-                  <div
-                    className={styles.nodeVisual}
-                    onPointerDown={(e) => {
-                      if (e.button !== 0) return;
-                      const target = e.target as HTMLElement;
-                      if (["TEXTAREA", "VIDEO", "INPUT", "BUTTON", "A"].includes(target.tagName)) return;
-                      e.stopPropagation();
-                      const cur = new Set(selectedNodeIds);
-                      if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
-                      startNodeDrag(node.id, e, cur);
-                    }}
-                  >
-                    {/* Content fills full card */}
-                    {node.type === "text" ? (
-                      <textarea
-                        className={styles.textNodeInput}
-                        value={node.metadata?.text ?? ""}
-                        placeholder="输入文本、提示词或分镜备注"
-                        onChange={(e) => updateNodeMetadata(node.id, "text", e.target.value)}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      />
-                    ) : node.type === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <div className={styles.imageFrame}>{node.metadata?.imageUrl && <img src={node.metadata.imageUrl} alt={node.title} draggable={false} />}</div>
-                    ) : node.type === "video" ? (
-                      <div className={styles.imageFrame}>{node.metadata?.videoUrl && <video src={node.metadata.videoUrl} controls className={styles.videoMedia} onPointerDown={(e) => e.stopPropagation()} />}</div>
-                    ) : node.type === "imageGen" || node.type === "videoGen" ? (
-                      <div className={styles.generatorBody}>
+                  {/* For image / video gen nodes: two separate visual cards (preview on top, composer below).
+                      For all other types: the standard single nodeVisual box. */}
+                  {(node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
+                    <>
+                      {/* ── Top card: standalone preview box ── */}
+                      <div
+                        className={styles.genImageBox}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          const target = e.target as HTMLElement;
+                          if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
+                          e.stopPropagation();
+                          const cur = new Set(selectedNodeIds);
+                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                          startNodeDrag(node.id, e, cur);
+                        }}
+                      >
+                        {node.type === "image" ? (
+                          /* ── image gen preview ── */
+                          node.metadata?.status === "running" ? (
+                            <div className={styles.generatorImageLoading}>
+                              <span className={styles.generatorSpinner} aria-hidden />
+                              <span className={styles.generatorLoadingLabel}>生成中</span>
+                            </div>
+                          ) : node.metadata?.previewImageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={node.metadata.previewImageUrl}
+                              alt="生成结果"
+                              className={styles.generatorPreviewImage}
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className={styles.generatorImagePlaceholder}>
+                              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                <rect x="3" y="3" width="18" height="18" rx="3" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                              {node.metadata?.status === "error" && node.metadata?.lastError ? (
+                                <span className={styles.generatorPlaceholderError}>{node.metadata.lastError}</span>
+                              ) : null}
+                            </div>
+                          )
+                        ) : (
+                          /* ── video gen preview ── */
+                          node.metadata?.status === "running" ? (
+                            <div className={styles.generatorImageLoading}>
+                              <span className={styles.generatorSpinner} aria-hidden />
+                              <span className={styles.generatorLoadingLabel}>生成中</span>
+                            </div>
+                          ) : node.metadata?.previewVideoUrl ? (
+                            <video
+                              src={node.metadata.previewVideoUrl}
+                              controls
+                              className={styles.generatorPreviewVideo}
+                            />
+                          ) : (
+                            <div className={styles.generatorImagePlaceholder}>
+                              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                <rect x="2" y="4" width="20" height="16" rx="3" />
+                                <polygon points="10 8 16 12 10 16" />
+                              </svg>
+                              {node.metadata?.status === "error" && node.metadata?.lastError ? (
+                                <span className={styles.generatorPlaceholderError}>{node.metadata.lastError}</span>
+                              ) : null}
+                            </div>
+                          )
+                        )}
+                      </div>
+
+                      {/* ── Bottom card: composer (prompt + toolbar) ── */}
+                      <div className={styles.genComposerBox} onPointerDown={(e) => e.stopPropagation()}>
                         <textarea
                           className={styles.generatorPrompt}
                           value={node.metadata?.prompt ?? ""}
-                          placeholder={node.type === "imageGen" ? "输入生图提示词" : "输入生视频提示词"}
+                          placeholder={node.type === "image" ? "描述任何你想要生成的内容" : "描述你想要生成的视频内容"}
                           onChange={(e) => updateNodeMetadata(node.id, "prompt", e.target.value)}
                           onPointerDown={(e) => e.stopPropagation()}
                         />
-                        <span className={styles.generatorBadge}>{node.type === "imageGen" ? "生图节点" : "生视频节点"}</span>
+                        <div className={styles.generatorToolbar}>
+                          {node.type === "image" ? (
+                            <>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.modelId ?? "gpt-image-2"}
+                                onChange={(e) =>
+                                  updateImageGenNodeSettings(node.id, {
+                                    modelId: e.target.value as ImageModelId,
+                                    gptImageQuality:
+                                      e.target.value === "gpt-image-2" ? (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality) : undefined,
+                                  })
+                                }
+                              >
+                                {IMAGE_MODEL_ORDER.map((id) => (
+                                  <option key={id} value={id}>
+                                    {imageSettings.models[id]?.label ?? id}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.aspectRatio ?? "4:3"}
+                                onChange={(e) => updateImageGenNodeSettings(node.id, { aspectRatio: e.target.value as ImageAspectRatio })}
+                              >
+                                {["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"].map((ratio) => (
+                                  <option key={ratio} value={ratio}>
+                                    {ratio === "auto" ? "自适应" : ratio}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.imageSize ?? "1K"}
+                                onChange={(e) => updateImageGenNodeSettings(node.id, { imageSize: e.target.value as ImageSizeTier })}
+                              >
+                                {["1K", "2K", "4K"].map((size) => (
+                                  <option key={size} value={size}>{size}</option>
+                                ))}
+                              </select>
+                              {(node.metadata?.modelId ?? "gpt-image-2") === "gpt-image-2" ? (
+                                <select
+                                  className={styles.generatorPill}
+                                  value={node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality}
+                                  onChange={(e) =>
+                                    updateImageGenNodeSettings(node.id, { gptImageQuality: e.target.value as GptImageQuality })
+                                  }
+                                >
+                                  {GPT_IMAGE_QUALITY_ORDER.map((quality) => (
+                                    <option key={quality} value={quality}>
+                                      {GPT_IMAGE_QUALITY_LABELS[quality]}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : null}
+                            </>
+                          ) : (
+                            /* video gen toolbar pills — placeholder for future video model options */
+                            <span className={styles.generatorPillLabel}>🎬 视频生成</span>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.generatorRunButton}
+                            disabled={node.metadata?.status === "running"}
+                            onClick={() => node.type === "image" ? void runImageGenNode(node.id) : undefined}
+                          >
+                            {node.metadata?.status === "running" ? (
+                              <span className={styles.generatorBtnSpinner} aria-hidden />
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                <path d="M4 12l8-8 8 8-1.41 1.41L13 7.83V20h-2V7.83l-5.59 5.58L4 12z" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    ) : null}
-                  </div>{/* end nodeVisual */}
+                    </>
+                  ) : (
+                    /* Standard single-box layout for text / image / video */
+                    <div
+                      className={styles.nodeVisual}
+                      onPointerDown={(e) => {
+                        if (e.button !== 0) return;
+                        const target = e.target as HTMLElement;
+                        if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
+                        e.stopPropagation();
+                        const cur = new Set(selectedNodeIds);
+                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                        startNodeDrag(node.id, e, cur);
+                      }}
+                    >
+                      {node.type === "text" ? (
+                        <textarea
+                          className={styles.textNodeInput}
+                          value={node.metadata?.text ?? ""}
+                          placeholder="输入文本、提示词或分镜备注"
+                          onChange={(e) => updateNodeMetadata(node.id, "text", e.target.value)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        />
+                      ) : node.type === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <div className={styles.imageFrame}>{node.metadata?.imageUrl && <img src={node.metadata.imageUrl} alt={node.title} draggable={false} />}</div>
+                      ) : node.type === "video" ? (
+                        <div className={styles.imageFrame}>{node.metadata?.videoUrl && <video src={node.metadata.videoUrl} controls className={styles.videoMedia} />}</div>
+                      ) : null}
+                    </div>
+                  )}{/* end node visual */}
 
-                  {/* Left + Right connection ports — outside nodeVisual so not clipped */}
+
+                  {/* Typed input ports on the left, single output port on the right */}
                   {!isGroup && (() => {
-                    const isFromNode = connectionDraft?.fromNodeId === node.id;
-                    const snapLeft  = connectionDraft?.targetNodeId === node.id && connectionDraft.targetSide === "left";
-                    const snapRight = connectionDraft?.targetNodeId === node.id && connectionDraft.targetSide === "right";
+                    const isFromNode = connectionDraft?.mode === "fromOutput" && connectionDraft.fromNodeId === node.id;
+                    const isInputAnchor = connectionDraft?.mode === "toInput" && connectionDraft.anchorNodeId === node.id;
+                    const targetPorts = getTargetPorts(node);
+                    const hasInputPort = targetPorts.length > 0;
+                    const inputSnap = connectionDraft?.targetNodeId === node.id && Boolean(connectionDraft.targetPort);
+                    const inputConnected = targetPorts.some((targetPort) => connectedInputs.has(`${node.id}:${targetPort}`));
                     return (
                       <>
-                        <button type="button" aria-label="左侧连线端口"
-                          className={[styles.connPort, styles.connPortLeft, (isFromNode && connectionDraft?.fromSide === "left") || snapLeft ? styles.connPortSnap : ""].filter(Boolean).join(" ")}
-                          onPointerDown={(e) => startConnectionDrag(node.id, "left", e)} />
-                        <button type="button" aria-label="右侧连线端口"
-                          className={[styles.connPort, styles.connPortRight, (isFromNode && connectionDraft?.fromSide === "right") || snapRight ? styles.connPortSnap : ""].filter(Boolean).join(" ")}
-                          onPointerDown={(e) => startConnectionDrag(node.id, "right", e)} />
+                        {hasInputPort ? (
+                          <button
+                            type="button"
+                            aria-label="输入端口"
+                            className={[
+                              styles.connPort,
+                              styles.connPortInput,
+                              inputSnap || isInputAnchor ? styles.connPortSnap : "",
+                              inputConnected ? styles.connPortConnected : "",
+                            ].filter(Boolean).join(" ")}
+                            onPointerDown={(e) => startInputConnectionDrag(node.id, e)}
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          aria-label="输出端口"
+                          className={[styles.connPort, styles.connPortOutput, isFromNode ? styles.connPortSnap : "", connectedOutputs.has(node.id) ? styles.connPortConnected : ""].filter(Boolean).join(" ")}
+                          onPointerDown={(e) => startOutputConnectionDrag(node.id, e)}
+                        />
                       </>
                     );
                   })()}
@@ -1790,8 +2293,15 @@ export default function CanvasBoardPage() {
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); videoInputRef.current?.click(); }}>上传视频</button>
               <button type="button" onClick={() => { openAssetDrawer(menu.world); setMenu(null); }}>打开素材库</button>
               <div className={styles.uploadMenuDivider} />
-              <button type="button" onClick={() => { appendNode(makeGenerationNode("imageGen", menu.world)); setMenu(null); }}>生图节点</button>
-              <button type="button" onClick={() => { appendNode(makeGenerationNode("videoGen", menu.world)); setMenu(null); }}>生视频节点</button>
+              <button type="button" onClick={() => { appendImageNodeWithSelection(menu.world); setMenu(null); }}>图片节点</button>
+              <button type="button" onClick={() => { appendNode(makeEmptyVideoNode(menu.world)); setMenu(null); }}>视频节点</button>
+            </div>
+          )}
+
+          {/* Connection right-click */}
+          {menu?.kind === "connection" && (
+            <div className={styles.uploadMenu} style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
+              <button type="button" className={styles.uploadMenuDanger} onClick={() => deleteConnectionById(menu.connectionId)}>断开连线</button>
             </div>
           )}
 
@@ -1816,6 +2326,14 @@ export default function CanvasBoardPage() {
               <div className={styles.uploadMenu} style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
                 {multiSelected && canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}>🗂️ 打组选中 (Ctrl+G)</button>}
                 {multiSelected && canGroup && <div className={styles.uploadMenuDivider} />}
+                {(nodeData?.type === "image" || nodeData?.type === "video") && nodeData?.metadata?.source !== "upload" ? (
+                  <>
+                    <button type="button" onClick={() => { void runImageGenNode(nodeId); setMenu(null); }}>
+                      {nodeData.metadata?.status === "success" ? "✨ 重新生成" : "✨ 生成"}
+                    </button>
+                    <div className={styles.uploadMenuDivider} />
+                  </>
+                ) : null}
                 <button type="button" onClick={() => { setEditingNodeTitleId(nodeId); setMenu(null); }}>✏️ 重命名</button>
                 <button type="button" onClick={() => { duplicateNodes(new Set([nodeId])); setMenu(null); }}>📋 复制节点 (Ctrl+D)</button>
                 <div className={styles.uploadMenuDivider} />
@@ -1833,6 +2351,7 @@ export default function CanvasBoardPage() {
             <button type="button" className={styles.toolbarIconBtn} onClick={redoLast} title="重做 (Ctrl+Y)">↷</button>
             <div className={styles.toolbarDivider} />
             <button type="button" className={[styles.toolbarTextBtn, minimapVisible ? styles.toolbarBtnActive : ""].join(" ")} onClick={() => setMinimapVisible((v) => !v)} title="小地图">小地图</button>
+            <button type="button" className={styles.toolbarTextBtn} onClick={fitToView} title="适配全部节点">适配</button>
             <button type="button" className={styles.toolbarIconBtn} onClick={() => zoomBy(-0.15)} title="缩小 (Ctrl+−)">−</button>
             <input
               className={styles.zoomSlider}
@@ -1938,16 +2457,17 @@ export default function CanvasBoardPage() {
           {/* Status hint */}
           <div className={styles.statusPanel}>
             <div className={styles.statusText}>
-              {connectionDraft ? "拖到另一个节点松开完成连线 · Esc 取消"
+              {connectionDraft ? `${connectionDraft.message ?? "拖到合法输入槽"} · Esc 取消`
+                : selectedConnectionId ? "已选连线 · 点红叉或按 Delete"
                 : selectedNodeIds.size > 1 ? `已选 ${selectedNodeIds.size} 个 · 右键菜单进行打组/删除等操作 · Ctrl+G 打组`
                 : spacePanMode ? "Space 平移模式 — 拖拽移动画布"
                 : "拖拽框选 · 双击添加节点 · 右键菜单 · Ctrl+Z 撤销"}
             </div>
           </div>
 
-          <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => void uploadMedia(e.target.files?.[0])} />
-          <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => void uploadMedia(e.target.files?.[0])} />
-          <input ref={mediaInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => void uploadMedia(e.target.files?.[0])} />
+          <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
+          <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
+          <input ref={mediaInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
           <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importCanvasFile(e.target.files?.[0])} />
         </div>
       </section>

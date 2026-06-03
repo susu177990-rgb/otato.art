@@ -7,7 +7,17 @@ import type {
   CanvasNode,
   CanvasViewport,
 } from "@/lib/canvas/types";
+import { normalizeConnectionPorts } from "@/lib/canvas/connection-rules";
 import { DEFAULT_CANVAS_VIEWPORT, emptyCanvasBoardData } from "@/lib/canvas/types";
+import {
+  DEFAULT_IMAGE_SETTINGS,
+  GPT_IMAGE_QUALITY_ORDER,
+  IMAGE_MODEL_ORDER,
+  type GptImageQuality,
+  type ImageAspectRatio,
+  type ImageModelId,
+  type ImageSizeTier,
+} from "@/lib/image-workspace";
 
 type CanvasBoardRow = {
   id: string;
@@ -35,9 +45,13 @@ function normalizeViewport(value: unknown): CanvasViewport {
 
 function normalizeNode(value: unknown): CanvasNode | null {
   if (!isObject(value)) return null;
+  // Auto-migrate legacy gen node types
+  let rawType = value.type;
+  if (rawType === "imageGen") rawType = "image";
+  if (rawType === "videoGen") rawType = "video";
   const type =
-    value.type === "image" || value.type === "text" || value.type === "video" || value.type === "imageGen" || value.type === "videoGen" || value.type === "group"
-      ? value.type
+    rawType === "image" || rawType === "text" || rawType === "video" || rawType === "group"
+      ? rawType
       : null;
   const id = typeof value.id === "string" ? value.id : "";
   if (!type || !id) return null;
@@ -49,6 +63,10 @@ function normalizeNode(value: unknown): CanvasNode | null {
   const videoUrl = typeof metadata.videoUrl === "string" ? metadata.videoUrl : undefined;
   const fallbackWidth = type === "image" || type === "video" ? 280 : type === "group" ? 400 : 260;
   const fallbackHeight = type === "image" || type === "video" ? 220 : type === "group" ? 300 : 150;
+  const modelId = normalizeImageModelId(metadata.modelId);
+  const aspectRatio = normalizeImageAspectRatio(metadata.aspectRatio);
+  const imageSize = normalizeImageSizeTier(metadata.imageSize);
+  const gptImageQuality = normalizeGptImageQuality(metadata.gptImageQuality);
   return {
     id,
     type,
@@ -67,15 +85,57 @@ function normalizeNode(value: unknown): CanvasNode | null {
       source: metadata.source === "upload" ? "upload" : metadata.source === "manual" ? "manual" : undefined,
       children: Array.isArray(metadata.children) ? metadata.children.filter((c): c is string => typeof c === "string") : undefined,
       parentId: typeof metadata.parentId === "string" ? metadata.parentId : undefined,
+      modelId: (type === "image" || type === "video") ? modelId : undefined,
+      aspectRatio: (type === "image" || type === "video") ? aspectRatio : undefined,
+      imageSize: (type === "image" || type === "video") ? imageSize : undefined,
+      gptImageQuality: (type === "image" || type === "video") && modelId === "gpt-image-2" ? gptImageQuality : undefined,
+      status: (type === "image" || type === "video") ? normalizeImageNodeStatus(metadata.status) : undefined,
+      lastRunAt: (type === "image" || type === "video") && typeof metadata.lastRunAt === "string" ? metadata.lastRunAt : undefined,
+      lastError: (type === "image" || type === "video") && typeof metadata.lastError === "string" ? metadata.lastError : undefined,
+      previewImageUrl: type === "image" && typeof metadata.previewImageUrl === "string" ? metadata.previewImageUrl : undefined,
+      previewVideoUrl: type === "video" && typeof metadata.previewVideoUrl === "string" ? metadata.previewVideoUrl : undefined,
     },
   };
+}
+
+function normalizeImageModelId(value: unknown): ImageModelId {
+  return IMAGE_MODEL_ORDER.includes(value as ImageModelId) ? (value as ImageModelId) : "gpt-image-2";
+}
+
+function normalizeImageAspectRatio(value: unknown): ImageAspectRatio {
+  switch (value) {
+    case "auto":
+    case "1:1":
+    case "2:3":
+    case "3:2":
+    case "3:4":
+    case "4:3":
+    case "9:16":
+    case "16:9":
+    case "21:9":
+      return value;
+    default:
+      return "4:3";
+  }
+}
+
+function normalizeImageSizeTier(value: unknown): ImageSizeTier {
+  return value === "1K" || value === "2K" || value === "4K" ? value : "1K";
+}
+
+function normalizeGptImageQuality(value: unknown): GptImageQuality {
+  return GPT_IMAGE_QUALITY_ORDER.includes(value as GptImageQuality)
+    ? (value as GptImageQuality)
+    : DEFAULT_IMAGE_SETTINGS.gptImageQuality;
+}
+
+function normalizeImageNodeStatus(value: unknown): "idle" | "running" | "success" | "error" {
+  return value === "running" || value === "success" || value === "error" ? value : "idle";
 }
 
 function defaultNodeTitle(type: CanvasNode["type"]): string {
   if (type === "image") return "图片";
   if (type === "video") return "视频";
-  if (type === "imageGen") return "生图节点";
-  if (type === "videoGen") return "生视频节点";
   if (type === "group") return "素材组";
   return "文本";
 }
@@ -90,13 +150,34 @@ function normalizePosition(value: unknown) {
   };
 }
 
-function normalizeConnection(value: unknown, nodeIds: Set<string>): CanvasConnection | null {
+function normalizeConnection(value: unknown, nodeMap: Map<string, CanvasNode>, existing: CanvasConnection[]): CanvasConnection | null {
   if (!isObject(value)) return null;
   const id = typeof value.id === "string" ? value.id : "";
   const fromNodeId = typeof value.fromNodeId === "string" ? value.fromNodeId : "";
   const toNodeId = typeof value.toNodeId === "string" ? value.toNodeId : "";
-  if (!id || !nodeIds.has(fromNodeId) || !nodeIds.has(toNodeId) || fromNodeId === toNodeId) return null;
-  return { id, fromNodeId, toNodeId };
+  const from = nodeMap.get(fromNodeId);
+  const to = nodeMap.get(toNodeId);
+  if (!id || !from || !to || fromNodeId === toNodeId) return null;
+  return normalizeConnectionPorts(
+    {
+      id,
+      fromNodeId,
+      toNodeId,
+      sourcePort: value.sourcePort === "output" ? "output" : undefined,
+      targetPort:
+        value.targetPort === "source" ||
+        value.targetPort === "prompt" ||
+        value.targetPort === "imageReference" ||
+        value.targetPort === "firstFrame" ||
+        value.targetPort === "lastFrame" ||
+        value.targetPort === "videoReference"
+          ? value.targetPort
+          : undefined,
+    },
+    from,
+    to,
+    existing
+  );
 }
 
 function isUnsafeMediaString(value: string): boolean {
@@ -119,10 +200,14 @@ function assertNoInlineMedia(value: unknown): void {
 export function normalizeBoardData(value: unknown): CanvasBoardData {
   if (!isObject(value)) return emptyCanvasBoardData();
   const nodes = Array.isArray(value.nodes) ? value.nodes.map(normalizeNode).filter((node): node is CanvasNode => Boolean(node)) : [];
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const connections = Array.isArray(value.connections)
-    ? value.connections.map((item) => normalizeConnection(item, nodeIds)).filter((conn): conn is CanvasConnection => Boolean(conn))
-    : [];
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const connections: CanvasConnection[] = [];
+  if (Array.isArray(value.connections)) {
+    for (const item of value.connections) {
+      const conn = normalizeConnection(item, nodeMap, connections);
+      if (conn) connections.push(conn);
+    }
+  }
   return {
     nodes,
     connections,

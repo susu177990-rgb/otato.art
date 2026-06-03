@@ -109,6 +109,41 @@
   stroke-width: 2.5;
 }
 
+.connectionBreakButton {
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.connectionBreakButton circle {
+  fill: rgba(127, 29, 29, 0.94);
+  stroke: rgba(254, 202, 202, 0.86);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.42));
+  transition: fill 120ms ease, stroke 120ms ease, transform 120ms ease;
+}
+
+.connectionBreakButton path {
+  fill: none;
+  stroke: #fecaca;
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.connectionItem:hover .connectionBreakButton,
+.connectionBreakButtonActive {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.connectionBreakButton:hover circle {
+  fill: rgba(185, 28, 28, 0.98);
+  stroke: #fee2e2;
+  transform: scale(1.08);
+}
+
 .node {
   position: absolute;
   /* No overflow:hidden here — ports and resize handles must be visible outside the box.
@@ -222,7 +257,7 @@
   user-select: none;
 }
 
-/* ─── Connection ports (left + right, outside node border) ─── */
+/* ─── Typed connection ports ─── */
 .connPort {
   position: absolute;
   top: 50%;
@@ -248,12 +283,13 @@
   border-radius: 999px;
 }
 
-.connPortLeft  { left:  -7px; }
-.connPortRight { right: -7px; }
+.connPortInput { left: -7px; }
+.connPortOutput { right: -7px; }
 
 /* Show ports on node hover or when node is selected */
 .node:hover .connPort,
-.nodeActive .connPort {
+.nodeActive .connPort,
+.connPortConnected {
   opacity: 1;
   transform: translateY(-50%) scale(1);
 }
@@ -353,35 +389,299 @@
   display: block;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   imageGen node: two-card split layout (image box on top, composer on bottom)
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Top card — image preview */
+.genImageBox {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(10, 10, 11, 0.94);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.nodeActive .genImageBox {
+  border-color: rgba(250, 250, 250, 0.55);
+  box-shadow: 0 0 0 2px rgba(250, 250, 250, 0.18), 0 8px 40px rgba(0, 0, 0, 0.44);
+}
+
+.nodeConnectTarget .genImageBox {
+  border-color: rgba(110, 231, 183, 0.72);
+}
+
+/* Bottom card — composer (prompt + toolbar) */
+.genComposerBox {
+  position: absolute;
+  top: calc(100% + 24px);
+  left: 50%;
+  transform: translate(-50%, -8px);
+  width: 680px;
+  height: 140px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(24, 24, 27, 0.96);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  
+  /* Hidden by default, shown only when node is selected */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 200ms ease, visibility 200ms ease, transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nodeActive .genComposerBox {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+
 .generatorBody {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  overflow: hidden;
+}
+
+
+/* ─── Top image preview area ─── */
+.generatorImageArea {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.generatorPreviewImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.generatorPreviewVideo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.generatorImagePlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  color: #3f3f46;
+  padding: 16px;
+  text-align: center;
+}
+
+.generatorPlaceholderError {
+  color: #fca5a5;
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 200px;
+  word-break: break-word;
+}
+
+.generatorImageLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+}
+
+.generatorLoadingLabel {
+  color: #a1a1aa;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.generatorSpinner {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(250, 204, 21, 0.8);
+  animation: genSpin 0.8s linear infinite;
+}
+
+@keyframes genSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Bottom composer area (prompt + toolbar) ─── */
+.generatorComposer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .generatorPrompt {
-  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
   min-height: 0;
+  flex: 1 1 0;
   border: 0;
   background: transparent;
   color: #e4e4e7;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.6;
   outline: none;
   resize: none;
+  padding: 8px 12px 4px;
+  overflow-y: auto;
 }
 
 .generatorPrompt::placeholder {
-  color: #3f3f46;
+  color: #52525b;
 }
 
+/* Toolbar row: selects + run button */
+.generatorToolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.generatorToolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Pill-style select (model, ratio, size, quality) — mirrors image page composerSelect */
+.generatorPill {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 20px 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.04);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 8px 8px;
+  color: #d4d4d8;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.generatorPill:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.generatorPill:focus-visible {
+  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Static label pill for videoGen toolbar */
+.generatorPillLabel {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.04);
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Generate button: circular icon button pushed to the end */
+.generatorRunButton {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: #fafafa;
+  color: #09090b;
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease, transform 120ms ease;
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15);
+}
+
+.generatorRunButton:hover:not(:disabled) {
+  background: #e4e4e7;
+  transform: scale(1.06);
+}
+
+.generatorRunButton:disabled {
+  background: #3f3f46;
+  color: #71717a;
+  cursor: wait;
+  box-shadow: none;
+}
+
+.generatorBtnSpinner {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #71717a;
+  animation: genSpin 0.8s linear infinite;
+}
+
+/* Legacy badge (used for videoGen node) */
 .generatorBadge {
   flex-shrink: 0;
   align-self: flex-end;
-  margin-top: 6px;
+  margin: auto 10px 8px;
   padding: 2px 8px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 999px;
@@ -685,6 +985,7 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 120ms ease, color 120ms ease;
 }
 
