@@ -1,81 +1,99 @@
 import { NextRequest } from "next/server";
-import { randomUUID } from "crypto";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
-import type { VideoAspectRatio, VideoDurationSeconds, VideoModelId } from "@/lib/video-workspace";
-import { persistGeneratedVideoToStorage } from "@/lib/db/persist-generated-video";
-
-type SeedanceGenerateResponse = {
-  code?: number;
-  message?: string;
-  data?: { task_id?: string; status?: string; consumed_credits?: number };
-};
-
-type SeedanceStatusResponse = {
-  code?: number;
-  message?: string;
-  data?: {
-    task_id?: string;
-    status?: string;
-    response?: string[];
-    error_message?: string | null;
-  };
-};
+import {
+  generateUnifiedVideo,
+  VideoGenerationError,
+} from "@/lib/video-generation-service";
+import type {
+  UnifiedVideoGenerateRequest,
+  UnifiedVideoReference,
+  VideoAspectRatio,
+  VideoGenerationModeId,
+  VideoModelId,
+  VideoResolution,
+} from "@/lib/video-workspace";
 
 function mustBeVideoModelId(raw: unknown): VideoModelId {
   const v = String(raw ?? "");
-  if (v === "seedance-2.0" || v === "seedance-2.0-fast") return v;
-  return "seedance-2.0";
-}
-
-function mustBeAspectRatio(raw: unknown): VideoAspectRatio {
-  const v = String(raw ?? "");
-  if (v === "16:9" || v === "9:16" || v === "4:3" || v === "3:4") return v;
-  return "16:9";
-}
-
-function mustBeDuration(raw: unknown): VideoDurationSeconds {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (n === 5 || n === 10 || n === 15) return n;
-  return 10;
-}
-
-async function pollSeedanceVideoUrl(params: {
-  baseUrl: string;
-  apiKey: string;
-  taskId: string;
-  timeoutMs?: number;
-  intervalMs?: number;
-}): Promise<string> {
-  const timeoutMs = params.timeoutMs ?? 6 * 60_000;
-  const intervalMs = params.intervalMs ?? 1800;
-  const started = Date.now();
-
-  for (;;) {
-    if (Date.now() - started > timeoutMs) throw new Error("任务超时，请稍后重试");
-    const url = new URL(params.baseUrl.replace(/\/+$/, "") + "/status");
-    url.searchParams.set("task_id", params.taskId);
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: { Authorization: `Bearer ${params.apiKey}` },
-      cache: "no-store",
-    });
-    const data = (await res.json().catch(() => ({}))) as SeedanceStatusResponse;
-    if (!res.ok) {
-      const err = (data && typeof data === "object" && "error" in data ? (data as { error?: unknown }).error : undefined);
-      throw new Error(typeof err === "string" && err.trim() ? err : "查询任务失败");
-    }
-    const status = String(data.data?.status ?? "");
-    if (status === "SUCCESS") {
-      const videoUrl = data.data?.response?.[0]?.trim() ?? "";
-      if (!videoUrl) throw new Error("任务完成但未返回视频地址");
-      return videoUrl;
-    }
-    if (status === "FAILED") {
-      throw new Error(String(data.data?.error_message ?? "任务失败"));
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
+  switch (v) {
+    case "seedance-2.0":
+    case "seedance-2.0-fast":
+    case "seedance-1.5":
+    case "kling-3.0":
+    case "kling-2.6-motion":
+    case "veo-3.1":
+    case "veo-3.1-fast":
+    case "gemini-omni":
+      return v;
+    default:
+      return "seedance-2.0";
   }
+}
+
+function mustBeModeId(raw: unknown): VideoGenerationModeId {
+  const v = String(raw ?? "");
+  switch (v) {
+    case "text_to_video":
+    case "start_frame":
+    case "start_end_frame":
+    case "multi_image_reference":
+    case "motion_control":
+      return v;
+    default:
+      return "text_to_video";
+  }
+}
+
+function mustBeAspectRatio(raw: unknown): VideoAspectRatio | undefined {
+  const v = String(raw ?? "");
+  switch (v) {
+    case "1:1":
+    case "4:3":
+    case "3:4":
+    case "16:9":
+    case "9:16":
+    case "21:9":
+    case "9:21":
+      return v;
+    default:
+      return undefined;
+  }
+}
+
+function mustBeResolution(raw: unknown): VideoResolution | undefined {
+  const v = String(raw ?? "");
+  switch (v) {
+    case "480p":
+    case "720p":
+    case "1080p":
+    case "4k":
+      return v;
+    default:
+      return undefined;
+  }
+}
+
+function parseReferences(raw: unknown): UnifiedVideoReference[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const row = item as Record<string, unknown>;
+      return {
+        role:
+          row.role === "start_frame" ||
+          row.role === "end_frame" ||
+          row.role === "image_reference" ||
+          row.role === "motion_source_video"
+            ? row.role
+            : "image_reference",
+        url: String(row.url ?? "").trim(),
+        label: typeof row.label === "string" ? row.label : undefined,
+        mimeType: typeof row.mimeType === "string" ? row.mimeType : undefined,
+      } satisfies UnifiedVideoReference;
+    })
+    .filter((item) => item.url);
 }
 
 export async function POST(req: NextRequest) {
@@ -90,57 +108,57 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     prompt?: unknown;
     modelId?: unknown;
+    modeId?: unknown;
     aspectRatio?: unknown;
     duration?: unknown;
+    resolution?: unknown;
+    references?: unknown;
+    providerOptions?: unknown;
   };
 
   const prompt = String(body.prompt ?? "").trim();
   if (!prompt) return Response.json({ error: "提示词为空" }, { status: 400 });
 
   const modelId = mustBeVideoModelId(body.modelId);
+  const modeId = mustBeModeId(body.modeId);
   const aspectRatio = mustBeAspectRatio(body.aspectRatio);
-  const duration = mustBeDuration(body.duration);
+  const duration = typeof body.duration === "number" ? body.duration : Number(body.duration);
+  const resolution = mustBeResolution(body.resolution);
+  const references = parseReferences(body.references);
 
   const snapshot = await getWorkspaceSnapshot(supabase);
-  const model = snapshot.videoWorkspace.models[modelId];
-  const baseUrl = model.baseUrl.trim();
-  const apiKey = model.apiKey.trim();
-  const modelName = String(model.modelName ?? "").trim();
-
-  if (!baseUrl || !apiKey || !modelName) {
-    return Response.json({ error: "当前生视频模型未配置（Base URL / API Key / 模型名）" }, { status: 400 });
-  }
-
   try {
-    const generateUrl = baseUrl.replace(/\/+$/, "") + "/generate";
-    const res = await fetch(generateUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt,
-        aspect_ratio: aspectRatio,
-        duration,
-        model: modelName,
-      }),
+    const requestPayload: UnifiedVideoGenerateRequest = {
+      modelId,
+      modeId,
+      prompt,
+      durationSeconds: Number.isFinite(duration) ? duration : snapshot.videoWorkspace.uiDefaults.defaultDurationSeconds,
+      aspectRatio,
+      resolution,
+      references,
+      providerOptions:
+        body.providerOptions && typeof body.providerOptions === "object"
+          ? (body.providerOptions as Record<string, string | number | boolean | null | undefined>)
+          : undefined,
+    };
+    const result = await generateUnifiedVideo({
+      supabase,
+      userId: user.id,
+      workspaceSnapshot: snapshot,
+      request: requestPayload,
     });
-    const data = (await res.json().catch(() => ({}))) as SeedanceGenerateResponse;
-    if (!res.ok) {
-      const err = (data && typeof data === "object" && "error" in data ? (data as { error?: unknown }).error : undefined);
-      const msg = typeof err === "string" && err.trim() ? err : data.message;
-      throw new Error(String(msg || "提交任务失败"));
-    }
-    const taskId = String(data.data?.task_id ?? "").trim();
-    if (!taskId) throw new Error("接口未返回 task_id");
-
-    const remoteVideoUrl = await pollSeedanceVideoUrl({ baseUrl, apiKey, taskId });
-    const videoUrl = await persistGeneratedVideoToStorage(supabase, user.id, remoteVideoUrl, randomUUID());
-    return Response.json({ videoUrl, taskId });
+    return Response.json(result);
   } catch (error) {
+    if (error instanceof VideoGenerationError) {
+      const status =
+        error.code === "model_not_configured" || error.code === "contract_pending"
+          ? 400
+          : error.code === "invalid_mode" || error.code === "unsupported_capability"
+            ? 422
+            : 500;
+      return Response.json({ error: error.message, code: error.code }, { status });
+    }
     const message = error instanceof Error ? error.message : "生视频失败";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, code: "provider_submit_failed" }, { status: 500 });
   }
 }
-

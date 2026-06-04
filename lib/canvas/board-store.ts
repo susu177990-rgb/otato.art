@@ -18,6 +18,13 @@ import {
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
+import {
+  VIDEO_MODEL_ORDER,
+  type VideoAspectRatio,
+  type VideoGenerationModeId,
+  type VideoModelId,
+  type VideoResolution,
+} from "@/lib/video-workspace";
 
 type CanvasBoardRow = {
   id: string;
@@ -63,10 +70,15 @@ function normalizeNode(value: unknown): CanvasNode | null {
   const videoUrl = typeof metadata.videoUrl === "string" ? metadata.videoUrl : undefined;
   const fallbackWidth = type === "image" || type === "video" ? 280 : type === "group" ? 400 : 260;
   const fallbackHeight = type === "image" || type === "video" ? 220 : type === "group" ? 300 : 150;
-  const modelId = normalizeImageModelId(metadata.modelId);
+  const imageModelId = normalizeImageModelId(metadata.imageModelId ?? metadata.modelId);
   const aspectRatio = normalizeImageAspectRatio(metadata.aspectRatio);
   const imageSize = normalizeImageSizeTier(metadata.imageSize);
   const gptImageQuality = normalizeGptImageQuality(metadata.gptImageQuality);
+  const videoModelId = normalizeVideoModelId(metadata.videoModelId ?? metadata.modelId);
+  const videoModeId = normalizeVideoModeId(metadata.videoModeId);
+  const videoAspectRatio = normalizeVideoAspectRatio(metadata.videoAspectRatio ?? metadata.aspectRatio);
+  const videoResolution = normalizeVideoResolution(metadata.videoResolution);
+  const videoDurationSeconds = normalizeVideoDurationSeconds(metadata.videoDurationSeconds);
   return {
     id,
     type,
@@ -85,10 +97,15 @@ function normalizeNode(value: unknown): CanvasNode | null {
       source: metadata.source === "upload" ? "upload" : metadata.source === "manual" ? "manual" : undefined,
       children: Array.isArray(metadata.children) ? metadata.children.filter((c): c is string => typeof c === "string") : undefined,
       parentId: typeof metadata.parentId === "string" ? metadata.parentId : undefined,
-      modelId: (type === "image" || type === "video") ? modelId : undefined,
-      aspectRatio: (type === "image" || type === "video") ? aspectRatio : undefined,
-      imageSize: (type === "image" || type === "video") ? imageSize : undefined,
-      gptImageQuality: (type === "image" || type === "video") && modelId === "gpt-image-2" ? gptImageQuality : undefined,
+      imageModelId: type === "image" ? imageModelId : undefined,
+      aspectRatio: type === "image" ? aspectRatio : undefined,
+      imageSize: type === "image" ? imageSize : undefined,
+      gptImageQuality: type === "image" && imageModelId === "gpt-image-2" ? gptImageQuality : undefined,
+      videoModelId: type === "video" ? videoModelId : undefined,
+      videoModeId: type === "video" ? videoModeId : undefined,
+      videoAspectRatio: type === "video" ? videoAspectRatio : undefined,
+      videoResolution: type === "video" ? videoResolution : undefined,
+      videoDurationSeconds: type === "video" ? videoDurationSeconds : undefined,
       status: (type === "image" || type === "video") ? normalizeImageNodeStatus(metadata.status) : undefined,
       lastRunAt: (type === "image" || type === "video") && typeof metadata.lastRunAt === "string" ? metadata.lastRunAt : undefined,
       lastError: (type === "image" || type === "video") && typeof metadata.lastError === "string" ? metadata.lastError : undefined,
@@ -100,6 +117,23 @@ function normalizeNode(value: unknown): CanvasNode | null {
 
 function normalizeImageModelId(value: unknown): ImageModelId {
   return IMAGE_MODEL_ORDER.includes(value as ImageModelId) ? (value as ImageModelId) : "gpt-image-2";
+}
+
+function normalizeVideoModelId(value: unknown): VideoModelId {
+  return VIDEO_MODEL_ORDER.includes(value as VideoModelId) ? (value as VideoModelId) : "seedance-2.0";
+}
+
+function normalizeVideoModeId(value: unknown): VideoGenerationModeId {
+  switch (value) {
+    case "text_to_video":
+    case "start_frame":
+    case "start_end_frame":
+    case "multi_image_reference":
+    case "motion_control":
+      return value;
+    default:
+      return "text_to_video";
+  }
 }
 
 function normalizeImageAspectRatio(value: unknown): ImageAspectRatio {
@@ -119,6 +153,21 @@ function normalizeImageAspectRatio(value: unknown): ImageAspectRatio {
   }
 }
 
+function normalizeVideoAspectRatio(value: unknown): VideoAspectRatio {
+  switch (value) {
+    case "1:1":
+    case "4:3":
+    case "3:4":
+    case "16:9":
+    case "9:16":
+    case "21:9":
+    case "9:21":
+      return value;
+    default:
+      return "16:9";
+  }
+}
+
 function normalizeImageSizeTier(value: unknown): ImageSizeTier {
   return value === "1K" || value === "2K" || value === "4K" ? value : "1K";
 }
@@ -127,6 +176,23 @@ function normalizeGptImageQuality(value: unknown): GptImageQuality {
   return GPT_IMAGE_QUALITY_ORDER.includes(value as GptImageQuality)
     ? (value as GptImageQuality)
     : DEFAULT_IMAGE_SETTINGS.gptImageQuality;
+}
+
+function normalizeVideoResolution(value: unknown): VideoResolution {
+  switch (value) {
+    case "480p":
+    case "720p":
+    case "1080p":
+    case "4k":
+      return value;
+    default:
+      return "1080p";
+  }
+}
+
+function normalizeVideoDurationSeconds(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 5;
 }
 
 function normalizeImageNodeStatus(value: unknown): "idle" | "running" | "success" | "error" {

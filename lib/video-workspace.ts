@@ -1,34 +1,41 @@
 import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import {
+  VIDEO_MODEL_ORDER,
+  VIDEO_MODEL_REGISTRY,
+  getVideoModelDefinition,
+} from "@/lib/video-model-registry";
+import type {
+  UnifiedVideoReference,
+  VideoAspectRatio,
+  VideoCapabilitySet,
+  VideoGenerationModeId,
+  VideoModelDefinition,
+  VideoModelId,
+  VideoProviderOptions,
+  VideoResolution,
+} from "@/lib/video-core";
+import { VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS } from "@/lib/video-core";
 
-export type VideoModeId =
-  | "free"
-  | "cinematic-text-to-video"
-  | "storyboard-shot"
-  | "product-ad";
+export * from "@/lib/video-core";
+export { VIDEO_MODEL_ORDER, VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS, getVideoModelDefinition };
 
-export const VIDEO_MODES: ReadonlyArray<{ id: VideoModeId; label: string }> = [
+export type VideoPromptModeId =
+  | "free";
+
+export const VIDEO_MODES: ReadonlyArray<{ id: VideoPromptModeId; label: string }> = [
   { id: "free", label: "自由模式" },
-  { id: "cinematic-text-to-video", label: "电影镜头（文生视频）" },
-  { id: "storyboard-shot", label: "分镜镜头（动作+机位）" },
-  { id: "product-ad", label: "产品广告（镜头语言）" },
 ];
 
-export type SeedanceModelName = "seedance-2.0" | "seedance-2.0-fast";
 
-export type VideoModelId = "seedance-2.0" | "seedance-2.0-fast";
-
-export type VideoAspectRatio = "16:9" | "9:16" | "4:3" | "3:4";
-
-export type VideoDurationSeconds = 5 | 10 | 15;
 
 export interface VideoModelSettings {
   id: VideoModelId;
   label: string;
-  /** Seedance v2 base url, e.g. https://seedanceapi.org/v2 */
   baseUrl: string;
   apiKey: string;
-  /** Seedance model name, e.g. seedance-2.0 */
-  modelName: SeedanceModelName;
+  apiModelName: string;
+  enabled: boolean;
+  providerOptions: VideoProviderOptions;
 }
 
 export interface CustomVideoMode {
@@ -40,57 +47,51 @@ export interface VideoWorkspaceSettings {
   prompts: Record<string, string>;
   models: Record<VideoModelId, VideoModelSettings>;
   customModes: CustomVideoMode[];
+  coverImageUrlByMode: Record<string, string>;
+  uiDefaults: {
+    defaultModelId: VideoModelId;
+    defaultModeByModel: Partial<Record<VideoModelId, VideoGenerationModeId>>;
+    defaultAspectRatio: VideoAspectRatio;
+    defaultDurationSeconds: number;
+    defaultResolution: VideoResolution;
+  };
 }
 
-export const VIDEO_MODEL_ORDER: VideoModelId[] = ["seedance-2.0", "seedance-2.0-fast"];
+type LegacyVideoModelId = "seedance-2.0" | "seedance-2.0-fast";
+type LegacyVideoModelSettings = {
+  id?: string;
+  label?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  modelName?: string;
+};
 
-const CINEMATIC_TEXT_TO_VIDEO_PROMPT = `# 任务：文生视频（电影镜头）
-# 目标：生成一条可直接用于短剧/广告剪辑的镜头素材（真实镜头语言、明确机位运动、画面构图稳定）。
+type LegacyVideoWorkspaceSettings = {
+  prompts?: Record<string, string>;
+  models?: Record<LegacyVideoModelId, LegacyVideoModelSettings>;
+  customModes?: Array<{ id?: string; label?: string }>;
+  customPresets?: unknown;
+  presets?: unknown;
+  coverImageUrlByMode?: unknown;
+};
 
-## 1. 画面内容（主体/动作/环境）
-{{主体与动作（人物/道具/事件）}}
+function defaultModelSettings(modelId: VideoModelId): VideoModelSettings {
+  const model = VIDEO_MODEL_REGISTRY[modelId];
+  return {
+    id: modelId,
+    label: model.label,
+    baseUrl: "",
+    apiKey: "",
+    apiModelName: model.defaultApiModelName,
+    enabled: true,
+    providerOptions: {},
+  };
+}
 
-## 2. 镜头语言（机位/焦段/运动/节奏）
-{{机位与运动（推拉摇移跟/长短镜头节奏）}}
-
-## 3. 视觉风格（光线/质感/色彩/氛围）
-{{风格与氛围（光影、色温、颗粒、质感）}}
-
-## 4. 约束（禁止项/清晰度/稳定性）
-{{约束（不抖动、不变形、不要字幕水印等）}}`;
-
-const STORYBOARD_SHOT_PROMPT = `# 任务：分镜镜头生成（可直接匹配脚本）
-
-## 分镜脚本
-{{分镜脚本（发生了什么）}}
-
-## 镜头调度
-{{镜头调度（景别、机位、运动、对焦）}}
-
-## 画面风格
-{{画面风格（材质、光线、色彩）}}`;
-
-const PRODUCT_AD_PROMPT = `# 任务：产品广告镜头（短视频）
-
-## 产品与卖点
-{{产品与卖点}}
-
-## 镜头脚本（分镜/节奏）
-{{镜头脚本（开场→展示→特写→收尾）}}
-
-## 画面风格（灯光/材质/背景）
-{{画面风格}}`;
-
-export function defaultVideoModePrompt(id: VideoModeId): string {
+export function defaultVideoModePrompt(id: VideoPromptModeId): string {
   switch (id) {
     case "free":
       return "";
-    case "cinematic-text-to-video":
-      return CINEMATIC_TEXT_TO_VIDEO_PROMPT;
-    case "storyboard-shot":
-      return STORYBOARD_SHOT_PROMPT;
-    case "product-ad":
-      return PRODUCT_AD_PROMPT;
     default: {
       const _never: never = id;
       return _never;
@@ -98,72 +99,227 @@ export function defaultVideoModePrompt(id: VideoModeId): string {
   }
 }
 
-function seedanceModelDefaults(id: VideoModelId): VideoModelSettings {
-  const modelName: SeedanceModelName = id === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0";
-  return {
-    id,
-    label: id,
-    baseUrl: "https://seedanceapi.org/v2",
-    apiKey: "",
-    modelName,
-  };
-}
-
 export const DEFAULT_VIDEO_SETTINGS: VideoWorkspaceSettings = {
   customModes: [],
+  coverImageUrlByMode: {},
   prompts: {
     free: "",
-    "cinematic-text-to-video": CINEMATIC_TEXT_TO_VIDEO_PROMPT,
-    "storyboard-shot": STORYBOARD_SHOT_PROMPT,
-    "product-ad": PRODUCT_AD_PROMPT,
   },
-  models: {
-    "seedance-2.0": seedanceModelDefaults("seedance-2.0"),
-    "seedance-2.0-fast": seedanceModelDefaults("seedance-2.0-fast"),
+  models: Object.fromEntries(
+    VIDEO_MODEL_ORDER.map((id) => [id, defaultModelSettings(id)]),
+  ) as Record<VideoModelId, VideoModelSettings>,
+  uiDefaults: {
+    defaultModelId: "seedance-2.0",
+    defaultModeByModel: {
+      "seedance-2.0": "text_to_video",
+      "seedance-2.0-fast": "text_to_video",
+      "seedance-1.5": "text_to_video",
+      "kling-3.0": "text_to_video",
+      "kling-2.6-motion": "motion_control",
+      "veo-3.1": "text_to_video",
+      "veo-3.1-fast": "text_to_video",
+      "gemini-omni": "text_to_video",
+    },
+    defaultAspectRatio: "16:9",
+    defaultDurationSeconds: 5,
+    defaultResolution: "1080p",
   },
 };
 
-function mergeVideoModelSettings(
-  id: VideoModelId,
-  partial: unknown,
-): VideoModelSettings {
-  const baked = seedanceModelDefaults(id);
-  const p = partial && typeof partial === "object" ? (partial as Partial<VideoModelSettings>) : {};
-  const baseUrl = pickNonEmptyTrimmed(p.baseUrl, baked.baseUrl);
-  const apiKey = pickNonEmptyTrimmed(p.apiKey, baked.apiKey);
-  const modelNameRaw = pickNonEmptyTrimmed(p.modelName, baked.modelName);
-  const modelName: SeedanceModelName =
-    modelNameRaw === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0";
-  const label = pickNonEmptyTrimmed(p.label, baked.label);
-  return { id, label, baseUrl, apiKey, modelName };
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeProviderOptions(value: unknown): VideoProviderOptions {
+  if (!isObject(value)) return {};
+  const out: VideoProviderOptions = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (
+      raw === null ||
+      typeof raw === "string" ||
+      typeof raw === "number" ||
+      typeof raw === "boolean" ||
+      typeof raw === "undefined"
+    ) {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+function coerceVideoModelSettings(modelId: VideoModelId, value: unknown): VideoModelSettings {
+  const baked = defaultModelSettings(modelId);
+  const row = isObject(value) ? value : {};
+  return {
+    id: modelId,
+    label: pickNonEmptyTrimmed(row.label, baked.label),
+    baseUrl: pickNonEmptyTrimmed(row.baseUrl, baked.baseUrl),
+    apiKey: pickNonEmptyTrimmed(row.apiKey, baked.apiKey),
+    apiModelName: pickNonEmptyTrimmed(row.apiModelName ?? row.modelName, baked.apiModelName),
+    enabled: typeof row.enabled === "boolean" ? row.enabled : baked.enabled,
+    providerOptions: sanitizeProviderOptions(row.providerOptions),
+  };
+}
+
+function coercePromptsRecord(value: unknown): Record<string, string> {
+  if (!isObject(value)) return {};
+  const builtInIds = new Set<string>(VIDEO_MODES.map((mode) => mode.id));
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string") {
+      if (builtInIds.has(key) || key.startsWith("custom_video_")) {
+        out[key] = raw;
+      }
+    }
+  }
+  return out;
+}
+
+function coerceCoverImageUrlByMode(value: unknown): Record<string, string> {
+  if (!isObject(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string" && raw.trim()) out[key] = raw.trim();
+  }
+  return out;
+}
+
+function coerceVideoCustomModes(value: unknown): CustomVideoMode[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: CustomVideoMode[] = [];
+  for (const item of value) {
+    if (!isObject(item)) continue;
+    const id = String(item.id ?? "").trim();
+    const label = String(item.label ?? "").trim();
+    if (!id || !id.startsWith("custom_video_") || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      label: label || id,
+    });
+  }
+  return out;
+}
+
+function migrateCustomPresets(value: unknown): { modes: CustomVideoMode[]; prompts: Record<string, string> } {
+  const modes: CustomVideoMode[] = [];
+  const prompts: Record<string, string> = {};
+  if (!Array.isArray(value)) return { modes, prompts };
+  for (const item of value) {
+    if (!isObject(item)) continue;
+    const id = String(item.id ?? "").trim();
+    const label = String(item.label ?? "").trim() || id;
+    const promptTemplate = typeof item.promptTemplate === "string" ? item.promptTemplate : "";
+    if (!id || !promptTemplate.trim()) continue;
+    const nextId = id.startsWith("custom_video_") ? id : `custom_video_${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    modes.push({ id: nextId, label });
+    prompts[nextId] = promptTemplate;
+  }
+  return { modes, prompts };
+}
+
+function coerceUiDefaults(value: unknown): VideoWorkspaceSettings["uiDefaults"] {
+  const row = isObject(value) ? value : {};
+  const defaultModelId = VIDEO_MODEL_ORDER.includes(row.defaultModelId as VideoModelId)
+    ? (row.defaultModelId as VideoModelId)
+    : DEFAULT_VIDEO_SETTINGS.uiDefaults.defaultModelId;
+  const defaultModeByModel: Partial<Record<VideoModelId, VideoGenerationModeId>> = {
+    ...DEFAULT_VIDEO_SETTINGS.uiDefaults.defaultModeByModel,
+  };
+  if (isObject(row.defaultModeByModel)) {
+    for (const modelId of VIDEO_MODEL_ORDER) {
+      const modeId = row.defaultModeByModel[modelId];
+      if (VIDEO_GENERATION_MODES.some((mode) => mode.id === modeId)) {
+        defaultModeByModel[modelId] = modeId as VideoGenerationModeId;
+      }
+    }
+  }
+  const defaultAspectRatio = (
+    ["1:1", "4:3", "3:4", "16:9", "9:16", "21:9", "9:21"] as VideoAspectRatio[]
+  ).includes(row.defaultAspectRatio as VideoAspectRatio)
+    ? (row.defaultAspectRatio as VideoAspectRatio)
+    : DEFAULT_VIDEO_SETTINGS.uiDefaults.defaultAspectRatio;
+  const defaultDurationSeconds = Number(row.defaultDurationSeconds);
+  const defaultResolution = (
+    ["480p", "720p", "1080p", "4k"] as VideoResolution[]
+  ).includes(row.defaultResolution as VideoResolution)
+    ? (row.defaultResolution as VideoResolution)
+    : DEFAULT_VIDEO_SETTINGS.uiDefaults.defaultResolution;
+  return {
+    defaultModelId,
+    defaultModeByModel,
+    defaultAspectRatio,
+    defaultDurationSeconds:
+      Number.isFinite(defaultDurationSeconds) && defaultDurationSeconds > 0
+        ? defaultDurationSeconds
+        : DEFAULT_VIDEO_SETTINGS.uiDefaults.defaultDurationSeconds,
+    defaultResolution,
+  };
+}
+
+function migrateLegacyPrompts(value: LegacyVideoWorkspaceSettings): { modes: CustomVideoMode[]; prompts: Record<string, string> } {
+  const prompts = isObject(value.prompts) ? value.prompts : {};
+  const customModes = Array.isArray(value.customModes) ? value.customModes : [];
+  const builtInIds = new Set<string>(VIDEO_MODES.map((mode) => mode.id));
+  const modes: CustomVideoMode[] = [];
+  const outPrompts: Record<string, string> = {};
+
+  for (const [legacyModeId, promptTemplateRaw] of Object.entries(prompts)) {
+    const promptTemplate = String(promptTemplateRaw ?? "");
+    if (!promptTemplate.trim()) continue;
+    if (builtInIds.has(legacyModeId)) continue;
+    const customMode = customModes.find((item) => String(item?.id ?? "").trim() === legacyModeId);
+    const id = legacyModeId.startsWith("custom_video_") ? legacyModeId : `custom_video_${legacyModeId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    modes.push({
+      id,
+      label: String(customMode?.label ?? legacyModeId).trim() || legacyModeId,
+    });
+    outPrompts[id] = promptTemplate;
+  }
+
+  return { modes, prompts: outPrompts };
 }
 
 export function mergeVideoSettings(partial: unknown): VideoWorkspaceSettings {
-  const p = partial && typeof partial === "object" ? (partial as Partial<VideoWorkspaceSettings>) : {};
-  const prompts: Record<string, string> = { ...DEFAULT_VIDEO_SETTINGS.prompts, ...(p.prompts ?? {}) };
-  const modelsObj: Record<string, unknown> =
-    p.models && typeof p.models === "object" ? (p.models as Record<string, unknown>) : {};
-  const models: Record<VideoModelId, VideoModelSettings> = {
-    "seedance-2.0": mergeVideoModelSettings("seedance-2.0", modelsObj["seedance-2.0"]),
-    "seedance-2.0-fast": mergeVideoModelSettings("seedance-2.0-fast", modelsObj["seedance-2.0-fast"]),
+  const p = isObject(partial) ? partial : {};
+  const legacy = p as LegacyVideoWorkspaceSettings;
+
+  const models = Object.fromEntries(
+    VIDEO_MODEL_ORDER.map((id) => {
+      const legacyValue =
+        id === "seedance-2.0" || id === "seedance-2.0-fast"
+          ? legacy.models?.[id as LegacyVideoModelId]
+          : undefined;
+      return [id, coerceVideoModelSettings(id, p.models && isObject(p.models) ? p.models[id] ?? legacyValue : legacyValue)];
+    }),
+  ) as Record<VideoModelId, VideoModelSettings>;
+
+  const migratedLegacy = migrateLegacyPrompts(legacy);
+  const migratedCustomPresets = migrateCustomPresets(p.customPresets);
+  const prompts = {
+    ...DEFAULT_VIDEO_SETTINGS.prompts,
+    ...coercePromptsRecord(p.prompts),
+    ...migratedLegacy.prompts,
+    ...migratedCustomPresets.prompts,
   };
-  const customModes = Array.isArray(p.customModes)
-    ? p.customModes
-        .filter((m) => m && typeof m === "object")
-        .map((m) => {
-          const row = m as Partial<CustomVideoMode>;
-          const id = String(row.id ?? "").trim();
-          const label = String(row.label ?? "").trim() || id;
-          return id ? { id, label } : null;
-        })
-        .filter((x): x is CustomVideoMode => x !== null)
-    : [];
-  return { prompts, models, customModes };
+  const customModes = [
+    ...coerceVideoCustomModes(p.customModes),
+    ...migratedLegacy.modes,
+    ...migratedCustomPresets.modes,
+  ].filter((item, index, arr) => arr.findIndex((other) => other.id === item.id) === index);
+
+  return {
+    prompts,
+    models,
+    customModes,
+    coverImageUrlByMode: coerceCoverImageUrlByMode(p.coverImageUrlByMode),
+    uiDefaults: coerceUiDefaults(p.uiDefaults),
+  };
 }
 
 export function extractPromptPlaceholderOccurrences(tpl: string): string[] {
-  const matches = tpl.match(/\{\{[^}]+\}\}/g) ?? [];
-  return matches;
+  return tpl.match(/\{\{[^}]+\}\}/g) ?? [];
 }
 
 export function placeholderInnerHint(token: string): string {
@@ -172,14 +328,45 @@ export function placeholderInnerHint(token: string): string {
   return m?.[1]?.trim() ?? "";
 }
 
-export function composerSlotCountForTemplate(template: string, modeId: string): number {
-  if (modeId === "free") return 1;
-  const n = extractPromptPlaceholderOccurrences(template).length;
-  return Math.max(1, n);
+export function composerSlotCountForTemplate(template: string): number {
+  return Math.max(1, extractPromptPlaceholderOccurrences(template).length);
 }
 
 export function buildVideoPromptFromSlots(template: string, slotInputs: string[]): string {
+  if (!template.trim()) return slotInputs.join("\n\n").trim();
   let i = 0;
   return template.replace(/\{\{[^}]+\}\}/g, () => slotInputs[i++] ?? "");
 }
 
+export function getVideoCapabilities(modelId: VideoModelId): VideoCapabilitySet {
+  return getVideoModelDefinition(modelId).capabilities;
+}
+
+export function summarizeVideoReferences(references: UnifiedVideoReference[]): string[] {
+  return references.map((item, index) => `${index + 1}. ${item.role}:${item.label ?? item.url}`);
+}
+
+export function defaultModeForModel(settings: VideoWorkspaceSettings, modelId: VideoModelId): VideoGenerationModeId {
+  const configured = settings.uiDefaults.defaultModeByModel[modelId];
+  if (configured && getVideoCapabilities(modelId).supportedModes.includes(configured)) return configured;
+  return getVideoCapabilities(modelId).supportedModes[0] ?? "text_to_video";
+}
+
+export function newCustomVideoPresetId(): string {
+  return `custom_video_${crypto.randomUUID()}`;
+}
+
+export const newCustomVideoModeId = newCustomVideoPresetId;
+
+const CUSTOM_VIDEO_MODE_ID_RE = /^custom_video_[a-zA-Z0-9_-]+$/;
+
+export function isKnownVideoModeId(modeId: string, customModes: CustomVideoMode[] = []): boolean {
+  const id = modeId.trim();
+  if (!id || id === "free") return false;
+  if (VIDEO_MODES.some((mode) => mode.id === id)) return true;
+  return CUSTOM_VIDEO_MODE_ID_RE.test(id) && customModes.some((mode) => mode.id === id);
+}
+
+export function describeModelCapability(model: VideoModelDefinition): string {
+  return model.capabilities.supportedModes.map((modeId) => VIDEO_MODE_LABELS[modeId]).join(" / ");
+}

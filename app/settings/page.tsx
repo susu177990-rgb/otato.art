@@ -10,7 +10,13 @@ import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { deleteImageModeCover, saveWorkspaceSnapshot, uploadImageModeCover } from "@/lib/workspace-api";
+import {
+  deleteImageModeCover,
+  deleteVideoModeCover,
+  saveWorkspaceSnapshot,
+  uploadImageModeCover,
+  uploadVideoModeCover,
+} from "@/lib/workspace-api";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
@@ -28,11 +34,12 @@ import {
   DEFAULT_VIDEO_SETTINGS,
   VIDEO_MODEL_ORDER,
   VIDEO_MODES,
-  buildVideoPromptFromSlots,
-  composerSlotCountForTemplate,
+  VIDEO_MODE_LABELS,
   defaultVideoModePrompt,
   extractPromptPlaceholderOccurrences as extractVideoPromptPlaceholderOccurrences,
-  placeholderInnerHint as videoPlaceholderInnerHint,
+  getVideoModelDefinition,
+  newCustomVideoModeId,
+  type VideoPromptModeId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
 
@@ -143,7 +150,7 @@ function SettingsPageInner() {
 
       <div className={shellStyles.body}>
         <div
-          className={[shellStyles.shell, tab === "imagePrompts" ? styles.promptModeShell : ""]
+          className={[shellStyles.shell, tab === "imagePrompts" || tab === "videoPrompts" ? styles.promptModeShell : ""]
             .filter(Boolean)
             .join(" ")}
         >
@@ -195,6 +202,7 @@ function SettingsPageInner() {
               value={videoSettings}
               onChange={setVideoSettings}
               persistMergeRef={videoPromptsPersistMergeRef}
+              onRefreshWorkspace={refreshWorkspace}
               onPersistVideo={async (next) => {
                 setVideoSettings(next);
                 await persistWorkspace(llmSettings, imageSettings, next);
@@ -940,22 +948,45 @@ function VideoApiPanel({
     <section className={styles.panel}>
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
+        const definition = getVideoModelDefinition(id);
         return (
           <div key={id} className={shellStyles.card}>
             <div className={shellStyles.cardHead}>
               <div>
                 <h2 className={shellStyles.cardTitle}>{model.label}</h2>
-                <p className={shellStyles.cardSubtitle}>Seedance/即梦 v2：提交 / 轮询任务</p>
+                <p className={shellStyles.cardSubtitle}>
+                  {definition.provider} · {definition.capabilities.supportedModes.map((modeId) => VIDEO_MODE_LABELS[modeId]).join(" / ")}
+                </p>
               </div>
             </div>
 
             <div className={shellStyles.row}>
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>是否启用</span>
+                <select
+                  className={shellStyles.input}
+                  value={model.enabled ? "on" : "off"}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [id]: { ...value.models[id], enabled: e.target.value === "on" },
+                      },
+                    })
+                  }
+                >
+                  <option value="on">启用</option>
+                  <option value="off">停用</option>
+                </select>
+              </label>
+
               <label className={[shellStyles.field, shellStyles.rowFull].join(" ")}>
                 <span className={shellStyles.fieldLabel}>Base URL</span>
                 <input
                   className={[shellStyles.input, shellStyles.mono].join(" ")}
                   value={model.baseUrl}
-                  placeholder="https://seedanceapi.org/v2"
+                  placeholder="留空，后续按模型填写"
                   onChange={(e) =>
                     onChange({
                       ...value,
@@ -974,7 +1005,7 @@ function VideoApiPanel({
                   type="password"
                   className={[shellStyles.input, shellStyles.mono].join(" ")}
                   value={model.apiKey}
-                  placeholder="sk-..."
+                  placeholder="留空，后续填写"
                   onChange={(e) =>
                     onChange({
                       ...value,
@@ -991,8 +1022,8 @@ function VideoApiPanel({
                 <span className={shellStyles.fieldLabel}>模型名</span>
                 <input
                   className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.modelName}
-                  placeholder="seedance-2.0 或 seedance-2.0-fast"
+                  value={model.apiModelName}
+                  placeholder={definition.defaultApiModelName}
                   onChange={(e) =>
                     onChange({
                       ...value,
@@ -1000,7 +1031,7 @@ function VideoApiPanel({
                         ...value.models,
                         [id]: {
                           ...value.models[id],
-                          modelName: e.target.value.trim() === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
+                          apiModelName: e.target.value,
                         },
                       },
                     })
@@ -1022,19 +1053,81 @@ function VideoPromptsPanel({
   onChange,
   persistMergeRef,
   onPersistVideo,
+  onRefreshWorkspace,
 }: {
   value: VideoWorkspaceSettings;
   onChange: (next: VideoWorkspaceSettings) => void;
   persistMergeRef?: MutableRefObject<(() => VideoWorkspaceSettings) | null>;
   onPersistVideo: (next: VideoWorkspaceSettings) => Promise<void>;
+  onRefreshWorkspace?: () => Promise<void>;
 }) {
-  const builtinRows: VideoModePromptRow[] = VIDEO_MODES.map((m) => ({ id: m.id, label: m.label, isCustom: false }));
-  const customRows: VideoModePromptRow[] = (value.customModes ?? []).map((m) => ({ id: m.id, label: m.label, isCustom: true }));
+  const builtinRows: VideoModePromptRow[] = VIDEO_MODES.filter((mode) => mode.id !== "free").map((mode) => ({
+    id: mode.id,
+    label: mode.label,
+    isCustom: false,
+  }));
+  const customRows: VideoModePromptRow[] = (value.customModes ?? []).map((mode) => ({
+    id: mode.id,
+    label: mode.label,
+    isCustom: true,
+  }));
   const allRows = [...builtinRows, ...customRows].reverse();
 
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
+  const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
+  const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
+
+  async function handleUploadCover(modeId: string, file: File) {
+    setCoverBusyModeId(modeId);
+    setCoverErrorByMode((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    try {
+      const result = await uploadVideoModeCover(modeId, file);
+      onChange(result.videoWorkspace);
+      await onRefreshWorkspace?.();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "上传封面失败";
+      setCoverErrorByMode((prev) => ({ ...prev, [modeId]: message }));
+    } finally {
+      setCoverBusyModeId((cur) => (cur === modeId ? null : cur));
+    }
+  }
+
+  async function handleDeleteCover(modeId: string) {
+    if (!value.coverImageUrlByMode?.[modeId]) return;
+    if (!window.confirm("确定删除该模式的封面图？")) return;
+    setCoverBusyModeId(modeId);
+    setCoverErrorByMode((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    try {
+      const result = await deleteVideoModeCover(modeId);
+      onChange(result.videoWorkspace);
+      await onRefreshWorkspace?.();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "删除封面失败";
+      setCoverErrorByMode((prev) => ({ ...prev, [modeId]: message }));
+    } finally {
+      setCoverBusyModeId((cur) => (cur === modeId ? null : cur));
+    }
+  }
+
+  async function removeStoredModeCover(modeId: string): Promise<Record<string, string>> {
+    if (!value.coverImageUrlByMode?.[modeId]) {
+      const copy = { ...value.coverImageUrlByMode };
+      delete copy[modeId];
+      return copy;
+    }
+    const result = await deleteVideoModeCover(modeId);
+    return result.videoWorkspace.coverImageUrlByMode;
+  }
 
   useEffect(() => {
     const ref = persistMergeRef;
@@ -1043,11 +1136,17 @@ function VideoPromptsPanel({
       if (editingPromptModeId === null) return value;
       const id = editingPromptModeId;
       const text = draftPrompts[id] ?? value.prompts[id] ?? "";
-      let merged: VideoWorkspaceSettings = { ...value, prompts: { ...value.prompts, [id]: text } };
-      if (id.startsWith("custom_")) {
-        const labelRaw = draftLabels[id] ?? value.customModes?.find((m) => m.id === id)?.label ?? id;
+      let merged: VideoWorkspaceSettings = {
+        ...value,
+        prompts: { ...value.prompts, [id]: text },
+      };
+      if (id.startsWith("custom_video_")) {
+        const labelRaw = draftLabels[id] ?? value.customModes?.find((mode) => mode.id === id)?.label ?? id;
         const label = String(labelRaw).trim() || id;
-        merged = { ...merged, customModes: (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)) };
+        merged = {
+          ...merged,
+          customModes: (merged.customModes ?? []).map((mode) => (mode.id === id ? { ...mode, label } : mode)),
+        };
       }
       return merged;
     };
@@ -1058,11 +1157,17 @@ function VideoPromptsPanel({
 
   function handleSavePrompt(modeId: string) {
     const text = draftPrompts[modeId] ?? value.prompts[modeId] ?? "";
-    let next: VideoWorkspaceSettings = { ...value, prompts: { ...value.prompts, [modeId]: text } };
-    if (modeId.startsWith("custom_")) {
-      const labelRaw = draftLabels[modeId] ?? value.customModes?.find((m) => m.id === modeId)?.label ?? modeId;
+    let next: VideoWorkspaceSettings = {
+      ...value,
+      prompts: { ...value.prompts, [modeId]: text },
+    };
+    if (modeId.startsWith("custom_video_")) {
+      const labelRaw = draftLabels[modeId] ?? value.customModes?.find((mode) => mode.id === modeId)?.label ?? modeId;
       const label = String(labelRaw).trim() || modeId;
-      next = { ...next, customModes: (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)) };
+      next = {
+        ...next,
+        customModes: (next.customModes ?? []).map((mode) => (mode.id === modeId ? { ...mode, label } : mode)),
+      };
     }
     onChange(next);
     void onPersistVideo(next);
@@ -1082,18 +1187,23 @@ function VideoPromptsPanel({
   function handleEditPrompt(modeId: string) {
     setDraftPrompts((prev) => {
       const copy = { ...prev };
-      if (editingPromptModeId !== null && editingPromptModeId !== modeId) delete copy[editingPromptModeId];
+      if (editingPromptModeId !== null && editingPromptModeId !== modeId) {
+        delete copy[editingPromptModeId];
+      }
       copy[modeId] = value.prompts[modeId] ?? "";
       return copy;
     });
-    if (modeId.startsWith("custom_")) {
-      setDraftLabels((prev) => ({ ...prev, [modeId]: value.customModes?.find((m) => m.id === modeId)?.label ?? "" }));
+    if (modeId.startsWith("custom_video_")) {
+      setDraftLabels((prev) => ({
+        ...prev,
+        [modeId]: value.customModes?.find((mode) => mode.id === modeId)?.label ?? "",
+      }));
     }
     setEditingPromptModeId(modeId);
   }
 
   function handleAddCustomMode() {
-    const id = `custom_${crypto.randomUUID()}`;
+    const id = newCustomVideoModeId();
     const next: VideoWorkspaceSettings = {
       ...value,
       customModes: [...(value.customModes ?? []), { id, label: `自定义模式 ${(value.customModes?.length ?? 0) + 1}` }],
@@ -1104,45 +1214,68 @@ function VideoPromptsPanel({
     handleEditPrompt(id);
   }
 
-  function handleDeletePromptRow(mode: VideoModePromptRow) {
-    if (mode.isCustom) {
+  function handleDeleteCustomMode(modeId: string) {
+    if (!modeId.startsWith("custom_video_")) return;
+    void (async () => {
+      let coverImageUrlByMode: Record<string, string>;
+      try {
+        coverImageUrlByMode = await removeStoredModeCover(modeId);
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "删除封面失败");
+        return;
+      }
       const restPrompts = { ...value.prompts };
-      delete restPrompts[mode.id];
+      delete restPrompts[modeId];
       const next: VideoWorkspaceSettings = {
         ...value,
-        customModes: (value.customModes ?? []).filter((m) => m.id !== mode.id),
+        customModes: (value.customModes ?? []).filter((mode) => mode.id !== modeId),
         prompts: restPrompts,
+        coverImageUrlByMode,
       };
       onChange(next);
       void onPersistVideo(next);
-      return;
-    }
-    if (!window.confirm(`「${mode.label}」将恢复为内置默认提示词（当前修改会丢失），确定？`)) return;
-    if (
-      mode.id !== "free" &&
-      mode.id !== "cinematic-text-to-video" &&
-      mode.id !== "storyboard-shot" &&
-      mode.id !== "product-ad"
-    ) {
-      return;
-    }
-    const next: VideoWorkspaceSettings = {
-      ...value,
-      prompts: { ...value.prompts, [mode.id]: defaultVideoModePrompt(mode.id) },
-    };
-    onChange(next);
-    void onPersistVideo(next);
+      setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
+      setDraftPrompts((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftLabels((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+    })();
   }
 
-  function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): string {
-    const tok = occ[slotIndex];
-    if (tok) {
-      const hint = videoPlaceholderInnerHint(tok);
-      if (hint) return hint;
-      return `槽位 ${slotIndex + 1}`;
+  function handleDeletePromptRow(mode: VideoModePromptRow) {
+    if (mode.isCustom) {
+      handleDeleteCustomMode(mode.id);
+      return;
     }
-    if (modeId === "free") return "直接输入完整提示词（自由模式无固定模版）";
-    return "输入内容";
+    if (!window.confirm(`「${mode.label}」将恢复为内置默认提示词并清空封面图，确定？`)) return;
+    void (async () => {
+      let coverImageUrlByMode: Record<string, string>;
+      try {
+        coverImageUrlByMode = await removeStoredModeCover(mode.id);
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "删除封面失败");
+        return;
+      }
+      const next: VideoWorkspaceSettings = {
+        ...value,
+        prompts: { ...value.prompts, [mode.id]: defaultVideoModePrompt(mode.id as VideoPromptModeId) },
+        coverImageUrlByMode,
+      };
+      onChange(next);
+      void onPersistVideo(next);
+      setEditingPromptModeId((cur) => (cur === mode.id ? null : cur));
+      setDraftPrompts((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+    })();
   }
 
   return (
@@ -1152,7 +1285,8 @@ function VideoPromptsPanel({
           <div>
             <h2 className={shellStyles.cardTitle}>生视频模式 · 固定提示词</h2>
             <p className={shellStyles.cardSubtitle}>
-              与作图页一致：模版内每出现一处 <code className={shellStyles.mono}>{"{{…}}"}</code> 占位符，视频页会对应多一栏输入（从左到右依次填入）。
+              与生图提示词一致：每张卡保存一个视频提示词模版。模版内每出现一处 <code className={shellStyles.mono}>{"{{…}}"}</code>{" "}
+              占位符，视频页会对应多一栏输入。编辑态可上传封面，系统会缩略并转为 WebP。
             </p>
             <div className={styles.promptIntroActions}>
               <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
@@ -1168,10 +1302,10 @@ function VideoPromptsPanel({
           const isEditing = editingPromptModeId === mode.id;
           const savedText = value.prompts[mode.id] ?? "";
           const textareaValue = isEditing ? (draftPrompts[mode.id] ?? savedText) : savedText;
-          const occ = extractVideoPromptPlaceholderOccurrences(savedText);
-          const slotCount = composerSlotCountForTemplate(savedText, mode.id);
-          const demoSlots = Array.from({ length: slotCount }, (_, i) => composerPlaceholder(mode.id, occ, i));
-          const preview = buildVideoPromptFromSlots(savedText, demoSlots);
+          const occCount = extractVideoPromptPlaceholderOccurrences(savedText).length;
+          const coverUrl = value.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
+          const coverBusy = coverBusyModeId === mode.id;
+          const coverError = coverErrorByMode[mode.id];
 
           return (
             <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
@@ -1207,7 +1341,9 @@ function VideoPromptsPanel({
                   </button>
                 </div>
               </header>
-
+              {occCount > 6 ? (
+                <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，视频页将显示 {occCount} 栏输入。</p>
+              ) : null}
               <div className={styles.promptModeEditBody}>
                 <textarea
                   className={[
@@ -1233,11 +1369,81 @@ function VideoPromptsPanel({
                     setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
                   }}
                 />
-              </div>
-
-              <div className={styles.promptModeRefHintsWrap}>
-                <span className={styles.promptModeRefHintsLabel}>预览（占位符会被替换为槽位输入）</span>
-                <pre className={[styles.promptPreviewBlock, shellStyles.mono].join(" ")}>{preview || "（空）"}</pre>
+                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 模式封面`}>
+                  <div
+                    className={[
+                      styles.promptModeCoverFrame,
+                      coverUrl ? styles.promptModeCoverFrameFilled : "",
+                      coverBusy ? styles.promptModeCoverFrameBusy : "",
+                      !isEditing && !coverUrl ? styles.promptModeCoverFrameReadOnly : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {coverUrl ? (
+                      <>
+                        {isEditing ? (
+                          <label className={styles.promptModeCoverReplaceHit} aria-label="点击更换封面">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={coverUrl} alt={`${mode.label} 封面`} className={styles.promptModeCoverImage} />
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className={styles.promptModeCoverFileInput}
+                              disabled={coverBusy}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (file) void handleUploadCover(mode.id, file);
+                              }}
+                            />
+                          </label>
+                        ) : (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={coverUrl} alt={`${mode.label} 封面`} className={styles.promptModeCoverImage} />
+                        )}
+                        {isEditing ? (
+                          <button
+                            type="button"
+                            className={styles.promptModeCoverDelete}
+                            disabled={coverBusy}
+                            aria-label="删除封面"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleDeleteCover(mode.id);
+                            }}
+                          >
+                            ×
+                          </button>
+                        ) : null}
+                      </>
+                    ) : isEditing ? (
+                      <label className={styles.promptModeCoverUploadLabel}>
+                        <span className={styles.promptModeCoverLabel}>上传封面</span>
+                        <span className={styles.promptModeCoverHint}>原比例缩略 · 自动转 WebP · 最大 5MB</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className={styles.promptModeCoverFileInput}
+                          disabled={coverBusy}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void handleUploadCover(mode.id, file);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <span className={styles.promptModeCoverLabel}>模式封面</span>
+                        <span className={styles.promptModeCoverHint}>未设置</span>
+                      </>
+                    )}
+                    {coverBusy ? <span className={styles.promptModeCoverBusy}>处理中…</span> : null}
+                  </div>
+                  {coverError ? <p className={styles.promptModeCoverError}>{coverError}</p> : null}
+                </div>
               </div>
             </article>
           );

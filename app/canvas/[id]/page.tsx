@@ -25,6 +25,18 @@ import {
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
+import {
+  DEFAULT_VIDEO_SETTINGS,
+  VIDEO_MODE_LABELS,
+  VIDEO_MODEL_ORDER,
+  defaultModeForModel,
+  getVideoCapabilities,
+  type VideoAspectRatio,
+  type VideoGenerationModeId,
+  type VideoModelId,
+  type VideoResolution,
+  type VideoWorkspaceSettings,
+} from "@/lib/video-workspace";
 import type {
   CanvasBoard,
   CanvasBoardData,
@@ -88,6 +100,11 @@ type AssetItem = {
 type CanvasImageGenerateResponse = {
   sourceNode: CanvasNode;
   galleryRecord: ImageGalleryRecord;
+};
+
+type CanvasVideoGenerateResponse = {
+  sourceNode: CanvasNode;
+  galleryRecord: VideoGalleryRecord;
 };
 
 type ConnectionDraft = {
@@ -289,7 +306,7 @@ function makeTextNode(pos: CanvasPosition): CanvasNode {
 function makeEmptyImageNode(
   pos: CanvasPosition,
   imageDefaults?: {
-    modelId: ImageModelId;
+    imageModelId: ImageModelId;
     aspectRatio: ImageAspectRatio;
     imageSize: ImageSizeTier;
     gptImageQuality: GptImageQuality;
@@ -304,7 +321,7 @@ function makeEmptyImageNode(
     height: 280,
     metadata: {
       prompt: "",
-      modelId: imageDefaults?.modelId ?? "gpt-image-2",
+      imageModelId: imageDefaults?.imageModelId ?? "gpt-image-2",
       aspectRatio: imageDefaults?.aspectRatio ?? "4:3",
       imageSize: imageDefaults?.imageSize ?? "1K",
       gptImageQuality: imageDefaults?.gptImageQuality ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
@@ -313,7 +330,16 @@ function makeEmptyImageNode(
   };
 }
 
-function makeEmptyVideoNode(pos: CanvasPosition): CanvasNode {
+function makeEmptyVideoNode(
+  pos: CanvasPosition,
+  videoDefaults?: {
+    videoModelId: VideoModelId;
+    videoModeId: VideoGenerationModeId;
+    videoAspectRatio: VideoAspectRatio;
+    videoResolution: VideoResolution;
+    videoDurationSeconds: number;
+  },
+): CanvasNode {
   return {
     id: newNodeId("video"),
     type: "video",
@@ -323,6 +349,11 @@ function makeEmptyVideoNode(pos: CanvasPosition): CanvasNode {
     height: 280,
     metadata: {
       prompt: "",
+      videoModelId: videoDefaults?.videoModelId ?? "seedance-2.0",
+      videoModeId: videoDefaults?.videoModeId ?? "text_to_video",
+      videoAspectRatio: videoDefaults?.videoAspectRatio ?? "16:9",
+      videoResolution: videoDefaults?.videoResolution ?? "1080p",
+      videoDurationSeconds: videoDefaults?.videoDurationSeconds ?? 5,
       status: "idle",
     },
   };
@@ -439,6 +470,7 @@ export default function CanvasBoardPage() {
   const [videoAssets, setVideoAssets] = useState<VideoGalleryRecord[]>([]);
   const [textAssets, setTextAssets] = useState<TextAsset[]>([]);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
+  const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState("");
   const [assetNotice, setAssetNotice] = useState("");
@@ -512,11 +544,24 @@ export default function CanvasBoardPage() {
   }, []);
 
   const currentImageNodeDefaults = useCallback(() => ({
-    modelId: "gpt-image-2" as ImageModelId,
+    imageModelId: "gpt-image-2" as ImageModelId,
     aspectRatio: "4:3" as ImageAspectRatio,
     imageSize: "1K" as ImageSizeTier,
     gptImageQuality: imageSettings.gptImageQuality,
   }), [imageSettings.gptImageQuality]);
+
+  const currentVideoNodeDefaults = useCallback(() => {
+    const videoModelId = videoSettings.uiDefaults.defaultModelId;
+    const capabilities = getVideoCapabilities(videoModelId);
+    const videoModeId = defaultModeForModel(videoSettings, videoModelId);
+    return {
+      videoModelId,
+      videoModeId,
+      videoAspectRatio: videoSettings.uiDefaults.defaultAspectRatio,
+      videoResolution: videoSettings.uiDefaults.defaultResolution,
+      videoDurationSeconds: capabilities.durations[0] ?? videoSettings.uiDefaults.defaultDurationSeconds,
+    };
+  }, [videoSettings]);
 
   const loadTextAssets = useCallback(() => {
     try {
@@ -622,10 +667,16 @@ export default function CanvasBoardPage() {
     let cancelled = false;
     void fetchWorkspaceSnapshot()
       .then((snapshot) => {
-        if (!cancelled) setImageSettings(snapshot.imageWorkspace);
+        if (!cancelled) {
+          setImageSettings(snapshot.imageWorkspace);
+          setVideoSettings(snapshot.videoWorkspace);
+        }
       })
       .catch(() => {
-        if (!cancelled) setImageSettings(DEFAULT_IMAGE_SETTINGS);
+        if (!cancelled) {
+          setImageSettings(DEFAULT_IMAGE_SETTINGS);
+          setVideoSettings(DEFAULT_VIDEO_SETTINGS);
+        }
       });
     return () => {
       cancelled = true;
@@ -1101,15 +1152,47 @@ export default function CanvasBoardPage() {
   ) => {
     patchNode(nodeId, (node) => {
       const nextMetadata = { ...node.metadata, ...patch };
-      if (patch.modelId && patch.modelId !== "gpt-image-2") {
+      if (patch.imageModelId && patch.imageModelId !== "gpt-image-2") {
         delete nextMetadata.gptImageQuality;
       }
-      if (patch.modelId === "gpt-image-2" && !nextMetadata.gptImageQuality) {
+      if (patch.imageModelId === "gpt-image-2" && !nextMetadata.gptImageQuality) {
         nextMetadata.gptImageQuality = imageSettings.gptImageQuality;
       }
       return { ...node, metadata: nextMetadata };
     });
   }, [imageSettings.gptImageQuality, patchNode]);
+
+  const updateVideoGenNodeSettings = useCallback((
+    nodeId: string,
+    patch: Partial<NonNullable<CanvasNode["metadata"]>>,
+  ) => {
+    patchNode(nodeId, (node) => {
+      const nextMetadata = { ...node.metadata, ...patch };
+      if (patch.videoModelId) {
+        const capabilities = getVideoCapabilities(patch.videoModelId);
+        const nextMode = nextMetadata.videoModeId && capabilities.supportedModes.includes(nextMetadata.videoModeId)
+          ? nextMetadata.videoModeId
+          : capabilities.supportedModes[0];
+        nextMetadata.videoModeId = nextMode;
+        if (!nextMetadata.videoAspectRatio || !capabilities.aspectRatios.includes(nextMetadata.videoAspectRatio)) {
+          nextMetadata.videoAspectRatio = capabilities.aspectRatios[0];
+        }
+        if (!nextMetadata.videoResolution || !capabilities.resolutions.includes(nextMetadata.videoResolution)) {
+          nextMetadata.videoResolution = capabilities.resolutions[0];
+        }
+        if (!nextMetadata.videoDurationSeconds || !capabilities.durations.includes(nextMetadata.videoDurationSeconds)) {
+          nextMetadata.videoDurationSeconds = capabilities.durations[0];
+        }
+      }
+      if (patch.videoModeId && nextMetadata.videoModelId) {
+        const capabilities = getVideoCapabilities(nextMetadata.videoModelId);
+        if (!capabilities.supportedModes.includes(patch.videoModeId)) {
+          nextMetadata.videoModeId = capabilities.supportedModes[0];
+        }
+      }
+      return { ...node, metadata: nextMetadata };
+    });
+  }, [patchNode]);
 
   const updateNodeTitle = (nodeId: string, value: string) => {
     setNodes((items) => items.map((n) => (n.id === nodeId ? { ...n, title: value.trim() || "未命名" } : n)));
@@ -1364,13 +1447,14 @@ export default function CanvasBoardPage() {
         const record: VideoGalleryRecord = {
           id: `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           createdAt: new Date().toISOString(),
-          modeId: "canvas",
-          modeName: "无限画布",
-          modelId: "seedance-2.0",
+          modelId: node.metadata.videoModelId ?? "seedance-2.0",
           modelName: "canvas asset",
+          modeId: node.metadata.videoModeId ?? "text_to_video",
+          modeName: VIDEO_MODE_LABELS[node.metadata.videoModeId ?? "text_to_video"],
           finalPrompt: node.title,
-          aspectRatio: "16:9",
-          duration: 5,
+          aspectRatio: node.metadata.videoAspectRatio ?? "16:9",
+          durationSeconds: node.metadata.videoDurationSeconds ?? 5,
+          resolution: node.metadata.videoResolution ?? "1080p",
           videoUrl: node.metadata.videoUrl,
           status: "success",
         };
@@ -1401,14 +1485,14 @@ export default function CanvasBoardPage() {
       let rawText = "";
       try {
         rawText = await res.text();
-      } catch (e) {
+      } catch {
         rawText = "Failed to read response body";
       }
 
       let data: Partial<CanvasImageGenerateResponse> & { error?: string } = {};
       try {
         data = rawText ? JSON.parse(rawText) : {};
-      } catch (e) {
+      } catch {
         // Not JSON
       }
 
@@ -1433,6 +1517,54 @@ export default function CanvasBoardPage() {
       setAssetNotice("");
     }
   }, [boardId, markDirty, updateImageGenNodeSettings]);
+
+  const runVideoGenNode = useCallback(async (nodeId: string) => {
+    const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+    if (!targetNode || targetNode.type !== "video") return;
+    updateVideoGenNodeSettings(nodeId, {
+      status: "running",
+      lastError: undefined,
+    });
+    try {
+      const res = await fetch("/api/canvas/video-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boardId, nodeId }),
+      });
+      let rawText = "";
+      try {
+        rawText = await res.text();
+      } catch {
+        rawText = "Failed to read response body";
+      }
+
+      let data: Partial<CanvasVideoGenerateResponse> & { error?: string } = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        // Not JSON
+      }
+
+      if (!res.ok || !data.sourceNode || !data.galleryRecord) {
+        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+      }
+      const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
+      setNodes(nextNodes);
+      nodesRef.current = nextNodes;
+      setVideoAssets((items) => [data.galleryRecord!, ...items.filter((item) => item.id !== data.galleryRecord!.id)].slice(0, 24));
+      setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionId(null);
+      setAssetNotice("生视频成功，已同步到图库");
+      markDirty();
+    } catch (error) {
+      updateVideoGenNodeSettings(nodeId, {
+        status: "error",
+        lastRunAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : "无线画布生视频失败",
+      });
+      setAssetNotice("");
+    }
+  }, [boardId, markDirty, updateVideoGenNodeSettings]);
 
   const exportCanvas = useCallback(() => {
     const payload = {
@@ -1851,7 +1983,7 @@ export default function CanvasBoardPage() {
               <button type="button" className={styles.quickAddBtn} onClick={() => appendImageNodeWithSelection(quickAddBar.world)}>
                 <span className={styles.quickAddBtnIcon}>🖼️</span>图片
               </button>
-              <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world))}>
+              <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world, currentVideoNodeDefaults()))}>
                 <span className={styles.quickAddBtnIcon}>🎬</span>视频
               </button>
             </div>
@@ -2015,7 +2147,8 @@ export default function CanvasBoardPage() {
                             title="执行生成"
                             onClick={(e) => {
                               e.stopPropagation();
-                              void runImageGenNode(node.id);
+                              if (node.type === "image") void runImageGenNode(node.id);
+                              else void runVideoGenNode(node.id);
                             }}
                             disabled={node.metadata?.status === "running"}
                           >
@@ -2118,10 +2251,10 @@ export default function CanvasBoardPage() {
                             <>
                               <select
                                 className={styles.generatorPill}
-                                value={node.metadata?.modelId ?? "gpt-image-2"}
+                                value={node.metadata?.imageModelId ?? "gpt-image-2"}
                                 onChange={(e) =>
                                   updateImageGenNodeSettings(node.id, {
-                                    modelId: e.target.value as ImageModelId,
+                                    imageModelId: e.target.value as ImageModelId,
                                     gptImageQuality:
                                       e.target.value === "gpt-image-2" ? (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality) : undefined,
                                   })
@@ -2153,7 +2286,7 @@ export default function CanvasBoardPage() {
                                   <option key={size} value={size}>{size}</option>
                                 ))}
                               </select>
-                              {(node.metadata?.modelId ?? "gpt-image-2") === "gpt-image-2" ? (
+                              {(node.metadata?.imageModelId ?? "gpt-image-2") === "gpt-image-2" ? (
                                 <select
                                   className={styles.generatorPill}
                                   value={node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality}
@@ -2170,14 +2303,89 @@ export default function CanvasBoardPage() {
                               ) : null}
                             </>
                           ) : (
-                            /* video gen toolbar pills — placeholder for future video model options */
-                            <span className={styles.generatorPillLabel}>🎬 视频生成</span>
+                            <>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId}
+                                onChange={(e) =>
+                                  updateVideoGenNodeSettings(node.id, {
+                                    videoModelId: e.target.value as VideoModelId,
+                                  })
+                                }
+                              >
+                                {VIDEO_MODEL_ORDER.map((id) => (
+                                  <option key={id} value={id}>
+                                    {videoSettings.models[id]?.label ?? id}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.videoModeId ?? "text_to_video"}
+                                onChange={(e) =>
+                                  updateVideoGenNodeSettings(node.id, {
+                                    videoModeId: e.target.value as VideoGenerationModeId,
+                                  })
+                                }
+                              >
+                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).supportedModes.map((modeId) => (
+                                  <option key={modeId} value={modeId}>
+                                    {VIDEO_MODE_LABELS[modeId]}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.videoAspectRatio ?? "16:9"}
+                                onChange={(e) =>
+                                  updateVideoGenNodeSettings(node.id, {
+                                    videoAspectRatio: e.target.value as VideoAspectRatio,
+                                  })
+                                }
+                              >
+                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).aspectRatios.map((ratio) => (
+                                  <option key={ratio} value={ratio}>
+                                    {ratio}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.videoDurationSeconds ?? 5}
+                                onChange={(e) =>
+                                  updateVideoGenNodeSettings(node.id, {
+                                    videoDurationSeconds: Number(e.target.value),
+                                  })
+                                }
+                              >
+                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).durations.map((duration) => (
+                                  <option key={duration} value={duration}>
+                                    {duration}s
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className={styles.generatorPill}
+                                value={node.metadata?.videoResolution ?? "1080p"}
+                                onChange={(e) =>
+                                  updateVideoGenNodeSettings(node.id, {
+                                    videoResolution: e.target.value as VideoResolution,
+                                  })
+                                }
+                              >
+                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).resolutions.map((resolution) => (
+                                  <option key={resolution} value={resolution}>
+                                    {resolution}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
                           )}
                           <button
                             type="button"
                             className={styles.generatorRunButton}
                             disabled={node.metadata?.status === "running"}
-                            onClick={() => node.type === "image" ? void runImageGenNode(node.id) : undefined}
+                            onClick={() => node.type === "image" ? void runImageGenNode(node.id) : void runVideoGenNode(node.id)}
                           >
                             {node.metadata?.status === "running" ? (
                               <span className={styles.generatorBtnSpinner} aria-hidden />
@@ -2294,7 +2502,7 @@ export default function CanvasBoardPage() {
               <button type="button" onClick={() => { openAssetDrawer(menu.world); setMenu(null); }}>打开素材库</button>
               <div className={styles.uploadMenuDivider} />
               <button type="button" onClick={() => { appendImageNodeWithSelection(menu.world); setMenu(null); }}>图片节点</button>
-              <button type="button" onClick={() => { appendNode(makeEmptyVideoNode(menu.world)); setMenu(null); }}>视频节点</button>
+              <button type="button" onClick={() => { appendNode(makeEmptyVideoNode(menu.world, currentVideoNodeDefaults())); setMenu(null); }}>视频节点</button>
             </div>
           )}
 
@@ -2328,7 +2536,12 @@ export default function CanvasBoardPage() {
                 {multiSelected && canGroup && <div className={styles.uploadMenuDivider} />}
                 {(nodeData?.type === "image" || nodeData?.type === "video") && nodeData?.metadata?.source !== "upload" ? (
                   <>
-                    <button type="button" onClick={() => { void runImageGenNode(nodeId); setMenu(null); }}>
+                    <button type="button" onClick={() => {
+                      const targetNode = nodeMap.get(nodeId);
+                      if (targetNode?.type === "image") void runImageGenNode(nodeId);
+                      if (targetNode?.type === "video") void runVideoGenNode(nodeId);
+                      setMenu(null);
+                    }}>
                       {nodeData.metadata?.status === "success" ? "✨ 重新生成" : "✨ 生成"}
                     </button>
                     <div className={styles.uploadMenuDivider} />

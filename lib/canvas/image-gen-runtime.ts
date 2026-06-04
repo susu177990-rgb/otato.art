@@ -22,7 +22,7 @@ function mustBeImageNode(node: CanvasNode | undefined): CanvasNode {
 }
 
 function resolveImageModel(snapshot: WorkspaceSnapshot, node: CanvasNode): ImageModelSettings {
-  const modelId = node.metadata?.modelId ?? "gpt-image-2";
+  const modelId = node.metadata?.imageModelId ?? "gpt-image-2";
   const model = snapshot.imageWorkspace.models[modelId];
   if (!model?.endpointUrl?.trim() || !model.apiKey?.trim() || !model.modelName?.trim()) {
     throw new Error(`生图模型「${model?.label ?? modelId}」未配置完整，请先到设置页填写 Endpoint / API Key / 模型名。`);

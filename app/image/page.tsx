@@ -129,7 +129,7 @@ function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
       status: parsed.status,
       startedAt: parsed.startedAt,
       updatedAt: parsed.updatedAt || parsed.startedAt,
-      modeId: String(parsed.modeId || "real-character-asset"),
+      modeId: String(parsed.modeId || "free"),
       modelId: parsed.modelId,
       aspectRatio: parsed.aspectRatio || "4:3",
       imageSize: parsed.imageSize || "1K",
@@ -273,7 +273,7 @@ export default function ImagePage() {
   const { settings: llmSettings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
-  const [selectedModeId, setSelectedModeId] = useState<string>("real-character-asset");
+  const [selectedModeId, setSelectedModeId] = useState<string>("free");
   const [selectedModelId, setSelectedModelId] = useState<ImageModelId>("gpt-image-2");
   const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("4:3");
   const [imageSize, setImageSize] = useState<ImageSizeTier>("1K");
@@ -394,7 +394,7 @@ export default function ImagePage() {
   useEffect(() => {
     if (modes.some((m) => m.id === selectedModeId)) return;
     const fallback =
-      modes.find((m) => m.id === "real-character-asset")?.id ?? modes[0]?.id ?? "free";
+      modes.find((m) => m.id === "free")?.id ?? modes[0]?.id ?? "free";
     setSelectedModeId(fallback);
   }, [modes, selectedModeId]);
 

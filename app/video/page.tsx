@@ -1,151 +1,250 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import {
-  VIDEO_MODES,
-  VIDEO_MODEL_ORDER,
-  buildVideoPromptFromSlots,
-  composerSlotCountForTemplate,
-  extractPromptPlaceholderOccurrences,
-  placeholderInnerHint,
-  type VideoAspectRatio,
-  type VideoDurationSeconds,
-  type VideoModelId,
-} from "@/lib/video-workspace";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import {
   fetchVideoGalleryRecords,
   fetchWorkspaceSnapshot,
   prependVideoGalleryRecordApi,
 } from "@/lib/workspace-api";
+import {
+  VIDEO_MODEL_ORDER,
+  VIDEO_MODES,
+  VIDEO_MODE_LABELS,
+  buildVideoPromptFromSlots,
+  composerSlotCountForTemplate,
+  extractPromptPlaceholderOccurrences,
+  getVideoCapabilities,
+  getVideoModelDefinition,
+  placeholderInnerHint,
+  type UnifiedVideoReference,
+  type VideoAspectRatio,
+  type VideoGenerationModeId,
+  type VideoModelId,
+  type VideoResolution,
+} from "@/lib/video-workspace";
 
-const ASPECT_RATIOS: VideoAspectRatio[] = ["16:9", "9:16", "4:3", "3:4"];
-const DURATIONS: VideoDurationSeconds[] = [5, 10, 15];
+const MEDIA_BUCKET = "generated-images";
 
-const VIDEO_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-video-generation-runtime-v1";
-const VIDEO_GENERATION_RUNTIME_EVENT = "script-agent-video-generation-runtime-change";
-
-type VideoGenerationRuntimeState = {
-  taskId: string;
-  status: "running" | "success" | "error";
-  startedAt: string;
-  updatedAt: string;
-  modeId: string;
-  modelId: VideoModelId;
-  aspectRatio: VideoAspectRatio;
-  duration: VideoDurationSeconds;
-  slotInputs: string[];
-  finalPrompt: string;
-  videoUrl?: string;
-  error?: string;
+type UiVideoModeId = "start_end_frame" | "multi_image_reference";
+type RefSlot = { url: string; previewUrl: string; label: string } | null;
+type PresetRailItem = {
+  id: string;
+  label: string;
+  promptTemplate: string;
+  coverUrl: string;
 };
 
-function readRuntimeState(): VideoGenerationRuntimeState | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(VIDEO_GENERATION_RUNTIME_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<VideoGenerationRuntimeState>;
-    if (!parsed.taskId || !parsed.status || !parsed.startedAt) return null;
-    if (parsed.status !== "running" && parsed.status !== "success" && parsed.status !== "error") return null;
-    if (parsed.modelId !== "seedance-2.0" && parsed.modelId !== "seedance-2.0-fast") return null;
-    return {
-      taskId: parsed.taskId,
-      status: parsed.status,
-      startedAt: parsed.startedAt,
-      updatedAt: parsed.updatedAt || parsed.startedAt,
-      modeId: String(parsed.modeId || "cinematic-text-to-video"),
-      modelId: parsed.modelId,
-      aspectRatio: (parsed.aspectRatio as VideoAspectRatio) || "16:9",
-      duration: (parsed.duration as VideoDurationSeconds) || 10,
-      slotInputs: Array.isArray(parsed.slotInputs) ? parsed.slotInputs.map((x) => String(x ?? "")) : [""],
-      finalPrompt: String(parsed.finalPrompt || ""),
-      videoUrl: typeof parsed.videoUrl === "string" ? parsed.videoUrl : undefined,
-      error: typeof parsed.error === "string" ? parsed.error : undefined,
-    };
-  } catch {
-    return null;
-  }
+const UI_MODES: ReadonlyArray<{ id: UiVideoModeId; label: string }> = [
+  { id: "start_end_frame", label: "首尾帧" },
+  { id: "multi_image_reference", label: "多图参考" },
+];
+
+const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => id !== "kling-2.6-motion");
+
+function createEmptyRefSlots(): RefSlot[] {
+  return Array.from({ length: 10 }, () => null);
 }
 
-function writeRuntimeState(next: VideoGenerationRuntimeState) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(VIDEO_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    return;
-  }
-  window.dispatchEvent(new CustomEvent<VideoGenerationRuntimeState>(VIDEO_GENERATION_RUNTIME_EVENT, { detail: next }));
+function normalizeRefSlots(slots: Array<RefSlot | null | undefined>): RefSlot[] {
+  return Array.from({ length: 10 }, (_, index) => slots[index] ?? null);
+}
+
+function fileExt(file: File) {
+  const t = file.type.toLowerCase();
+  if (t.includes("quicktime")) return "mov";
+  if (t.includes("webm")) return "webm";
+  if (t.includes("mp4")) return "mp4";
+  if (t.includes("jpeg") || t.includes("jpg")) return "jpg";
+  if (t.includes("webp")) return "webp";
+  if (t.includes("gif")) return "gif";
+  return "png";
 }
 
 function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): string[] {
   return Array.from({ length: len }, (_, i) => slots?.[i] ?? "");
 }
 
-function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): string {
-  const tok = occ[slotIndex];
-  if (tok) {
-    const hint = placeholderInnerHint(tok);
+function composerPlaceholder(tokenList: string[], slotIndex: number): string {
+  const token = tokenList[slotIndex];
+  if (token) {
+    const hint = placeholderInnerHint(token);
     if (hint) return hint;
-    return `槽位 ${slotIndex + 1}`;
   }
-  if (modeId === "free") return "直接输入完整提示词（自由模式无固定模版）";
-  return "输入内容";
+  return slotIndex === 0 ? "输入视频描述" : `输入槽位 ${slotIndex + 1}`;
+}
+
+function uiModeFromRecord(modeId: VideoGenerationModeId): UiVideoModeId {
+  return modeId === "multi_image_reference" ? "multi_image_reference" : "start_end_frame";
+}
+
+function effectiveModeFromUi(
+  uiModeId: UiVideoModeId,
+  refSlots: RefSlot[],
+): { modeId: VideoGenerationModeId; error?: string } {
+  if (uiModeId === "multi_image_reference") {
+    return { modeId: "multi_image_reference" };
+  }
+  const first = refSlots[0];
+  const second = refSlots[1];
+  if (!first && !second) return { modeId: "text_to_video" };
+  if (second && !first) return { modeId: "start_end_frame", error: "请先上传首帧图，再上传尾帧图。" };
+  if (first && !second) return { modeId: "start_frame" };
+  return { modeId: "start_end_frame" };
+}
+
+function visibleSlotCount(uiModeId: UiVideoModeId): number {
+  return uiModeId === "start_end_frame" ? 2 : 10;
+}
+
+function slotLabel(uiModeId: UiVideoModeId, index: number): string {
+  if (uiModeId === "start_end_frame") return index === 0 ? "首帧" : "尾帧";
+  return `图${index + 1}`;
+}
+
+function buildReferences(uiModeId: UiVideoModeId, refSlots: RefSlot[]): UnifiedVideoReference[] {
+  if (uiModeId === "multi_image_reference") {
+    return refSlots
+      .slice(0, 10)
+      .filter((slot): slot is NonNullable<RefSlot> => Boolean(slot))
+      .map((slot) => ({
+        role: "image_reference" as const,
+        url: slot.url,
+        label: slot.label,
+        mimeType: "image/png",
+      }));
+  }
+
+  const refs: UnifiedVideoReference[] = [];
+  if (refSlots[0]) {
+    refs.push({
+      role: "start_frame",
+      url: refSlots[0].url,
+      label: refSlots[0].label,
+      mimeType: "image/png",
+    });
+  }
+  if (refSlots[1]) {
+    refs.push({
+      role: "end_frame",
+      url: refSlots[1].url,
+      label: refSlots[1].label,
+      mimeType: "image/png",
+    });
+  }
+  return refs;
+}
+
+function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReference["role"], index: number): number | null {
+  if (modeId === "multi_image_reference") {
+    return role === "image_reference" ? index : null;
+  }
+  if (role === "start_frame") return 0;
+  if (role === "end_frame") return 1;
+  return null;
 }
 
 export default function VideoPage() {
   const { videoWorkspace, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
-  const [selectedModeId, setSelectedModeId] = useState<string>("cinematic-text-to-video");
-  const [selectedModelId, setSelectedModelId] = useState<VideoModelId>("seedance-2.0");
-  const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>("16:9");
-  const [duration, setDuration] = useState<VideoDurationSeconds>(10);
+  const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
+  const [selectedPresetId, setSelectedPresetId] = useState("free");
+  const [selectedModelId, setSelectedModelId] = useState<VideoModelId>(videoWorkspace.uiDefaults.defaultModelId);
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<VideoAspectRatio>(videoWorkspace.uiDefaults.defaultAspectRatio);
+  const [selectedDuration, setSelectedDuration] = useState<number>(videoWorkspace.uiDefaults.defaultDurationSeconds);
+  const [selectedResolution, setSelectedResolution] = useState<VideoResolution>(videoWorkspace.uiDefaults.defaultResolution);
   const [slotInputs, setSlotInputs] = useState<string[]>([""]);
+  const [refSlots, setRefSlots] = useState<RefSlot[]>(createEmptyRefSlots);
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement>(null);
-  const promptsRef = useRef(videoWorkspace.prompts);
-  promptsRef.current = videoWorkspace.prompts;
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
-  const modes = useMemo(
-    () => [...VIDEO_MODES, ...(videoWorkspace.customModes ?? [])].reverse(),
-    [videoWorkspace.customModes],
+  const safeModelId = VIDEO_UI_MODEL_ORDER.includes(selectedModelId)
+    ? selectedModelId
+    : videoWorkspace.uiDefaults.defaultModelId;
+  const capabilities = getVideoCapabilities(safeModelId);
+  const { modeId: effectiveModeId, error: modeError } = useMemo(
+    () => effectiveModeFromUi(selectedUiModeId, refSlots),
+    [selectedUiModeId, refSlots],
   );
-
-  const promptTemplate = videoWorkspace.prompts[selectedModeId] ?? "";
+  const presetRailItems = useMemo<PresetRailItem[]>(
+    () => {
+      const builtinRows = VIDEO_MODES.map((mode) => ({
+        id: mode.id,
+        label: mode.label,
+      }));
+      const customRows = (videoWorkspace.customModes ?? []).map((mode) => ({
+        id: mode.id,
+        label: mode.label,
+      }));
+      return [...builtinRows, ...customRows].reverse().map((item) => ({
+        id: item.id,
+        label: item.label,
+        promptTemplate: videoWorkspace.prompts[item.id] ?? "",
+        coverUrl: videoWorkspace.coverImageUrlByMode?.[item.id]?.trim() ?? "",
+      }));
+    },
+    [videoWorkspace.coverImageUrlByMode, videoWorkspace.customModes, videoWorkspace.prompts],
+  );
+  const selectedPreset =
+    presetRailItems.find((item) => item.id === selectedPresetId) ?? presetRailItems[0] ?? { id: "free", label: "自由模式", promptTemplate: "", coverUrl: "" };
   const placeholderOccurrences = useMemo(
-    () => extractPromptPlaceholderOccurrences(promptTemplate),
-    [promptTemplate],
+    () => extractPromptPlaceholderOccurrences(selectedPreset.promptTemplate),
+    [selectedPreset.promptTemplate],
   );
-  const composerSlotCount = composerSlotCountForTemplate(promptTemplate, selectedModeId);
+  const composerSlotCount = composerSlotCountForTemplate(selectedPreset.promptTemplate);
+  const displayedRefSlotCount = visibleSlotCount(selectedUiModeId);
+  const modelReady = Boolean(
+    videoWorkspace.models[safeModelId]?.baseUrl.trim() &&
+      videoWorkspace.models[safeModelId]?.apiKey.trim() &&
+      videoWorkspace.models[safeModelId]?.apiModelName.trim(),
+  );
+  const sidebarHistoryRecords = useMemo(() => {
+    const success = records.filter((item) => item.status === "success" && Boolean(item.videoUrl)).slice(0, 24);
+    return success.slice().reverse();
+  }, [records]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    void fetchVideoGalleryRecords()
+      .then((rows) => setRecords(rows))
+      .catch((e) => console.warn("[video] gallery load failed", e));
+  }, [workspaceReady]);
+
+  useEffect(() => {
+    setSelectedModelId((current) =>
+      VIDEO_UI_MODEL_ORDER.includes(current) ? current : videoWorkspace.uiDefaults.defaultModelId,
+    );
+  }, [videoWorkspace.uiDefaults.defaultModelId]);
+
+  useEffect(() => {
+    setSelectedAspectRatio((current) =>
+      capabilities.aspectRatios.includes(current) ? current : capabilities.aspectRatios[0],
+    );
+    setSelectedDuration((current) =>
+      capabilities.durations.includes(current) ? current : capabilities.durations[0],
+    );
+    setSelectedResolution((current) =>
+      capabilities.resolutions.includes(current) ? current : capabilities.resolutions[0],
+    );
+  }, [capabilities, safeModelId]);
+
+  useEffect(() => {
+    if (presetRailItems.some((item) => item.id === selectedPresetId)) return;
+    setSelectedPresetId(presetRailItems[0]?.id ?? "free");
+  }, [presetRailItems, selectedPresetId]);
 
   useEffect(() => {
     setSlotInputs((prev) => normalizeSlotInputsToLength(prev, composerSlotCount));
-  }, [selectedModeId, promptTemplate, composerSlotCount]);
-
-  useEffect(() => {
-    if (modes.some((m) => m.id === selectedModeId)) return;
-    const fallback = modes.find((m) => m.id === "cinematic-text-to-video")?.id ?? modes[0]?.id ?? "free";
-    setSelectedModeId(fallback);
-  }, [modes, selectedModeId]);
-
-  const finalPrompt = useMemo(
-    () => buildVideoPromptFromSlots(promptTemplate, slotInputs),
-    [promptTemplate, slotInputs],
-  );
-
-  const selectedModel = videoWorkspace.models[selectedModelId];
-  const modelReady = Boolean(selectedModel.baseUrl.trim() && selectedModel.apiKey.trim() && String(selectedModel.modelName).trim());
-
-  const sidebarHistoryRecords = useMemo(() => {
-    const success = records.filter((r) => r.status === "success" && Boolean(r.videoUrl)).slice(0, 24);
-    return success.slice().reverse();
-  }, [records]);
+  }, [composerSlotCount, selectedPreset.promptTemplate]);
 
   useEffect(() => {
     const el = historyScrollRef.current;
@@ -155,70 +254,83 @@ export default function VideoPage() {
     });
   }, [sidebarHistoryRecords]);
 
-  const applyRuntimeState = useCallback((state: VideoGenerationRuntimeState | null) => {
-    if (!state) return;
-    setSelectedModelId(state.modelId);
-    setSelectedModeId(state.modeId);
-    setAspectRatio(state.aspectRatio);
-    setDuration(state.duration);
-    const tpl = promptsRef.current[state.modeId] ?? "";
-    const n = composerSlotCountForTemplate(tpl, state.modeId);
-    setSlotInputs(normalizeSlotInputsToLength(state.slotInputs, n));
-    setIsGenerating(state.status === "running");
-    if (state.status === "success") {
-      setResultUrl(state.videoUrl || "");
-      setError("");
-    } else if (state.status === "error") {
-      setError(state.error || "生视频失败");
-    }
-  }, []);
+  async function uploadImageSlotsFromIndex(index: number, files: FileList | File[] | null | undefined) {
+    if (!files) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    setIsUploading(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("请先登录");
 
-  useEffect(() => {
-    if (!workspaceReady) return;
-    const initial = readRuntimeState();
-    if (initial?.status === "running") {
-      applyRuntimeState(initial);
-    }
-    function onRuntimeChange(e: Event) {
-      const detail = e instanceof CustomEvent ? (e.detail as VideoGenerationRuntimeState | undefined) : undefined;
-      const next = detail ?? readRuntimeState();
-      if (!next) return;
-      applyRuntimeState(next);
-    }
-    function onVisible() {
-      if (document.visibilityState !== "visible") return;
-      const next = readRuntimeState();
-      if (next?.status !== "running") return;
-      applyRuntimeState(next);
-    }
-    window.addEventListener(VIDEO_GENERATION_RUNTIME_EVENT, onRuntimeChange);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener(VIDEO_GENERATION_RUNTIME_EVENT, onRuntimeChange);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [workspaceReady, applyRuntimeState]);
+      const uploaded = await Promise.all(
+        images.map(async (file) => {
+          const path = `${user.id}/video-inputs/${safeModelId}/${crypto.randomUUID()}.${fileExt(file)}`;
+          const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
+            contentType: file.type || "image/png",
+            upsert: false,
+          });
+          if (uploadError) throw uploadError;
+          const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+          if (!data.publicUrl) throw new Error("无法生成素材地址");
+          return { url: data.publicUrl, previewUrl: data.publicUrl, label: file.name } satisfies NonNullable<RefSlot>;
+        }),
+      );
 
-  useEffect(() => {
-    if (!workspaceReady) return;
-    void fetchVideoGalleryRecords()
-      .then((rows) => setRecords(rows))
-      .catch((e) => console.warn("[video] gallery load failed", e));
-  }, [workspaceReady]);
+      setRefSlots((prev) => {
+        const next = normalizeRefSlots(prev);
+        uploaded.forEach((slot, offset) => {
+          const slotIndex = index + offset;
+          if (slotIndex < next.length) next[slotIndex] = slot;
+        });
+        return next;
+      });
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "参考图上传失败");
+    } finally {
+      setIsUploading(false);
+      for (const key of Object.keys(fileInputRefs.current)) {
+        if (fileInputRefs.current[Number(key)]) fileInputRefs.current[Number(key)]!.value = "";
+      }
+    }
+  }
 
-  async function writeRecord(status: "success" | "error", videoUrl?: string, message?: string, promptSnapshot?: string) {
-    const resolvedPrompt = promptSnapshot ?? finalPrompt;
+  function clearRefImage(index: number) {
+    setRefSlots((prev) => {
+      const next = normalizeRefSlots(prev);
+      next[index] = null;
+      return next;
+    });
+  }
+
+  async function writeRecord(
+    status: "success" | "error",
+    finalPrompt: string,
+    providerTaskId?: string,
+    videoUrl?: string,
+    message?: string,
+  ) {
     const record: VideoGalleryRecord = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      modeId: selectedModeId,
-      modeName: modes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
-      modelId: selectedModelId,
-      modelName: String(selectedModel.modelName ?? selectedModelId),
-      finalPrompt: resolvedPrompt,
+      modelId: safeModelId,
+      modelName: getVideoModelDefinition(safeModelId).label,
+      modeId: effectiveModeId,
+      modeName: VIDEO_MODE_LABELS[effectiveModeId],
+      finalPrompt,
       userSlotInputs: [...slotInputs],
-      aspectRatio,
-      duration,
+      aspectRatio: selectedAspectRatio,
+      durationSeconds: selectedDuration,
+      resolution: selectedResolution,
+      providerTaskId,
+      referencesSummary: buildReferences(selectedUiModeId, refSlots).map((item) => ({
+        role: item.role,
+        label: item.label || item.role,
+        url: item.url,
+      })),
       videoUrl,
       status,
       error: message,
@@ -230,82 +342,100 @@ export default function VideoPage() {
       console.warn("[video] gallery save failed", e);
       setRecords((prev) => [record, ...prev]);
     }
-    return record;
   }
 
   async function handleGenerate() {
     setError("");
+    if (modeError) {
+      setError(modeError);
+      return;
+    }
+    if (selectedUiModeId === "multi_image_reference" && !refSlots[0]) {
+      setError("多图参考模式至少需要上传一张参考图。");
+      return;
+    }
+    if (effectiveModeId === "start_end_frame" && !capabilities.supportedModes.includes("start_end_frame")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持首尾帧模式。`);
+      return;
+    }
+    if (effectiveModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持多图参考模式。`);
+      return;
+    }
 
-    if (selectedModeId === "free" && !(slotInputs[0] ?? "").trim()) {
-      setError("自由模式请填写完整提示词（无内置模版）。");
+    const prompt = buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs).trim();
+    if (!prompt) {
+      setError("提示词不能为空。");
       return;
     }
 
     const liveSnapshot = await fetchWorkspaceSnapshot();
-    const liveVideoSettings = liveSnapshot.videoWorkspace;
-    const liveModel = liveVideoSettings.models[selectedModelId];
-    const liveTemplate = liveVideoSettings.prompts[selectedModeId] ?? "";
-    const promptForRequest = buildVideoPromptFromSlots(liveTemplate, slotInputs);
-    const liveReady = Boolean(liveModel.baseUrl && liveModel.apiKey && liveModel.modelName);
-    if (!liveReady) {
-      setError(`「${liveModel.label}」缺少 Base URL / API Key / 模型名。请在「设置 → 生视频 API」里填写并保存。`);
+    const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
+    if (!liveModel.baseUrl.trim() || !liveModel.apiKey.trim() || !liveModel.apiModelName.trim()) {
+      setError(`模型「${liveModel.label}」未配置完整，请先到设置页填写 Base URL / API Key / API Model Name。`);
       return;
     }
 
     setIsGenerating(true);
-    let runtimeState: VideoGenerationRuntimeState | null = null;
     try {
-      runtimeState = {
-        taskId: crypto.randomUUID(),
-        status: "running",
-        startedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        modeId: selectedModeId,
-        modelId: selectedModelId,
-        aspectRatio,
-        duration,
-        slotInputs: [...slotInputs],
-        finalPrompt: promptForRequest,
-      };
-      writeRuntimeState(runtimeState);
-
       const res = await fetch("/api/video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptForRequest, modelId: selectedModelId, aspectRatio, duration }),
+        body: JSON.stringify({
+          modelId: safeModelId,
+          modeId: effectiveModeId,
+          prompt,
+          duration: selectedDuration,
+          aspectRatio: selectedAspectRatio,
+          resolution: selectedResolution,
+          references: buildReferences(selectedUiModeId, refSlots),
+        }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        providerTaskId?: string;
+        videoUrl?: string;
+      };
       if (!res.ok) throw new Error(data.error || "生视频失败");
       const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl.trim() : "";
-      if (!videoUrl) throw new Error(typeof data.error === "string" && data.error ? data.error : "服务器未返回视频地址");
-
-      if (runtimeState) {
-        writeRuntimeState({
-          ...runtimeState,
-          status: "success",
-          updatedAt: new Date().toISOString(),
-          videoUrl,
-          error: undefined,
-        });
-      }
-
+      if (!videoUrl) throw new Error("服务器未返回视频地址");
       setResultUrl(videoUrl);
-      void writeRecord("success", videoUrl, undefined, promptForRequest);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "生视频失败";
-      if (runtimeState) {
-        writeRuntimeState({
-          ...runtimeState,
-          status: "error",
-          updatedAt: new Date().toISOString(),
-          error: message,
-        });
-      }
+      await writeRecord("success", prompt, data.providerTaskId, videoUrl);
+    } catch (generationError) {
+      const message = generationError instanceof Error ? generationError.message : "生视频失败";
       setError(message);
-      void writeRecord("error", undefined, message, runtimeState?.finalPrompt);
+      await writeRecord("error", prompt, undefined, undefined, message);
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function applyHistoryRecord(record: VideoGalleryRecord) {
+    setError("");
+    setSelectedUiModeId(uiModeFromRecord(record.modeId));
+    setSelectedModelId(VIDEO_UI_MODEL_ORDER.includes(record.modelId) ? record.modelId : videoWorkspace.uiDefaults.defaultModelId);
+    if (record.aspectRatio) setSelectedAspectRatio(record.aspectRatio);
+    if (record.durationSeconds) setSelectedDuration(record.durationSeconds);
+    if (record.resolution) setSelectedResolution(record.resolution);
+    setResultUrl(record.videoUrl || "");
+    const nextSlots = createEmptyRefSlots();
+    (record.referencesSummary ?? []).forEach((item, index) => {
+      const slotIndex = historySlotKey(record.modeId, item.role, index);
+      if (slotIndex === null || !item.url) return;
+      nextSlots[slotIndex] = {
+        url: item.url,
+        previewUrl: item.url,
+        label: item.label,
+      };
+    });
+    setRefSlots(nextSlots);
+    const template = selectedPreset.promptTemplate;
+    const n = composerSlotCountForTemplate(template);
+    const slots =
+      record.userSlotInputs && record.userSlotInputs.length > 0
+        ? normalizeSlotInputsToLength(record.userSlotInputs, n)
+        : normalizeSlotInputsToLength([record.finalPrompt], n);
+    setSlotInputs(slots);
   }
 
   return (
@@ -316,7 +446,7 @@ export default function VideoPage() {
             返回首页
           </Link>
           <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>模式化生视频工作台</p>
+            <p className={shellStyles.plainDockText}>统一生视频工作台</p>
           </div>
         </div>
       </header>
@@ -325,23 +455,28 @@ export default function VideoPage() {
         <aside className={styles.modePanel}>
           <div className={styles.modeColumn}>
             <div className={styles.railFrame}>
-              <div className={[styles.scrollWrap, modes.length > 7 ? styles.scrollWrapFaded : ""].filter(Boolean).join(" ")}>
+              <div className={styles.scrollWrap}>
                 <div className={styles.scroll}>
                   <div className={styles.list}>
-                    {modes.map((mode) => {
-                      const active = selectedModeId === mode.id;
-                      return (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          onClick={() => setSelectedModeId(mode.id)}
-                          className={[styles.modeItem, active ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
-                          aria-label={mode.label}
-                        >
-                          <span className={styles.modeLabel}>{mode.label}</span>
-                        </button>
-                      );
-                    })}
+                    {presetRailItems.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setSelectedPresetId(preset.id)}
+                        className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
+                        aria-label={preset.label}
+                      >
+                        {preset.coverUrl ? (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
+                            <span className={styles.modeMeta}>{preset.label}</span>
+                          </>
+                        ) : (
+                          <span className={styles.modeCoverFallback}>{preset.label}</span>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -353,9 +488,7 @@ export default function VideoPage() {
           <div className={styles.canvasInner}>
             <div className={styles.resultSafeFrame}>
               <div className={styles.resultClip}>
-                {resultUrl ? (
-                  <video className={styles.resultVideo} src={resultUrl} controls />
-                ) : null}
+                {resultUrl ? <video className={styles.resultVideo} src={resultUrl} controls /> : null}
               </div>
             </div>
             {isGenerating ? (
@@ -377,27 +510,10 @@ export default function VideoPage() {
                       <div className={styles.emptyRail}>暂无记录</div>
                     ) : (
                       sidebarHistoryRecords.map((record) => (
-                        <button
-                          key={record.id}
-                          type="button"
-                          onClick={() => {
-                            setError("");
-                            setResultUrl(record.videoUrl || "");
-                            setSelectedModelId(record.modelId);
-                            setSelectedModeId(record.modeId);
-                            setAspectRatio(record.aspectRatio);
-                            setDuration(record.duration);
-                            const tpl = videoWorkspace.prompts[record.modeId] ?? "";
-                            const n = composerSlotCountForTemplate(tpl, record.modeId);
-                            const slots = normalizeSlotInputsToLength(record.userSlotInputs ?? [""], n);
-                            setSlotInputs(slots);
-                          }}
-                          className={styles.historyItem}
-                          aria-label={`${record.modeName} · ${new Date(record.createdAt).toLocaleString()}`}
-                        >
+                        <button key={record.id} type="button" onClick={() => applyHistoryRecord(record)} className={styles.historyItem}>
                           {record.videoUrl ? <video src={record.videoUrl} muted playsInline /> : null}
                           <span className={styles.historyMeta}>
-                            {record.aspectRatio} · {record.duration}s
+                            {record.modeName} · {record.durationSeconds}s
                           </span>
                         </button>
                       ))
@@ -412,26 +528,65 @@ export default function VideoPage() {
         <section className={styles.composerWrap}>
           {error ? <div className={styles.error}>{error}</div> : null}
 
+          <div className={styles.referenceStrip}>
+            {refSlots.slice(0, displayedRefSlotCount).map((slot, index) => (
+              <div
+                key={index}
+                className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void uploadImageSlotsFromIndex(index, e.dataTransfer.files);
+                }}
+              >
+                <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
+                  <input
+                    ref={(node) => {
+                      fileInputRefs.current[index] = node;
+                    }}
+                    className={styles.hiddenInput}
+                    type="file"
+                    accept="image/*"
+                    multiple={selectedUiModeId === "multi_image_reference"}
+                    onChange={(e) => {
+                      void uploadImageSlotsFromIndex(index, e.target.files);
+                    }}
+                  />
+                  {slot ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={slot.previewUrl} alt={slot.label} />
+                  ) : (
+                    <span className={styles.refEmptyContent}>
+                      <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
+                    </span>
+                  )}
+                </label>
+                {slot ? (
+                  <button type="button" onClick={() => clearRefImage(index)} className={styles.deleteRef} aria-label="移除参考图">
+                    ×
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
           <div className={styles.composer}>
             <div
               className={styles.promptSlotGrid}
               style={{ gridTemplateColumns: `repeat(${slotInputs.length}, minmax(0, 1fr))` }}
-              role="group"
-              aria-label="生视频输入"
             >
-              {slotInputs.map((val, i) => (
-                <div key={i} className={styles.promptSlotPane}>
+              {slotInputs.map((value, index) => (
+                <div key={index} className={styles.promptSlotPane}>
                   <textarea
-                    value={val}
+                    value={value}
                     onChange={(e) =>
                       setSlotInputs((prev) => {
                         const next = [...prev];
-                        next[i] = e.target.value;
+                        next[index] = e.target.value;
                         return next;
                       })
                     }
-                    placeholder={composerPlaceholder(selectedModeId, placeholderOccurrences, i)}
-                    aria-label={`生视频输入槽位 ${i + 1}`}
+                    placeholder={composerPlaceholder(placeholderOccurrences, index)}
                     className={styles.promptInput}
                   />
                 </div>
@@ -440,29 +595,38 @@ export default function VideoPage() {
 
             <div className={styles.toolbar}>
               <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
-                {VIDEO_MODEL_ORDER.map((id) => {
-                  const model = videoWorkspace.models[id];
-                  const active = selectedModelId === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setSelectedModelId(id)}
-                      className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].join(" ")}
-                    >
-                      {model.label}
-                    </button>
-                  );
-                })}
+                {UI_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setSelectedUiModeId(mode.id)}
+                    className={[shellStyles.segmentedItem, selectedUiModeId === mode.id ? shellStyles.segmentedItemActive : ""].join(" ")}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
               </div>
 
               <select
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value as VideoAspectRatio)}
+                value={safeModelId}
+                onChange={(e) => setSelectedModelId(e.target.value as VideoModelId)}
+                className={styles.composerSelect}
+                aria-label="模型"
+              >
+                {VIDEO_UI_MODEL_ORDER.map((id) => (
+                  <option key={id} value={id}>
+                    {getVideoModelDefinition(id).label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedAspectRatio}
+                onChange={(e) => setSelectedAspectRatio(e.target.value as VideoAspectRatio)}
                 className={styles.composerSelect}
                 aria-label="比例"
               >
-                {ASPECT_RATIOS.map((ratio) => (
+                {capabilities.aspectRatios.map((ratio) => (
                   <option key={ratio} value={ratio}>
                     {ratio}
                   </option>
@@ -470,29 +634,37 @@ export default function VideoPage() {
               </select>
 
               <select
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value) as VideoDurationSeconds)}
+                value={selectedDuration}
+                onChange={(e) => setSelectedDuration(Number(e.target.value))}
                 className={styles.composerSelect}
                 aria-label="时长"
               >
-                {DURATIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}s
+                {capabilities.durations.map((duration) => (
+                  <option key={duration} value={duration}>
+                    {duration}s
                   </option>
                 ))}
               </select>
 
-              {!modelReady ? <span className={styles.warning}>当前模型未配置</span> : null}
-
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className={styles.generate}
-                title="生成"
+              <select
+                value={selectedResolution}
+                onChange={(e) => setSelectedResolution(e.target.value as VideoResolution)}
+                className={styles.composerSelect}
+                aria-label="分辨率"
               >
-                {isGenerating ? "生成中" : "生成"}
-              </button>
+                {capabilities.resolutions.map((resolution) => (
+                  <option key={resolution} value={resolution}>
+                    {resolution}
+                  </option>
+                ))}
+              </select>
+
+              <div className={styles.toolbarActions}>
+                {!modelReady ? <span className={styles.warning}>当前模型未配置</span> : null}
+                <button type="button" onClick={handleGenerate} disabled={isGenerating || isUploading} className={styles.generate}>
+                  {isGenerating ? "生成中" : "生成"}
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -500,4 +672,3 @@ export default function VideoPage() {
     </main>
   );
 }
-

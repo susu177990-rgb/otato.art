@@ -1,21 +1,34 @@
-import type { VideoAspectRatio, VideoDurationSeconds, VideoModelId } from "@/lib/video-workspace";
+import type {
+  UnifiedVideoReferenceRole,
+  VideoAspectRatio,
+  VideoGenerationModeId,
+  VideoModelId,
+  VideoResolution,
+} from "@/lib/video-workspace";
 
 export type VideoGenerationStatus = "success" | "error";
+
+export interface VideoGalleryReferenceSummary {
+  role: UnifiedVideoReferenceRole;
+  label: string;
+  url?: string;
+}
 
 export interface VideoGalleryRecord {
   id: string;
   createdAt: string;
-  modeId: string;
-  modeName: string;
   modelId: VideoModelId;
   modelName: string;
+  modeId: VideoGenerationModeId;
+  modeName: string;
   finalPrompt: string;
-  /** 按模版中 `{{…}}` 出现顺序保存的各槽输入 */
   userSlotInputs?: string[];
-  aspectRatio: VideoAspectRatio;
-  duration: VideoDurationSeconds;
+  aspectRatio?: VideoAspectRatio;
+  durationSeconds: number;
+  resolution?: VideoResolution;
+  providerTaskId?: string;
+  referencesSummary?: VideoGalleryReferenceSummary[];
   videoUrl?: string;
   status: VideoGenerationStatus;
   error?: string;
 }
-

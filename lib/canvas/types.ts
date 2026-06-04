@@ -1,4 +1,5 @@
 import type { GptImageQuality, ImageAspectRatio, ImageModelId, ImageSizeTier } from "@/lib/image-workspace";
+import type { VideoAspectRatio, VideoGenerationModeId, VideoModelId, VideoResolution } from "@/lib/video-workspace";
 
 export type CanvasPosition = {
   x: number;
@@ -30,11 +31,17 @@ export type CanvasNodeMetadata = {
   children?: string[];
   /** Child node: ID of the parent group node */
   parentId?: string;
-  /** image/video node generation-mode runtime */
-  modelId?: ImageModelId;
+  /** image node generation runtime */
+  imageModelId?: ImageModelId;
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
   gptImageQuality?: GptImageQuality;
+  /** video node generation runtime */
+  videoModelId?: VideoModelId;
+  videoModeId?: VideoGenerationModeId;
+  videoAspectRatio?: VideoAspectRatio;
+  videoResolution?: VideoResolution;
+  videoDurationSeconds?: number;
   status?: "idle" | "running" | "success" | "error";
   lastRunAt?: string;
   lastError?: string;

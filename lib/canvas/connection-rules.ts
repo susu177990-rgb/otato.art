@@ -17,8 +17,23 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
       return [];
     case "image":
       return node.metadata?.source === "upload" ? [] : ["prompt", "imageReference"];
-    case "video":
-      return node.metadata?.source === "upload" ? [] : ["prompt", "firstFrame", "lastFrame", "videoReference"];
+    case "video": {
+      if (node.metadata?.source === "upload") return [];
+      switch (node.metadata?.videoModeId ?? "text_to_video") {
+        case "text_to_video":
+          return ["prompt"];
+        case "start_frame":
+          return ["prompt", "firstFrame"];
+        case "start_end_frame":
+          return ["prompt", "firstFrame", "lastFrame"];
+        case "multi_image_reference":
+          return ["prompt", "imageReference"];
+        case "motion_control":
+          return ["prompt", "firstFrame", "videoReference"];
+        default:
+          return ["prompt"];
+      }
+    }
     default:
       return [];
   }
@@ -65,17 +80,39 @@ export function inferTargetPort(
   }
 
   if (to.type === "video" && to.metadata?.source !== "upload") {
+    const videoModeId = to.metadata?.videoModeId ?? "text_to_video";
     if (from.type === "text") {
       return connectionExists(connections, from.id, to.id, "prompt")
         ? { targetPort: null, reason: "提示词已连接" }
         : { targetPort: "prompt" };
     }
     if (from.type === "image") {
-      if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "firstFrame")) return { targetPort: "firstFrame" };
-      if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "lastFrame")) return { targetPort: "lastFrame" };
-      return { targetPort: null, reason: "首帧和尾帧已占用" };
+      if (videoModeId === "start_frame") {
+        return connectionExists(connections, from.id, to.id, "firstFrame")
+          ? { targetPort: null, reason: "首帧已连接" }
+          : { targetPort: "firstFrame" };
+      }
+      if (videoModeId === "start_end_frame") {
+        if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "firstFrame")) return { targetPort: "firstFrame" };
+        if (!connections.some((conn) => conn.toNodeId === to.id && conn.targetPort === "lastFrame")) return { targetPort: "lastFrame" };
+        return { targetPort: null, reason: "首帧和尾帧已占用" };
+      }
+      if (videoModeId === "multi_image_reference") {
+        return connectionExists(connections, from.id, to.id, "imageReference")
+          ? { targetPort: null, reason: "该参考图已连接" }
+          : { targetPort: "imageReference" };
+      }
+      if (videoModeId === "motion_control") {
+        return connectionExists(connections, from.id, to.id, "firstFrame")
+          ? { targetPort: null, reason: "主体首帧已连接" }
+          : { targetPort: "firstFrame" };
+      }
+      return { targetPort: null, reason: "当前视频模式不接收图片输入" };
     }
     if (from.type === "video") {
+      if (videoModeId !== "motion_control") {
+        return { targetPort: null, reason: "当前视频模式不接收视频参考" };
+      }
       return connectionExists(connections, from.id, to.id, "videoReference")
         ? { targetPort: null, reason: "视频参考已连接" }
         : { targetPort: "videoReference" };

@@ -63,6 +63,41 @@ export async function deleteImageModeCover(
   return { imageWorkspace: data.imageWorkspace };
 }
 
+export async function uploadVideoModeCover(
+  modeId: string,
+  file: File,
+): Promise<{ coverImageUrl: string; videoWorkspace: VideoWorkspaceSettings }> {
+  const fd = new FormData();
+  fd.set("modeId", modeId);
+  fd.set("file", file);
+  const res = await fetch("/api/video-mode-covers", { method: "POST", body: fd });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    coverImageUrl?: string;
+    videoWorkspace?: VideoWorkspaceSettings;
+  };
+  if (!res.ok) throw new Error(data.error?.trim() || "无法上传模式封面");
+  if (!data.coverImageUrl || !data.videoWorkspace) throw new Error("上传封面响应不完整");
+  return { coverImageUrl: data.coverImageUrl, videoWorkspace: data.videoWorkspace };
+}
+
+export async function deleteVideoModeCover(
+  modeId: string,
+): Promise<{ videoWorkspace: VideoWorkspaceSettings }> {
+  const res = await fetch("/api/video-mode-covers", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modeId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    videoWorkspace?: VideoWorkspaceSettings;
+  };
+  if (!res.ok) throw new Error(data.error?.trim() || "无法删除模式封面");
+  if (!data.videoWorkspace) throw new Error("删除封面响应不完整");
+  return { videoWorkspace: data.videoWorkspace };
+}
+
 export async function fetchGalleryRecords() {
   const res = await fetch("/api/image/gallery", { cache: "no-store" });
   if (!res.ok) throw new Error("无法加载画廊");

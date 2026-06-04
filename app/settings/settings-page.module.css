@@ -35,7 +35,7 @@
 
 /* 生图提示词 tab：比默认 shell 更宽，便于 4 列卡片与编辑区并排 */
 .promptModeShell {
-  max-width: 1360px;
+  max-width: 1360px !important;
 }
 
 /* 生图提示词：4 列宫格 */

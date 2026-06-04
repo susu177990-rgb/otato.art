@@ -274,6 +274,57 @@
   border: 2px solid #c4b5fd;
 }
 
+.modeCoverFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #e4e4e7;
+  word-break: break-word;
+}
+
+.modeItemActive .modeCoverFallback {
+  color: #e9d5ff;
+}
+
+.modeCoverImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #09090b;
+}
+
+.modeMeta {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 4px 3px;
+  background: rgba(0, 0, 0, 0.68);
+  color: #e4e4e7;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.modeItem:hover .modeMeta,
+.modeItem:focus-visible .modeMeta,
+.modeItemActive .modeMeta {
+  opacity: 1;
+}
+
+.modeItemActive .modeMeta {
+  background: rgba(76, 29, 149, 0.72);
+  color: #f3e8ff;
+}
+
 .modeLabel {
   position: absolute;
   inset: auto 0 0;
@@ -338,11 +389,111 @@
 
 .composer {
   overflow-x: hidden;
+  overflow-y: visible;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 30px;
   background: rgba(8, 8, 9, 0.94);
   box-shadow: 0 30px 120px rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(26px);
+}
+
+.referenceStrip {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  overflow-x: auto;
+  padding: 0 4px 12px;
+}
+
+.refSlot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #09090b;
+  box-shadow: 0 13px 42px rgba(0, 0, 0, 0.32);
+}
+
+.refSlotEmpty {
+  border: 1.5px dashed rgba(148, 163, 184, 0.48);
+}
+
+.refSlotFilled {
+  border: 1.5px solid rgba(255, 255, 255, 0.24);
+}
+
+.refSlot label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.refSlot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.refEmptyContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 3px 2px;
+  text-align: center;
+  color: #64748b;
+}
+
+.refSlotIndex {
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  line-height: 1.05;
+}
+
+.deleteRef {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ef4444;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, background 140ms ease;
+}
+
+.refSlot:hover .deleteRef,
+.refSlot:focus-within .deleteRef {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.deleteRef:hover {
+  background: rgba(0, 0, 0, 0.75);
+  color: #f87171;
 }
 
 .promptSlotGrid {
@@ -393,12 +544,21 @@
 .toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   min-height: 34px;
   flex-shrink: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding: 10px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.toolbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .composerSelect {
@@ -438,6 +598,21 @@
   color: #fbbf24;
   font-size: 11px;
   font-weight: 500;
+}
+
+.toolbarActions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.modelSummary {
+  flex: 1 1 220px;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .viewPrompt {
@@ -499,4 +674,3 @@
     max-height: calc(100vh - 24px);
   }
 }
-
