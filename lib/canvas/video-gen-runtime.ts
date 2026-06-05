@@ -2,7 +2,9 @@ import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanvasBoard, CanvasNode } from "@/lib/canvas/types";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
-import { prependVideoGalleryRecord } from "@/lib/db/video-gallery-store";
+import { prependVideoGalleryRecord, listVideoGalleryRecords } from "@/lib/db/video-gallery-store";
+import { listGalleryRecords } from "@/lib/db/gallery-store";
+import { resolveMentions } from "@/lib/prompt-mention";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import {
   generateUnifiedVideo,
@@ -139,8 +141,37 @@ export async function executeCanvasVideoGeneration(params: {
   const prompt = buildPrompt(params.board, sourceNode);
   const references = collectReferences(params.board, sourceNode);
 
-  const hasStartFrame = references.some((ref) => ref.role === "start_frame");
-  const hasEndFrame = references.some((ref) => ref.role === "end_frame");
+  // 获取用户历史画廊记录以解析可能存在的 @ 引用
+  const galleryRecords = await listGalleryRecords(params.supabase, 100).catch(() => []);
+  const videoGalleryRecords = await listVideoGalleryRecords(params.supabase, 100).catch(() => []);
+  const combinedRecords = [...galleryRecords, ...videoGalleryRecords];
+
+  const { cleanedPrompt, refImages: resolvedImages, refVideos: resolvedVideos } = resolveMentions(prompt, {
+    galleryRecords: combinedRecords,
+    canvasNodes: params.board.nodes,
+  });
+
+  const extraReferences: UnifiedVideoReference[] = [];
+  resolvedImages.forEach((url, i) => {
+    extraReferences.push({
+      role: "image_reference",
+      url,
+      label: `Prompt Ref Image ${i + 1}`,
+      mimeType: "image/png",
+    });
+  });
+  resolvedVideos.forEach((url, i) => {
+    extraReferences.push({
+      role: "motion_source_video",
+      url,
+      label: `Prompt Ref Video ${i + 1}`,
+      mimeType: "video/mp4",
+    });
+  });
+
+  const allReferences = [...references, ...extraReferences];
+  const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
+  const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
 
   let effectiveModeId: VideoGenerationModeId;
   if (modeId === "motion_control") {
@@ -160,11 +191,11 @@ export async function executeCanvasVideoGeneration(params: {
   const request: UnifiedVideoGenerateRequest = {
     modelId,
     modeId: effectiveModeId,
-    prompt,
+    prompt: cleanedPrompt,
     durationSeconds: sourceNode.metadata?.videoDurationSeconds ?? capabilities.durations[0] ?? 5,
     aspectRatio: sourceNode.metadata?.videoAspectRatio ?? capabilities.aspectRatios[0],
     resolution: sourceNode.metadata?.videoResolution ?? capabilities.resolutions[0],
-    references,
+    references: allReferences,
   };
 
   const result = await generateUnifiedVideo({
@@ -193,11 +224,11 @@ export async function executeCanvasVideoGeneration(params: {
 
   const galleryRecord = buildGalleryRecord({
     result,
-    prompt,
+    prompt: cleanedPrompt,
     node: nextSourceNode,
     modelId,
     modeId: effectiveModeId,
-    references,
+    references: allReferences,
   });
   await prependVideoGalleryRecord(params.supabase, galleryRecord);
 

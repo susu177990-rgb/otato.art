@@ -9,9 +9,12 @@ import { useApiSettings } from "@/components/ApiSettingsProvider";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import {
   fetchVideoGalleryRecords,
+  fetchGalleryRecords,
   fetchWorkspaceSnapshot,
   prependVideoGalleryRecordApi,
 } from "@/lib/workspace-api";
+import { MentionTextarea } from "@/components/MentionTextarea";
+import { resolveMentions } from "@/lib/prompt-mention";
 import {
   VIDEO_MODEL_ORDER,
   VIDEO_MODES,
@@ -141,6 +144,7 @@ function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReferen
 export default function VideoPage() {
   const { videoWorkspace, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
+  const [imageRecords, setImageRecords] = useState<any[]>([]);
   const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
   const [selectedPresetId, setSelectedPresetId] = useState("free");
   const [selectedModelId, setSelectedModelId] = useState<VideoModelId>(videoWorkspace.uiDefaults.defaultModelId);
@@ -206,7 +210,27 @@ export default function VideoPage() {
     void fetchVideoGalleryRecords()
       .then((rows) => setRecords(rows))
       .catch((e) => console.warn("[video] gallery load failed", e));
+    void fetchGalleryRecords()
+      .then((rows) => setImageRecords(rows))
+      .catch((e) => console.warn("[image] gallery load failed", e));
   }, [workspaceReady]);
+
+  const mentionCandidates = useMemo(() => {
+    const images = imageRecords.map((r) => ({
+      id: r.id,
+      name: r.finalPrompt ? (r.finalPrompt.length > 25 ? r.finalPrompt.slice(0, 25) + "..." : r.finalPrompt) : "画廊图片",
+      type: "gallery" as const,
+      subType: "image",
+      imageUrl: r.imageUrl,
+    }));
+    const videos = records.map((r) => ({
+      id: r.id,
+      name: r.finalPrompt ? (r.finalPrompt.length > 25 ? r.finalPrompt.slice(0, 25) + "..." : r.finalPrompt) : "画廊视频",
+      type: "gallery" as const,
+      subType: "video",
+    }));
+    return [...images, ...videos];
+  }, [imageRecords, records]);
 
   useEffect(() => {
     setSelectedModelId((current) =>
@@ -301,21 +325,24 @@ export default function VideoPage() {
     providerTaskId?: string,
     videoUrl?: string,
     message?: string,
+    overrideModeId?: VideoGenerationModeId,
+    overrideReferences?: UnifiedVideoReference[],
   ) {
+    const targetModeId = overrideModeId ?? effectiveModeId;
     const record: VideoGalleryRecord = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       modelId: safeModelId,
       modelName: getVideoModelDefinition(safeModelId).label,
-      modeId: effectiveModeId,
-      modeName: VIDEO_MODE_LABELS[effectiveModeId],
+      modeId: targetModeId,
+      modeName: VIDEO_MODE_LABELS[targetModeId],
       finalPrompt,
       userSlotInputs: [...slotInputs],
       aspectRatio: selectedAspectRatio,
       durationSeconds: selectedDuration,
       resolution: selectedResolution,
       providerTaskId,
-      referencesSummary: buildReferences(selectedUiModeId, refSlots).map((item) => ({
+      referencesSummary: (overrideReferences ?? buildReferences(selectedUiModeId, refSlots)).map((item) => ({
         role: item.role,
         label: item.label || item.role,
         url: item.url,
@@ -358,6 +385,47 @@ export default function VideoPage() {
       return;
     }
 
+    const { cleanedPrompt, refImages: resolvedImages, refVideos: resolvedVideos } = resolveMentions(prompt, {
+      galleryRecords: [...imageRecords, ...records],
+    });
+
+    const extraRefs: UnifiedVideoReference[] = [];
+    resolvedImages.forEach((url, i) => {
+      extraRefs.push({
+        role: "image_reference",
+        url,
+        label: `Prompt Ref Image ${i + 1}`,
+        mimeType: "image/png",
+      });
+    });
+    resolvedVideos.forEach((url, i) => {
+      extraRefs.push({
+        role: "motion_source_video",
+        url,
+        label: `Prompt Ref Video ${i + 1}`,
+        mimeType: "video/mp4",
+      });
+    });
+
+    const allReferences = [...buildReferences(selectedUiModeId, refSlots), ...extraRefs];
+    const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
+    const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
+
+    let finalEffectiveModeId = effectiveModeId;
+    if (selectedUiModeId === "start_end_frame") {
+      const { modeId: inferredMode } = inferEffectiveVideoMode(selectedUiModeId, hasStartFrame, hasEndFrame);
+      finalEffectiveModeId = inferredMode;
+    }
+
+    if (finalEffectiveModeId === "start_end_frame" && !capabilities.supportedModes.includes("start_end_frame")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持首尾帧模式。`);
+      return;
+    }
+    if (finalEffectiveModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持多图参考模式。`);
+      return;
+    }
+
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
     if (!liveModel.baseUrl.trim() || !liveModel.apiKey.trim() || !liveModel.apiModelName.trim()) {
@@ -372,12 +440,12 @@ export default function VideoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           modelId: safeModelId,
-          modeId: effectiveModeId,
-          prompt,
+          modeId: finalEffectiveModeId,
+          prompt: cleanedPrompt,
           duration: selectedDuration,
           aspectRatio: selectedAspectRatio,
           resolution: selectedResolution,
-          references: buildReferences(selectedUiModeId, refSlots),
+          references: allReferences,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -389,11 +457,11 @@ export default function VideoPage() {
       const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl.trim() : "";
       if (!videoUrl) throw new Error("服务器未返回视频地址");
       setResultUrl(videoUrl);
-      await writeRecord("success", prompt, data.providerTaskId, videoUrl);
+      await writeRecord("success", cleanedPrompt, data.providerTaskId, videoUrl, undefined, finalEffectiveModeId, allReferences);
     } catch (generationError) {
       const message = generationError instanceof Error ? generationError.message : "生视频失败";
       setError(message);
-      await writeRecord("error", prompt, undefined, undefined, message);
+      await writeRecord("error", cleanedPrompt, undefined, undefined, message, finalEffectiveModeId, allReferences);
     } finally {
       setIsGenerating(false);
     }
@@ -566,15 +634,16 @@ export default function VideoPage() {
             >
               {slotInputs.map((value, index) => (
                 <div key={index} className={styles.promptSlotPane}>
-                  <textarea
+                  <MentionTextarea
                     value={value}
-                    onChange={(e) =>
+                    onValueChange={(newVal) =>
                       setSlotInputs((prev) => {
                         const next = [...prev];
-                        next[index] = e.target.value;
+                        next[index] = newVal;
                         return next;
                       })
                     }
+                    candidates={mentionCandidates}
                     placeholder={composerPlaceholder(placeholderOccurrences, index)}
                     className={styles.promptInput}
                   />

@@ -54,8 +54,10 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
         response: Response.json({ error: "meta 字段不是合法 JSON。", code: "META_JSON_INVALID" }, { status: 400 }),
       };
     }
-    const meta = metaObj && typeof metaObj === "object" ? (metaObj as Record<string, unknown>) : {};
-    const refImages: string[] = [];
+    const meta = metaObj && typeof metaObj === "object" ? (metaObj as Record<string, any>) : {};
+    const refImages: string[] = Array.isArray(meta.refImages)
+      ? meta.refImages.filter((x): x is string => typeof x === "string" && x.length > 0)
+      : [];
     for (const part of form.getAll("ref")) {
       if (part instanceof Blob && part.size > 0) {
         refImages.push(await blobToDataUrl(part));

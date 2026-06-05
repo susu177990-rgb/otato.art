@@ -21,6 +21,8 @@ import {
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
+import { MentionTextarea } from "@/components/MentionTextarea";
+import { resolveMentions } from "@/lib/prompt-mention";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
   mergeCachedImageUrls,
@@ -286,6 +288,14 @@ export default function ImagePage() {
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const mentionCandidates = useMemo(() => {
+    return records.map((record) => ({
+      id: record.id,
+      name: record.finalPrompt ? (record.finalPrompt.length > 25 ? record.finalPrompt.slice(0, 25) + "..." : record.finalPrompt) : "画廊图片",
+      type: "gallery" as const,
+      imageUrl: record.imageUrl,
+    }));
+  }, [records]);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
@@ -654,6 +664,11 @@ export default function ImagePage() {
     const liveModel = liveSettings.models[selectedModelId];
     const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
     const promptForRequest = buildImagePromptFromSlots(liveTemplate, slotInputs);
+    // 解析提示词中的 @ 引用
+    const { cleanedPrompt, refImages: resolvedImages } = resolveMentions(promptForRequest, {
+      galleryRecords: records,
+    });
+
     const liveReady = Boolean(
       liveModel.endpointUrl && liveModel.apiKey && liveModel.modelName,
     );
@@ -670,7 +685,14 @@ export default function ImagePage() {
     let runtimeState: ImageGenerationRuntimeState | null = null;
     try {
       const refSlotsSnapshot = normalizeRefSlots(refSlots);
-      referenceImages = await snapshotReferenceImages(refSlotsSnapshot);
+      const fileRefs = await snapshotReferenceImages(refSlotsSnapshot);
+      const resolvedRefs: ImageGalleryReferenceImage[] = resolvedImages.map((url, idx) => ({
+        slotIndex: fileRefs.length + idx,
+        dataUrl: url,
+        name: `Prompt Ref ${idx + 1}`,
+        type: "image/png",
+      }));
+      referenceImages = [...fileRefs, ...resolvedRefs];
       refSlotsUserEditedRef.current = false;
       runtimeState = {
         taskId: crypto.randomUUID(),
@@ -683,7 +705,7 @@ export default function ImagePage() {
         imageSize,
         gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
         slotInputs: [...slotInputs],
-        finalPrompt: promptForRequest,
+        finalPrompt: cleanedPrompt,
         referenceImages,
       };
       writeGenerationRuntimeState(runtimeState);
@@ -691,11 +713,12 @@ export default function ImagePage() {
       fd.append(
         "meta",
         JSON.stringify({
-          prompt: promptForRequest,
+          prompt: cleanedPrompt,
           model: liveModel,
           aspectRatio,
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
+          refImages: resolvedImages, // 传入解析的图片链接
         }),
       );
       for (const slot of refSlotsSnapshot) {
@@ -721,7 +744,7 @@ export default function ImagePage() {
       }
       if (mountedRef.current) setResultUrl(imageUrl);
       try {
-        void writeRecord("success", imageUrl, undefined, promptForRequest, referenceImages);
+        void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages);
       } catch (persistErr) {
         console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
       }
@@ -737,7 +760,7 @@ export default function ImagePage() {
       }
       if (mountedRef.current) setError(message);
       try {
-        void writeRecord("error", undefined, message, promptForRequest, referenceImages);
+        void writeRecord("error", undefined, message, cleanedPrompt, referenceImages);
       } catch (persistErr) {
         console.warn("写入失败记录到本地画廊时出错:", persistErr);
       }
@@ -986,15 +1009,16 @@ export default function ImagePage() {
             >
               {slotInputs.map((val, i) => (
                 <div key={i} className={styles.promptSlotPane}>
-                  <textarea
+                  <MentionTextarea
                     value={val}
-                    onChange={(e) =>
+                    onValueChange={(newVal) =>
                       setSlotInputs((prev) => {
                         const next = [...prev];
-                        next[i] = e.target.value;
+                        next[i] = newVal;
                         return next;
                       })
                     }
+                    candidates={mentionCandidates}
                     placeholder={composerPlaceholder(selectedModeId, placeholderOccurrences, i)}
                     aria-label={`作图输入槽位 ${i + 1}`}
                     className={styles.promptInput}

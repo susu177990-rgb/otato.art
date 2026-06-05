@@ -39,6 +39,7 @@ import {
   type UiVideoModeId,
   UI_VIDEO_MODES,
 } from "@/lib/video-workspace";
+import { MentionTextarea } from "@/components/MentionTextarea";
 import type {
   CanvasBoard,
   CanvasBoardData,
@@ -486,6 +487,41 @@ export default function CanvasBoardPage() {
   const [smartGuides, setSmartGuides] = useState<SmartGuide[]>([]);
 
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  const mentionCandidates = useMemo(() => {
+    // 1. 画布上的其它节点
+    const nodeItems = nodes.map((node) => ({
+      id: node.id,
+      name: node.title || (node.type === "image" ? "图片节点" : node.type === "video" ? "视频节点" : "文本节点"),
+      type: "node" as const,
+      subType: node.type,
+      imageUrl: node.type === "image"
+        ? (node.metadata?.imageUrl || node.metadata?.previewImageUrl)
+        : node.type === "video"
+          ? (node.metadata?.videoUrl || node.metadata?.previewVideoUrl)
+          : undefined,
+      text: node.metadata?.text,
+    }));
+
+    // 2. 画廊生图资产
+    const galleryImageItems = imageAssets.map((record) => ({
+      id: record.id,
+      name: record.finalPrompt ? (record.finalPrompt.length > 25 ? record.finalPrompt.slice(0, 25) + "..." : record.finalPrompt) : "画廊图片",
+      type: "gallery" as const,
+      subType: "image",
+      imageUrl: record.imageUrl,
+    }));
+
+    // 3. 画廊生视频资产
+    const galleryVideoItems = videoAssets.map((record) => ({
+      id: record.id,
+      name: record.finalPrompt ? (record.finalPrompt.length > 25 ? record.finalPrompt.slice(0, 25) + "..." : record.finalPrompt) : "画廊视频",
+      type: "gallery" as const,
+      subType: "video",
+    }));
+
+    return [...nodeItems, ...galleryImageItems, ...galleryVideoItems];
+  }, [nodes, imageAssets, videoAssets]);
 
   const sortedNodes = useMemo(() => {
     const groups = nodes.filter((n) => n.type === "group");
@@ -2234,11 +2270,12 @@ export default function CanvasBoardPage() {
 
                       {/* ── Bottom card: composer (prompt + toolbar) ── */}
                       <div className={styles.genComposerBox} onPointerDown={(e) => e.stopPropagation()}>
-                        <textarea
+                        <MentionTextarea
                           className={styles.generatorPrompt}
                           value={node.metadata?.prompt ?? ""}
                           placeholder={node.type === "image" ? "描述任何你想要生成的内容" : "描述你想要生成的视频内容"}
-                          onChange={(e) => updateNodeMetadata(node.id, "prompt", e.target.value)}
+                          onValueChange={(newVal) => updateNodeMetadata(node.id, "prompt", newVal)}
+                          candidates={mentionCandidates.filter((c) => c.id !== node.id)}
                           onPointerDown={(e) => e.stopPropagation()}
                         />
                         <div className={styles.generatorToolbar}>
@@ -2412,11 +2449,12 @@ export default function CanvasBoardPage() {
                       }}
                     >
                       {node.type === "text" ? (
-                        <textarea
+                        <MentionTextarea
                           className={styles.textNodeInput}
                           value={node.metadata?.text ?? ""}
                           placeholder="输入文本、提示词或分镜备注"
-                          onChange={(e) => updateNodeMetadata(node.id, "text", e.target.value)}
+                          onValueChange={(newVal) => updateNodeMetadata(node.id, "text", newVal)}
+                          candidates={mentionCandidates.filter((c) => c.id !== node.id)}
                           onPointerDown={(e) => e.stopPropagation()}
                         />
                       ) : node.type === "image" ? (

@@ -5,7 +5,8 @@ import type { ImageAspectRatio, ImageGalleryRecord, ImageModelSettings } from "@
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { generateImage } from "@/lib/image-generate";
 import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
-import { prependGalleryRecord } from "@/lib/db/gallery-store";
+import { prependGalleryRecord, listGalleryRecords } from "@/lib/db/gallery-store";
+import { resolveMentions } from "@/lib/prompt-mention";
 
 
 
@@ -138,11 +139,24 @@ export async function executeCanvasImageGeneration(params: {
   const sourceNode = mustBeImageNode(params.board.nodes.find((node) => node.id === params.nodeId));
   const model = resolveImageModel(params.workspaceSnapshot, sourceNode);
   const prompt = buildPrompt(params.board, sourceNode);
-  const refImages = collectReferenceImages(params.board, sourceNode);
+
+  // 获取用户历史画廊记录以解析可能存在的画廊图片 @ 引用
+  const galleryRecords = await listGalleryRecords(params.supabase, 100).catch(() => []);
+  const { cleanedPrompt, refImages: resolvedImages } = resolveMentions(prompt, {
+    galleryRecords,
+    canvasNodes: params.board.nodes,
+  });
+
+  const refImages = Array.from(
+    new Set([
+      ...collectReferenceImages(params.board, sourceNode),
+      ...resolvedImages,
+    ])
+  );
 
   const result = await generateImage({
     model,
-    prompt,
+    prompt: cleanedPrompt,
     aspectRatio: sourceNode.metadata?.aspectRatio ?? "4:3",
     imageSize: sourceNode.metadata?.imageSize ?? "1K",
     gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
@@ -173,7 +187,7 @@ export async function executeCanvasImageGeneration(params: {
     imageUrl,
     model,
     sourceNode: nextSourceNode,
-    prompt,
+    prompt: cleanedPrompt,
     refImageCount: refImages.length,
   });
   await prependGalleryRecord(params.supabase, galleryRecord);
