@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import {
@@ -72,8 +72,8 @@ type DragState = {
 };
 
 type PanState = { startX: number; startY: number; initial: CanvasViewport };
-type UploadKind = "image" | "video";
-type AssetKind = "text" | "image" | "video";
+type UploadKind = "image" | "video" | "audio";
+type AssetKind = "text" | "image" | "video" | "audio";
 
 type MenuState =
   | { kind: "canvas"; x: number; y: number; world: CanvasPosition }
@@ -151,6 +151,12 @@ const TEXT_ASSET_STORAGE_KEY = "gleam-canvas-text-assets";
 
 function fileExt(file: File) {
   const t = file.type.toLowerCase();
+  if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
+  if (t.includes("wav")) return "wav";
+  if (t.includes("aac")) return "aac";
+  if (t.includes("ogg")) return "ogg";
+  if (t.includes("flac")) return "flac";
+  if (t.includes("m4a") || t.includes("mp4")) return file.type.startsWith("audio/") ? "m4a" : "mp4";
   if (t.includes("quicktime")) return "mov";
   if (t.includes("webm")) return "webm";
   if (t.includes("mp4")) return "mp4";
@@ -175,6 +181,15 @@ function readVideoSize(url: string): Promise<{ width: number; height: number }> 
     video.onloadedmetadata = () => resolve({ width: video.videoWidth || 16, height: video.videoHeight || 9 });
     video.onerror = () => resolve({ width: 16, height: 9 });
     video.src = url;
+  });
+}
+
+function readAudioDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const audio = document.createElement("audio");
+    audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? audio.duration : undefined);
+    audio.onerror = () => resolve(undefined);
+    audio.src = url;
   });
 }
 
@@ -362,22 +377,36 @@ function makeEmptyVideoNode(
   };
 }
 
-function makeMediaNode(pos: CanvasPosition, kind: UploadKind, media: { url: string; width: number; height: number; mimeType: string, filename?: string }): CanvasNode {
-  const size = fitMediaSize(media);
+function makeMediaNode(
+  pos: CanvasPosition,
+  kind: UploadKind,
+  media: { url: string; width: number; height: number; mimeType: string; filename?: string; audioDurationSeconds?: number },
+): CanvasNode {
+  const size = kind === "audio" ? { width: 320, height: 96 } : fitMediaSize(media);
+  const title = media.filename || (kind === "image" ? "图片" : kind === "video" ? "视频" : "音频");
   return {
-    id: newNodeId(kind), type: kind, title: media.filename || (kind === "image" ? "图片" : "视频"),
+    id: newNodeId(kind), type: kind, title,
     position: { x: pos.x - size.width / 2, y: pos.y - size.height / 2 },
     width: size.width, height: size.height,
-    metadata: { imageUrl: kind === "image" ? media.url : undefined, videoUrl: kind === "video" ? media.url : undefined, naturalWidth: media.width, naturalHeight: media.height, mimeType: media.mimeType, source: "upload" },
+    metadata: {
+      imageUrl: kind === "image" ? media.url : undefined,
+      videoUrl: kind === "video" ? media.url : undefined,
+      audioUrl: kind === "audio" ? media.url : undefined,
+      naturalWidth: kind === "audio" ? undefined : media.width,
+      naturalHeight: kind === "audio" ? undefined : media.height,
+      audioDurationSeconds: media.audioDurationSeconds,
+      mimeType: media.mimeType,
+      source: "upload",
+    },
   };
 }
 
 function makeMediaNodeFromAsset(pos: CanvasPosition, kind: UploadKind, asset: { url: string; title: string }): CanvasNode {
   return makeMediaNode(pos, kind, {
     url: asset.url,
-    width: kind === "image" ? 1024 : 1280,
-    height: kind === "image" ? 768 : 720,
-    mimeType: kind === "image" ? "image/png" : "video/mp4",
+    width: kind === "image" ? 1024 : kind === "video" ? 1280 : 320,
+    height: kind === "image" ? 768 : kind === "video" ? 720 : 96,
+    mimeType: kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/mpeg",
     filename: asset.title,
   });
 }
@@ -386,6 +415,7 @@ function nodeTypeIcon(type: CanvasNodeType) {
   if (type === "group") return "🗂️";
   if (type === "image") return "🖼️";
   if (type === "video") return "🎬";
+  if (type === "audio") return "♪";
 
   return "✏️";
 }
@@ -394,6 +424,7 @@ function nodeTypeColor(type: CanvasNodeType) {
   if (type === "group") return "#a1a1aa";
   if (type === "image") return "#60a5fa";
   if (type === "video") return "#f472b6";
+  if (type === "audio") return "#facc15";
 
   return "#6ee7b7";
 }
@@ -423,6 +454,7 @@ export default function CanvasBoardPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const uploadTargetNodeRef = useRef<string | null>(null);
 
@@ -505,7 +537,9 @@ export default function CanvasBoardPage() {
               : conn.targetPort === "lastFrame"
                 ? "end_frame"
                 : conn.targetPort === "videoReference"
-                  ? "video_reference"
+                  ? nodeMap.get(currentNodeId)?.metadata?.videoModeId === "motion_control"
+                    ? "motion_source_video"
+                    : "video_reference"
                   : "image_reference";
         return [{
           id: n.id,
@@ -520,7 +554,7 @@ export default function CanvasBoardPage() {
           text: n.metadata?.text,
         }];
       });
-  }, [nodes, connections]);
+  }, [nodes, connections, nodeMap]);
 
   const sortedNodes = useMemo(() => {
     const groups = nodes.filter((n) => n.type === "group");
@@ -633,7 +667,7 @@ export default function CanvasBoardPage() {
 
   const handleCanvasWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("textarea,input,select,video,[data-canvas-no-zoom]")) return;
+    if (target?.closest("textarea,input,select,video,audio,[data-canvas-no-zoom]")) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -969,10 +1003,10 @@ export default function CanvasBoardPage() {
     return () => { window.removeEventListener("pointermove", onPointerMove); window.removeEventListener("pointerup", onPointerUp); };
   }, [markDirty, screenToWorld, setViewportBoth]);
 
-  // ── Paste (image/video from OS clipboard) ───────────────────────────────────
+  // ── Paste (image/video/audio from OS clipboard) ─────────────────────────────
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/"));
       if (!file) return;
       e.preventDefault();
       void uploadMedia(file, worldCenter());
@@ -1121,51 +1155,57 @@ export default function CanvasBoardPage() {
   }, [currentImageNodeDefaults, markDirty, pushHistory, selectedNodeIds]);
 
   const uploadMedia = async (file?: File, position = menuWorldRef.current ?? worldCenter(), targetNodeId?: string | null) => {
-    if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/"))) return;
-    const kind: UploadKind = file.type.startsWith("video/") ? "video" : "image";
+    if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !file.type.startsWith("audio/"))) return;
+    const kind: UploadKind = file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "image";
     setUploading(true); setSaveStatus("saving");
     try {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("请先登录");
       const path = `${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${fileExt(file)}`;
-      const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, { contentType: file.type || (kind === "video" ? "video/mp4" : "image/png"), upsert: false });
+      const fallbackMime = kind === "video" ? "video/mp4" : kind === "audio" ? "audio/mpeg" : "image/png";
+      const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, { contentType: file.type || fallbackMime, upsert: false });
       if (error) throw error;
       const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
       if (!data.publicUrl) throw new Error("无法生成媒体地址");
       const objectUrl = URL.createObjectURL(file);
-      const size = kind === "video" ? await readVideoSize(objectUrl) : await readImageSize(objectUrl);
+      const size = kind === "video" ? await readVideoSize(objectUrl) : kind === "audio" ? { width: 320, height: 96 } : await readImageSize(objectUrl);
+      const audioDurationSeconds = kind === "audio" ? await readAudioDuration(objectUrl) : undefined;
       URL.revokeObjectURL(objectUrl);
       
       if (targetNodeId) {
         pushHistory();
-        const displaySize = fitMediaSize(size, 360, 300);
+        const displaySize = kind === "audio" ? { width: 320, height: 96 } : fitMediaSize(size, 360, 300);
         setNodes((items) => items.map((n) => n.id === targetNodeId ? {
           ...n,
           title: file.name,
+          type: kind,
           width: displaySize.width,
           height: displaySize.height,
           metadata: {
             ...n.metadata,
             source: "upload",
             filename: file.name,
-            imageUrl: kind === "image" ? data.publicUrl : n.metadata?.imageUrl,
-            videoUrl: kind === "video" ? data.publicUrl : n.metadata?.videoUrl,
-            naturalWidth: size.width,
-            naturalHeight: size.height,
-            mimeType: file.type || (kind === "video" ? "video/mp4" : "image/png"),
+            imageUrl: kind === "image" ? data.publicUrl : undefined,
+            videoUrl: kind === "video" ? data.publicUrl : undefined,
+            audioUrl: kind === "audio" ? data.publicUrl : undefined,
+            naturalWidth: kind === "audio" ? undefined : size.width,
+            naturalHeight: kind === "audio" ? undefined : size.height,
+            audioDurationSeconds,
+            mimeType: file.type || fallbackMime,
             status: "success",
           }
         } : n));
         markDirty();
       } else {
-        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: file.type || (kind === "video" ? "video/mp4" : "image/png"), filename: file.name }));
+        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: file.type || fallbackMime, filename: file.name, audioDurationSeconds }));
       }
     } catch { setSaveStatus("error"); }
     finally {
       setUploading(false);
       if (imageInputRef.current) imageInputRef.current.value = "";
       if (videoInputRef.current) videoInputRef.current.value = "";
+      if (audioInputRef.current) audioInputRef.current.value = "";
       if (mediaInputRef.current) mediaInputRef.current.value = "";
     }
   };
@@ -1493,6 +1533,10 @@ export default function CanvasBoardPage() {
         setAssetNotice("视频已加入素材库");
         return;
       }
+      if (node.type === "audio" && node.metadata?.audioUrl) {
+        setAssetNotice("音频已在当前画布素材库可用");
+        return;
+      }
       setAssetNotice("当前节点不能加入素材库");
     } catch {
       setAssetNotice("加入素材库失败");
@@ -1657,20 +1701,20 @@ export default function CanvasBoardPage() {
   }, [markDirty, setViewportBoth]);
 
   const openNodeMedia = useCallback((node: CanvasNode) => {
-    const url = node.type === "image" ? node.metadata?.imageUrl : node.type === "video" ? node.metadata?.videoUrl : undefined;
+    const url = node.type === "image" ? node.metadata?.imageUrl : node.type === "video" ? node.metadata?.videoUrl : node.type === "audio" ? node.metadata?.audioUrl : undefined;
     if (url) window.open(url, "_blank", "noopener,noreferrer");
     else focusNode(node);
   }, [focusNode]);
 
   const downloadNodeMedia = useCallback((node: CanvasNode) => {
-    const url = node.type === "image" ? node.metadata?.imageUrl : node.type === "video" ? node.metadata?.videoUrl : undefined;
+    const url = node.type === "image" ? node.metadata?.imageUrl : node.type === "video" ? node.metadata?.videoUrl : node.type === "audio" ? node.metadata?.audioUrl : undefined;
     if (url) {
       fetch(url)
         .then(res => res.blob())
         .then(blob => {
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);
-          a.download = node.title || (node.type === "image" ? "image.png" : "video.mp4");
+          a.download = node.title || (node.type === "image" ? "image.png" : node.type === "video" ? "video.mp4" : "audio.mp3");
           a.click();
           URL.revokeObjectURL(a.href);
         })
@@ -1772,6 +1816,13 @@ export default function CanvasBoardPage() {
   const saveLabel = uploading ? "上传中" : saveStatus === "saving" ? "保存中" : saveStatus === "saved" ? "已保存" : saveStatus === "error" ? "保存失败" : "未保存";
   const hasSelection = selectedNodeIds.size > 0 || !!selectedConnectionId;
   const zoomPct = Math.round(viewport.k * 100);
+  const worldStyle = useMemo(
+    () => ({
+      transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})`,
+      "--canvas-zoom-inverse": `${1 / Math.max(viewport.k, 0.01)}`,
+    }) as CSSProperties,
+    [viewport.k, viewport.x, viewport.y],
+  );
   const canGroup = [...selectedNodeIds].filter((id) => nodeMap.get(id)?.type !== "group").length >= 2;
   const canUngroup = [...selectedNodeIds].some((id) => nodeMap.get(id)?.type === "group");
   const connectedOutputs = useMemo(() => new Set(connections.map((conn) => conn.fromNodeId)), [connections]);
@@ -1840,6 +1891,16 @@ export default function CanvasBoardPage() {
           title: node.title || "画布视频",
           subtitle: "当前画布",
           url: node.metadata.videoUrl,
+          source: "canvas" as const,
+        }];
+      }
+      if (node.type === "audio" && node.metadata?.audioUrl) {
+        return [{
+          id: `canvas-audio-${node.id}`,
+          kind: "audio" as const,
+          title: node.title || "画布音频",
+          subtitle: "当前画布",
+          url: node.metadata.audioUrl,
           source: "canvas" as const,
         }];
       }
@@ -1927,8 +1988,8 @@ export default function CanvasBoardPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
+    <main className={[shellStyles.page, styles.canvasEditorShell].join(" ")}>
+      <header className={[shellStyles.topbar, styles.canvasTopbar].join(" ")}>
         <div className={shellStyles.topbarLeft}>
           <Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link>
           <div className={shellStyles.topbarTagline}>
@@ -1966,7 +2027,7 @@ export default function CanvasBoardPage() {
             const rect = containerRef.current?.getBoundingClientRect();
             if (!rect) return;
             const world = screenToWorld(e.clientX, e.clientY);
-            const barHalfW = 175;
+            const barHalfW = 225;
             const barH = 68;
             const left = Math.min(Math.max(e.clientX - rect.left, barHalfW), rect.width - barHalfW);
             const top = Math.max(e.clientY - rect.top - barH, 8);
@@ -1975,7 +2036,7 @@ export default function CanvasBoardPage() {
           onDrop={(e) => {
             e.preventDefault();
             const world = screenToWorld(e.clientX, e.clientY);
-            const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+            const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/"));
             void uploadMedia(file, world);
           }}
           onWheel={handleCanvasWheel}
@@ -2016,11 +2077,14 @@ export default function CanvasBoardPage() {
               <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world, currentVideoNodeDefaults()))}>
                 <span className={styles.quickAddBtnIcon}>🎬</span>视频
               </button>
+              <button type="button" className={styles.quickAddBtn} onClick={() => { menuWorldRef.current = quickAddBar.world; setQuickAddBar(null); audioInputRef.current?.click(); }}>
+                <span className={styles.quickAddBtnIcon}>♪</span>音频
+              </button>
             </div>
           )}
 
           {/* World */}
-          <div className={styles.world} style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.k})` }}>
+          <div className={styles.world} style={worldStyle}>
             {/* Connections */}
             <svg className={styles.connectionLayer}>
               {connections.map((conn) => {
@@ -2273,6 +2337,7 @@ export default function CanvasBoardPage() {
                           className={styles.generatorPrompt}
                           value={node.metadata?.prompt ?? ""}
                           placeholder={node.type === "image" ? "描述任何你想要生成的内容" : "描述你想要生成的视频内容"}
+                          placeholderClassName={styles.generatorPromptPlaceholder}
                           onValueChange={(newVal) => updateNodeMetadata(node.id, "prompt", newVal)}
                           candidates={getCandidatesForNode(node.id)}
                           onPointerDown={(e) => e.stopPropagation()}
@@ -2434,7 +2499,7 @@ export default function CanvasBoardPage() {
                       </div>
                     </>
                   ) : (
-                    /* Standard single-box layout for text / image / video */
+                    /* Standard single-box layout for text / image / video / audio */
                     <div
                       className={styles.nodeVisual}
                       onPointerDown={(e) => {
@@ -2452,6 +2517,7 @@ export default function CanvasBoardPage() {
                           className={styles.textNodeInput}
                           value={node.metadata?.text ?? ""}
                           placeholder="输入文本、提示词或分镜备注"
+                          placeholderClassName={styles.textNodePlaceholder}
                           onValueChange={(newVal) => updateNodeMetadata(node.id, "text", newVal)}
                           candidates={getCandidatesForNode(node.id)}
                           onPointerDown={(e) => e.stopPropagation()}
@@ -2461,6 +2527,15 @@ export default function CanvasBoardPage() {
                         <div className={styles.imageFrame}>{node.metadata?.imageUrl && <img src={node.metadata.imageUrl} alt={node.title} draggable={false} />}</div>
                       ) : node.type === "video" ? (
                         <div className={styles.imageFrame}>{node.metadata?.videoUrl && <video src={node.metadata.videoUrl} controls className={styles.videoMedia} />}</div>
+                      ) : node.type === "audio" ? (
+                        <div className={styles.audioFrame}>
+                          <div className={styles.audioGlyph} aria-hidden>♪</div>
+                          <div className={styles.audioInfo}>
+                            <span className={styles.audioTitle}>{node.title || "音频"}</span>
+                            <span className={styles.audioMeta}>{node.metadata?.mimeType || "audio"}</span>
+                          </div>
+                          {node.metadata?.audioUrl ? <audio src={node.metadata.audioUrl} controls className={styles.audioMedia} /> : null}
+                        </div>
                       ) : null}
                     </div>
                   )}{/* end node visual */}
@@ -2489,12 +2564,14 @@ export default function CanvasBoardPage() {
                             onPointerDown={(e) => startInputConnectionDrag(node.id, e)}
                           />
                         ) : null}
-                        <button
-                          type="button"
-                          aria-label="输出端口"
-                          className={[styles.connPort, styles.connPortOutput, isFromNode ? styles.connPortSnap : "", connectedOutputs.has(node.id) ? styles.connPortConnected : ""].filter(Boolean).join(" ")}
-                          onPointerDown={(e) => startOutputConnectionDrag(node.id, e)}
-                        />
+                        {canStartConnection(node) ? (
+                          <button
+                            type="button"
+                            aria-label="输出端口"
+                            className={[styles.connPort, styles.connPortOutput, isFromNode ? styles.connPortSnap : "", connectedOutputs.has(node.id) ? styles.connPortConnected : ""].filter(Boolean).join(" ")}
+                            onPointerDown={(e) => startOutputConnectionDrag(node.id, e)}
+                          />
+                        ) : null}
                       </>
                     );
                   })()}
@@ -2535,6 +2612,7 @@ export default function CanvasBoardPage() {
               <button type="button" onClick={() => { appendNode(makeTextNode(menu.world)); setMenu(null); }}>新建文本节点</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); imageInputRef.current?.click(); }}>上传图片</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); videoInputRef.current?.click(); }}>上传视频</button>
+              <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); audioInputRef.current?.click(); }}>上传音频</button>
               <button type="button" onClick={() => { openAssetDrawer(menu.world); setMenu(null); }}>打开素材库</button>
               <div className={styles.uploadMenuDivider} />
               <button type="button" onClick={() => { appendImageNodeWithSelection(menu.world); setMenu(null); }}>图片节点</button>
@@ -2668,13 +2746,15 @@ export default function CanvasBoardPage() {
                         <img src={asset.url} alt={asset.title} />
                       ) : asset.kind === "video" && asset.url ? (
                         <video src={asset.url} muted playsInline />
+                      ) : asset.kind === "audio" ? (
+                        <span className={styles.assetTextThumb}>音</span>
                       ) : (
                         <span className={styles.assetTextThumb}>文</span>
                       )}
                     </span>
                     <span className={styles.assetInfo}>
                       <span className={styles.assetTitle}>{asset.title}</span>
-                      <span className={styles.assetSubtitle}>{asset.kind === "image" ? "图片" : asset.kind === "video" ? "视频" : "文本"} · {asset.subtitle}</span>
+                      <span className={styles.assetSubtitle}>{asset.kind === "image" ? "图片" : asset.kind === "video" ? "视频" : asset.kind === "audio" ? "音频" : "文本"} · {asset.subtitle}</span>
                     </span>
                   </button>
                 )) : <div className={styles.assetEmpty}>暂无匹配素材</div>}
@@ -2716,7 +2796,8 @@ export default function CanvasBoardPage() {
 
           <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
           <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
-          <input ref={mediaInputRef} type="file" accept="image/*,video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
+          <input ref={audioInputRef} type="file" accept="audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
+          <input ref={mediaInputRef} type="file" accept="image/*,video/*,audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
           <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importCanvasFile(e.target.files?.[0])} />
         </div>
       </section>
