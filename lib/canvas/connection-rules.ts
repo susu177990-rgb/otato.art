@@ -14,6 +14,7 @@ export const TARGET_PORT_LABELS: Record<CanvasTargetPort, string> = {
 export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
   switch (node.type) {
     case "text":
+    case "audio":
       return [];
     case "image":
       return node.metadata?.source === "upload" ? [] : ["prompt", "imageReference"];
@@ -30,7 +31,7 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
         case "start_end_frame":
           return ["prompt", "firstFrame", "lastFrame"];
         case "multi_image_reference":
-          return ["prompt", "imageReference"];
+          return ["prompt", "imageReference", "videoReference"];
         case "motion_control":
           return ["prompt", "firstFrame", "videoReference"];
         default:
@@ -43,7 +44,7 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
 }
 
 export function canStartConnection(node: CanvasNode): boolean {
-  return node.type !== "group";
+  return node.type !== "group" && node.type !== "audio";
 }
 
 export function isConnectionAllowed(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort): boolean {
@@ -112,7 +113,7 @@ export function inferTargetPort(
       return { targetPort: null, reason: "当前视频模式不接收图片输入" };
     }
     if (from.type === "video") {
-      if (normalizedMode !== "motion_control") {
+      if (normalizedMode !== "motion_control" && normalizedMode !== "multi_image_reference") {
         return { targetPort: null, reason: "当前视频模式不接收视频参考" };
       }
       return connectionExists(connections, from.id, to.id, "videoReference")

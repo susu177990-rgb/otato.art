@@ -36,7 +36,13 @@ import {
 
 const MEDIA_BUCKET = "generated-images";
 
-type RefSlot = { url: string; previewUrl: string; label: string } | null;
+type ReferenceKind = "image" | "video" | "audio";
+type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string } | null;
+type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
+type ReferenceState = {
+  frames: [ReferenceSlot, ReferenceSlot];
+  allPurpose: ReferenceCollections;
+};
 type PresetRailItem = {
   id: string;
   label: string;
@@ -46,16 +52,30 @@ type PresetRailItem = {
 
 const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => id !== "kling-2.6-motion");
 
-function createEmptyRefSlots(): RefSlot[] {
-  return Array.from({ length: 10 }, () => null);
+const REFERENCE_KINDS: ReferenceKind[] = ["image", "video", "audio"];
+
+function createEmptyReferences(): ReferenceState {
+  return {
+    frames: [null, null],
+    allPurpose: {
+      image: [],
+      video: [],
+      audio: [],
+    },
+  };
 }
 
-function normalizeRefSlots(slots: Array<RefSlot | null | undefined>): RefSlot[] {
-  return Array.from({ length: 10 }, (_, index) => slots[index] ?? null);
+function compactReferenceList(slots: Array<ReferenceSlot | null | undefined>): NonNullable<ReferenceSlot>[] {
+  return slots.filter((slot): slot is NonNullable<ReferenceSlot> => Boolean(slot));
 }
 
 function fileExt(file: File) {
   const t = file.type.toLowerCase();
+  if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
+  if (t.includes("wav")) return "wav";
+  if (t.includes("aac")) return "aac";
+  if (t.includes("ogg")) return "ogg";
+  if (t.includes("m4a")) return "m4a";
   if (t.includes("quicktime")) return "mov";
   if (t.includes("webm")) return "webm";
   if (t.includes("mp4")) return "mp4";
@@ -63,6 +83,28 @@ function fileExt(file: File) {
   if (t.includes("webp")) return "webp";
   if (t.includes("gif")) return "gif";
   return "png";
+}
+
+function kindAccept(kind: ReferenceKind): string {
+  if (kind === "image") return "image/*";
+  if (kind === "video") return "video/*";
+  return "audio/*";
+}
+
+function fileMatchesKind(file: File, kind: ReferenceKind): boolean {
+  return file.type.startsWith(`${kind}/`);
+}
+
+function kindSlotLabel(kind: ReferenceKind, index: number): string {
+  if (kind === "image") return `图${index + 1}`;
+  if (kind === "video") return `视频${index + 1}`;
+  return `音频${index + 1}`;
+}
+
+function kindGroupLabel(kind: ReferenceKind): string {
+  if (kind === "image") return "图片";
+  if (kind === "video") return "视频";
+  return "音频";
 }
 
 function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): string[] {
@@ -84,13 +126,9 @@ function uiModeFromRecord(modeId: VideoGenerationModeId): UiVideoModeId {
 
 function effectiveModeFromUi(
   uiModeId: UiVideoModeId,
-  refSlots: RefSlot[],
+  references: ReferenceState,
 ): { modeId: VideoGenerationModeId; error?: string } {
-  return inferEffectiveVideoMode(uiModeId, Boolean(refSlots[0]), Boolean(refSlots[1]));
-}
-
-function visibleSlotCount(uiModeId: UiVideoModeId): number {
-  return uiModeId === "start_end_frame" ? 2 : 10;
+  return inferEffectiveVideoMode(uiModeId, Boolean(references.frames[0]), Boolean(references.frames[1]));
 }
 
 function slotLabel(uiModeId: UiVideoModeId, index: number): string {
@@ -98,45 +136,53 @@ function slotLabel(uiModeId: UiVideoModeId, index: number): string {
   return `图${index + 1}`;
 }
 
-function buildReferences(uiModeId: UiVideoModeId, refSlots: RefSlot[]): UnifiedVideoReference[] {
+function referenceRoleForKind(kind: ReferenceKind): UnifiedVideoReference["role"] {
+  if (kind === "image") return "image_reference";
+  if (kind === "video") return "video_reference";
+  return "audio_reference";
+}
+
+function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): UnifiedVideoReference[] {
   if (uiModeId === "multi_image_reference") {
-    return refSlots
-      .slice(0, 10)
-      .filter((slot): slot is NonNullable<RefSlot> => Boolean(slot))
-      .map((slot) => ({
-        role: "image_reference" as const,
+    return REFERENCE_KINDS.flatMap((kind) =>
+      references.allPurpose[kind].map((slot, index) => ({
+        role: referenceRoleForKind(kind),
         url: slot.url,
-        label: slot.label,
-        mimeType: "image/png",
-      }));
+        label: kindSlotLabel(kind, index),
+        mimeType: slot.mimeType,
+      })),
+    );
   }
 
   const refs: UnifiedVideoReference[] = [];
-  if (refSlots[0]) {
+  if (references.frames[0]) {
     refs.push({
       role: "start_frame",
-      url: refSlots[0].url,
-      label: refSlots[0].label,
-      mimeType: "image/png",
+      url: references.frames[0].url,
+      label: "首帧",
+      mimeType: references.frames[0].mimeType,
     });
   }
-  if (refSlots[1]) {
+  if (references.frames[1]) {
     refs.push({
       role: "end_frame",
-      url: refSlots[1].url,
-      label: refSlots[1].label,
-      mimeType: "image/png",
+      url: references.frames[1].url,
+      label: "尾帧",
+      mimeType: references.frames[1].mimeType,
     });
   }
   return refs;
 }
 
-function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReference["role"], index: number): number | null {
+function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReference["role"], index: number): { kind: "frame"; index: 0 | 1 } | { kind: ReferenceKind; index: number } | null {
   if (modeId === "multi_image_reference") {
-    return role === "image_reference" ? index : null;
+    if (role === "image_reference") return { kind: "image", index };
+    if (role === "video_reference") return { kind: "video", index };
+    if (role === "audio_reference") return { kind: "audio", index };
+    return null;
   }
-  if (role === "start_frame") return 0;
-  if (role === "end_frame") return 1;
+  if (role === "start_frame") return { kind: "frame", index: 0 };
+  if (role === "end_frame") return { kind: "frame", index: 1 };
   return null;
 }
 
@@ -150,21 +196,21 @@ export default function VideoPage() {
   const [selectedDuration, setSelectedDuration] = useState<number>(videoWorkspace.uiDefaults.defaultDurationSeconds);
   const [selectedResolution, setSelectedResolution] = useState<VideoResolution>(videoWorkspace.uiDefaults.defaultResolution);
   const [slotInputs, setSlotInputs] = useState<string[]>([""]);
-  const [refSlots, setRefSlots] = useState<RefSlot[]>(createEmptyRefSlots);
+  const [references, setReferences] = useState<ReferenceState>(createEmptyReferences);
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement>(null);
-  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const safeModelId = VIDEO_UI_MODEL_ORDER.includes(selectedModelId)
     ? selectedModelId
     : videoWorkspace.uiDefaults.defaultModelId;
   const capabilities = getVideoCapabilities(safeModelId);
   const { modeId: effectiveModeId, error: modeError } = useMemo(
-    () => effectiveModeFromUi(selectedUiModeId, refSlots),
-    [selectedUiModeId, refSlots],
+    () => effectiveModeFromUi(selectedUiModeId, references),
+    [selectedUiModeId, references],
   );
   const presetRailItems = useMemo<PresetRailItem[]>(
     () => {
@@ -192,7 +238,6 @@ export default function VideoPage() {
     [selectedPreset.promptTemplate],
   );
   const composerSlotCount = composerSlotCountForTemplate(selectedPreset.promptTemplate);
-  const displayedRefSlotCount = visibleSlotCount(selectedUiModeId);
   const modelReady = Boolean(
     videoWorkspace.models[safeModelId]?.baseUrl.trim() &&
       videoWorkspace.models[safeModelId]?.apiKey.trim() &&
@@ -212,25 +257,38 @@ export default function VideoPage() {
 
   const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
     const candidates: AssetMentionCandidate[] = [];
-    refSlots.forEach((slot, index) => {
-      if (slot) {
-        const role = selectedUiModeId === "start_end_frame"
-          ? index === 0 ? "start_frame" : "end_frame"
-          : "image_reference";
+    if (selectedUiModeId === "start_end_frame") {
+      references.frames.forEach((slot, index) => {
+        if (!slot) return;
         candidates.push({
           id: String(index),
           label: slotLabel(selectedUiModeId, index),
           type: "slot",
-          role,
+          role: index === 0 ? "start_frame" : "end_frame",
           groupLabel: "当前参考图",
           description: slot.label,
           thumbnailUrl: slot.previewUrl,
           url: slot.url,
         });
-      }
+      });
+      return candidates;
+    }
+    REFERENCE_KINDS.forEach((kind) => {
+      references.allPurpose[kind].forEach((slot, index) => {
+        candidates.push({
+          id: `${kind}:${index}`,
+          label: kindSlotLabel(kind, index),
+          type: "slot",
+          role: referenceRoleForKind(kind),
+          groupLabel: `当前${kindGroupLabel(kind)}`,
+          description: slot.label,
+          thumbnailUrl: kind === "image" ? slot.previewUrl : undefined,
+          url: slot.url,
+        });
+      });
     });
     return candidates;
-  }, [refSlots, selectedUiModeId]);
+  }, [references, selectedUiModeId]);
 
   useEffect(() => {
     setSelectedModelId((current) =>
@@ -248,7 +306,10 @@ export default function VideoPage() {
     setSelectedResolution((current) =>
       capabilities.resolutions.includes(current) ? current : capabilities.resolutions[0],
     );
-  }, [capabilities, safeModelId]);
+    if (selectedUiModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
+      setSelectedUiModeId("start_end_frame");
+    }
+  }, [capabilities, safeModelId, selectedUiModeId]);
 
   useEffect(() => {
     if (presetRailItems.some((item) => item.id === selectedPresetId)) return;
@@ -267,10 +328,10 @@ export default function VideoPage() {
     });
   }, [sidebarHistoryRecords]);
 
-  async function uploadImageSlotsFromIndex(index: number, files: FileList | File[] | null | undefined) {
+  async function uploadReferenceFiles(kind: ReferenceKind, index: number, files: FileList | File[] | null | undefined) {
     if (!files) return;
-    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    if (images.length === 0) return;
+    const accepted = Array.from(files).filter((file) => fileMatchesKind(file, kind));
+    if (accepted.length === 0) return;
     setIsUploading(true);
     try {
       const supabase = createSupabaseBrowserClient();
@@ -280,42 +341,64 @@ export default function VideoPage() {
       if (!user) throw new Error("请先登录");
 
       const uploaded = await Promise.all(
-        images.map(async (file) => {
-          const path = `${user.id}/video-inputs/${safeModelId}/${crypto.randomUUID()}.${fileExt(file)}`;
+        accepted.map(async (file) => {
+          const path = `${user.id}/video-inputs/${safeModelId}/${kind}/${crypto.randomUUID()}.${fileExt(file)}`;
           const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
-            contentType: file.type || "image/png",
+            contentType: file.type || `${kind}/*`,
             upsert: false,
           });
           if (uploadError) throw uploadError;
           const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
           if (!data.publicUrl) throw new Error("无法生成素材地址");
-          return { url: data.publicUrl, previewUrl: data.publicUrl, label: file.name } satisfies NonNullable<RefSlot>;
+          return { kind, url: data.publicUrl, previewUrl: data.publicUrl, label: file.name, mimeType: file.type || `${kind}/*` } satisfies NonNullable<ReferenceSlot>;
         }),
       );
 
-      setRefSlots((prev) => {
-        const next = normalizeRefSlots(prev);
+      setReferences((prev) => {
+        if (selectedUiModeId === "start_end_frame") {
+          const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
+          uploaded.slice(0, 2 - index).forEach((slot, offset) => {
+            const slotIndex = index + offset;
+            if (slotIndex === 0 || slotIndex === 1) frames[slotIndex] = slot;
+          });
+          return { ...prev, frames };
+        }
+        const current = [...prev.allPurpose[kind]];
         uploaded.forEach((slot, offset) => {
-          const slotIndex = index + offset;
-          if (slotIndex < next.length) next[slotIndex] = slot;
+          current[index + offset] = slot;
         });
-        return next;
+        return {
+          ...prev,
+          allPurpose: {
+            ...prev.allPurpose,
+            [kind]: compactReferenceList(current),
+          },
+        };
       });
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "参考图上传失败");
+      setError(uploadError instanceof Error ? uploadError.message : `${kindGroupLabel(kind)}素材上传失败`);
     } finally {
       setIsUploading(false);
       for (const key of Object.keys(fileInputRefs.current)) {
-        if (fileInputRefs.current[Number(key)]) fileInputRefs.current[Number(key)]!.value = "";
+        if (fileInputRefs.current[key]) fileInputRefs.current[key]!.value = "";
       }
     }
   }
 
-  function clearRefImage(index: number) {
-    setRefSlots((prev) => {
-      const next = normalizeRefSlots(prev);
-      next[index] = null;
-      return next;
+  function clearReference(kind: ReferenceKind, index: number) {
+    setReferences((prev) => {
+      if (selectedUiModeId === "start_end_frame") {
+        const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
+        if (index === 0 || index === 1) frames[index] = null;
+        return { ...prev, frames };
+      }
+      return {
+        ...prev,
+        allPurpose: {
+          ...prev.allPurpose,
+          [kind]: prev.allPurpose[kind].filter((_, slotIndex) => slotIndex !== index),
+        },
+      };
     });
   }
 
@@ -342,7 +425,7 @@ export default function VideoPage() {
       durationSeconds: selectedDuration,
       resolution: selectedResolution,
       providerTaskId,
-      referencesSummary: (overrideReferences ?? buildReferences(selectedUiModeId, refSlots)).map((item) => ({
+      referencesSummary: (overrideReferences ?? buildReferences(selectedUiModeId, references)).map((item) => ({
         role: item.role,
         label: item.label || item.role,
         url: item.url,
@@ -382,31 +465,40 @@ export default function VideoPage() {
       .filter((candidate) => Boolean(candidate.url))
       .map((candidate) => ({
         role:
-          candidate.role === "start_frame" || candidate.role === "end_frame" || candidate.role === "video_reference"
-            ? candidate.role === "video_reference" ? "motion_source_video" : candidate.role
+          candidate.role === "start_frame" || candidate.role === "end_frame" || candidate.role === "video_reference" || candidate.role === "motion_source_video"
+            ? candidate.role
+            : candidate.role === "audio_reference"
+              ? "audio_reference"
             : "image_reference",
         url: candidate.url!,
         label: candidate.label,
-        mimeType: candidate.type === "gallery-video" ? "video/mp4" : "image/png",
+        mimeType:
+          candidate.role === "video_reference"
+            ? "video/mp4"
+            : candidate.role === "audio_reference"
+              ? "audio/mpeg"
+              : "image/png",
       }));
-    const allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, refSlots);
+    const allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, references);
     if (modeError && !mentionResolution.hasMentions) {
       setError(modeError);
       return;
     }
     if (selectedUiModeId === "multi_image_reference" && allReferences.length === 0) {
-      setError("多图参考模式至少需要上传或 @ 引用一张参考图。");
+      setError("全能参考模式至少需要上传或 @ 引用一个图片、视频或音频素材。");
       return;
     }
     const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
     const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
     const hasImageReferences = allReferences.some((ref) => ref.role === "image_reference");
+    const hasVideoReferences = allReferences.some((ref) => ref.role === "video_reference");
+    const hasAudioReferences = allReferences.some((ref) => ref.role === "audio_reference");
     const hasMotionSourceVideo = allReferences.some((ref) => ref.role === "motion_source_video");
 
     let finalEffectiveModeId = effectiveModeId;
     if (mentionResolution.hasMentions && hasMotionSourceVideo) {
       finalEffectiveModeId = "motion_control";
-    } else if (mentionResolution.hasMentions && hasImageReferences) {
+    } else if (mentionResolution.hasMentions && (hasImageReferences || hasVideoReferences || hasAudioReferences)) {
       finalEffectiveModeId = "multi_image_reference";
     } else if (selectedUiModeId === "start_end_frame") {
       const { modeId: inferredMode } = inferEffectiveVideoMode(selectedUiModeId, hasStartFrame, hasEndFrame);
@@ -418,7 +510,7 @@ export default function VideoPage() {
       return;
     }
     if (finalEffectiveModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
-      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持多图参考模式。`);
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持全能参考模式。`);
       return;
     }
 
@@ -471,17 +563,33 @@ export default function VideoPage() {
     if (record.durationSeconds) setSelectedDuration(record.durationSeconds);
     if (record.resolution) setSelectedResolution(record.resolution);
     setResultUrl(record.videoUrl || "");
-    const nextSlots = createEmptyRefSlots();
+    const nextReferences = createEmptyReferences();
     (record.referencesSummary ?? []).forEach((item, index) => {
       const slotIndex = historySlotKey(record.modeId, item.role, index);
       if (slotIndex === null || !item.url) return;
-      nextSlots[slotIndex] = {
+      const slot: NonNullable<ReferenceSlot> = {
+        kind: slotIndex.kind === "frame" ? "image" : slotIndex.kind,
         url: item.url,
         previewUrl: item.url,
         label: item.label,
+        mimeType:
+          item.role === "video_reference" || item.role === "motion_source_video"
+            ? "video/mp4"
+            : item.role === "audio_reference"
+              ? "audio/mpeg"
+              : "image/png",
       };
+      if (slotIndex.kind === "frame") nextReferences.frames[slotIndex.index] = slot;
+      else nextReferences.allPurpose[slotIndex.kind][slotIndex.index] = slot;
     });
-    setRefSlots(nextSlots);
+    setReferences({
+      ...nextReferences,
+      allPurpose: {
+        image: compactReferenceList(nextReferences.allPurpose.image),
+        video: compactReferenceList(nextReferences.allPurpose.video),
+        audio: compactReferenceList(nextReferences.allPurpose.audio),
+      },
+    });
     const template = selectedPreset.promptTemplate;
     const n = composerSlotCountForTemplate(template);
     const slots =
@@ -582,45 +690,96 @@ export default function VideoPage() {
           {error ? <div className={styles.error}>{error}</div> : null}
 
           <div className={styles.referenceStrip}>
-            {refSlots.slice(0, displayedRefSlotCount).map((slot, index) => (
-              <div
-                key={index}
-                className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  void uploadImageSlotsFromIndex(index, e.dataTransfer.files);
-                }}
-              >
-                <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
-                  <input
-                    ref={(node) => {
-                      fileInputRefs.current[index] = node;
-                    }}
-                    className={styles.hiddenInput}
-                    type="file"
-                    accept="image/*"
-                    multiple={selectedUiModeId === "multi_image_reference"}
-                    onChange={(e) => {
-                      void uploadImageSlotsFromIndex(index, e.target.files);
-                    }}
-                  />
+            {selectedUiModeId === "start_end_frame" ? (
+              references.frames.map((slot, index) => (
+                <div
+                  key={`frame-${index}`}
+                  className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    void uploadReferenceFiles("image", index, e.dataTransfer.files);
+                  }}
+                >
+                  <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
+                    <input
+                      ref={(node) => {
+                        fileInputRefs.current[`frame:${index}`] = node;
+                      }}
+                      className={styles.hiddenInput}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        void uploadReferenceFiles("image", index, e.target.files);
+                      }}
+                    />
+                    {slot ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={slot.previewUrl} alt={slot.label} />
+                    ) : (
+                      <span className={styles.refEmptyContent}>
+                        <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
+                      </span>
+                    )}
+                  </label>
                   {slot ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={slot.previewUrl} alt={slot.label} />
-                  ) : (
-                    <span className={styles.refEmptyContent}>
-                      <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
-                    </span>
-                  )}
-                </label>
-                {slot ? (
-                  <button type="button" onClick={() => clearRefImage(index)} className={styles.deleteRef} aria-label="移除参考图">
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            ))}
+                    <button type="button" onClick={() => clearReference("image", index)} className={styles.deleteRef} aria-label="移除参考图">
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              REFERENCE_KINDS.map((kind) => (
+                <div key={kind} className={styles.refGroup} aria-label={`${kindGroupLabel(kind)}素材`}>
+                  {[...references.allPurpose[kind], null].map((slot, index) => (
+                    <div
+                      key={`${kind}-${index}`}
+                      className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        void uploadReferenceFiles(kind, index, e.dataTransfer.files);
+                      }}
+                    >
+                      <label aria-label={`${kindSlotLabel(kind, index)}，点击上传${kindGroupLabel(kind)}素材`}>
+                        <input
+                          ref={(node) => {
+                            fileInputRefs.current[`${kind}:${index}`] = node;
+                          }}
+                          className={styles.hiddenInput}
+                          type="file"
+                          accept={kindAccept(kind)}
+                          multiple
+                          onChange={(e) => {
+                            void uploadReferenceFiles(kind, index, e.target.files);
+                          }}
+                        />
+                        {slot ? (
+                          kind === "image" ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={slot.previewUrl} alt={slot.label} />
+                          ) : kind === "video" ? (
+                            <video src={slot.previewUrl} muted playsInline />
+                          ) : (
+                            <span className={styles.refMediaGlyph}>音频</span>
+                          )
+                        ) : (
+                          <span className={styles.refEmptyContent}>
+                            <span className={styles.refSlotIndex}>{kindSlotLabel(kind, index)}</span>
+                          </span>
+                        )}
+                      </label>
+                      {slot ? (
+                        <button type="button" onClick={() => clearReference(kind, index)} className={styles.deleteRef} aria-label={`移除${kindGroupLabel(kind)}素材`}>
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
           </div>
 
           <div className={styles.composer}>
@@ -641,6 +800,7 @@ export default function VideoPage() {
                     }
                     candidates={mentionCandidates}
                     placeholder={composerPlaceholder(placeholderOccurrences, index)}
+                    placeholderClassName={styles.promptPlaceholder}
                     className={styles.promptInput}
                   />
                 </div>
@@ -650,14 +810,23 @@ export default function VideoPage() {
             <div className={styles.toolbar}>
               <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
                 {UI_MODES.map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => setSelectedUiModeId(mode.id)}
-                    className={[shellStyles.segmentedItem, selectedUiModeId === mode.id ? shellStyles.segmentedItemActive : ""].join(" ")}
-                  >
-                    {mode.label}
-                  </button>
+                  (() => {
+                    const unsupported = mode.id === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference");
+                    return (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        disabled={unsupported}
+                        title={unsupported ? "当前模型不支持全能参考" : undefined}
+                        onClick={() => {
+                          if (!unsupported) setSelectedUiModeId(mode.id);
+                        }}
+                        className={[shellStyles.segmentedItem, selectedUiModeId === mode.id ? shellStyles.segmentedItemActive : ""].join(" ")}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })()
                 ))}
               </div>
 

@@ -1,11 +1,13 @@
-export type AssetMentionType = "slot" | "node" | "gallery-image" | "gallery-video";
+export type AssetMentionType = "slot" | "node" | "gallery-image" | "gallery-video" | "gallery-audio";
 
 export type AssetMentionRole =
   | "prompt"
   | "image_reference"
   | "start_frame"
   | "end_frame"
-  | "video_reference";
+  | "video_reference"
+  | "motion_source_video"
+  | "audio_reference";
 
 export type AssetMentionCandidate = {
   id: string;
@@ -17,7 +19,7 @@ export type AssetMentionCandidate = {
   thumbnailUrl?: string;
   url?: string;
   text?: string;
-  nodeType?: "text" | "image" | "video";
+  nodeType?: "text" | "image" | "video" | "audio";
 };
 
 export type ParsedAssetMention = {
@@ -44,7 +46,7 @@ export type AssetMentionResolution = {
 const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
 
 function normalizeType(raw: string): AssetMentionType | null {
-  if (raw === "slot" || raw === "node" || raw === "gallery-image" || raw === "gallery-video") return raw;
+  if (raw === "slot" || raw === "node" || raw === "gallery-image" || raw === "gallery-video" || raw === "gallery-audio") return raw;
   if (raw === "gallery") return "gallery-image";
   return null;
 }
@@ -55,7 +57,9 @@ function normalizeRole(raw: string | null): AssetMentionRole | undefined {
     raw === "image_reference" ||
     raw === "start_frame" ||
     raw === "end_frame" ||
-    raw === "video_reference"
+    raw === "video_reference" ||
+    raw === "motion_source_video" ||
+    raw === "audio_reference"
   ) {
     return raw;
   }
@@ -151,7 +155,7 @@ export function resolveAssetMentions(
     const candidate = candidateMap.get(key) ?? candidateMap.get(fallbackKey);
     const resolved: ResolvedAssetMention = {
       ...parsed,
-      role: candidate?.role ?? parsed.role,
+      role: parsed.role ?? candidate?.role,
       candidate,
       missing: !candidate,
     };

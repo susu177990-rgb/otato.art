@@ -19,8 +19,14 @@
   position: absolute;
   top: 0;
   left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
   pointer-events: none;
   color: #52525b;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menuAnchor {

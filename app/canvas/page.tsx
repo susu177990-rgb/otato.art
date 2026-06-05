@@ -135,6 +135,7 @@ export default function CanvasLibraryPage() {
                     <span className={shellStyles.metaPill}>{board.nodeCount} 节点</span>
                     <span className={shellStyles.metaPill}>{board.imageCount} 图片</span>
                     <span className={shellStyles.metaPill}>{board.videoCount} 视频</span>
+                    <span className={shellStyles.metaPill}>{board.audioCount} 音频</span>
                     <span className={shellStyles.metaPill}>更新 {formatTime(board.updatedAt)}</span>
                   </div>
                   <div className={styles.boardActions}>

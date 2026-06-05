@@ -102,6 +102,8 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
   const startFrameCount = countRole(references, "start_frame");
   const endFrameCount = countRole(references, "end_frame");
   const imageRefCount = countRole(references, "image_reference");
+  const videoRefCount = countRole(references, "video_reference");
+  const audioRefCount = countRole(references, "audio_reference");
   const motionSourceCount = countRole(references, "motion_source_video");
 
   if (startFrameCount > 1 || endFrameCount > 1 || motionSourceCount > 1) {
@@ -114,6 +116,18 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
       `当前模型最多只支持 ${capabilities.maxImageReferences} 张参考图。`,
     );
   }
+  if (videoRefCount > capabilities.maxVideoReferences) {
+    throw new VideoGenerationError(
+      "unsupported_capability",
+      `当前模型最多只支持 ${capabilities.maxVideoReferences} 个参考视频。`,
+    );
+  }
+  if (audioRefCount > capabilities.maxAudioReferences) {
+    throw new VideoGenerationError(
+      "unsupported_capability",
+      `当前模型最多只支持 ${capabilities.maxAudioReferences} 个参考音频。`,
+    );
+  }
 
   switch (request.modeId) {
     case "text_to_video":
@@ -122,7 +136,7 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
       }
       break;
     case "start_frame":
-      if (startFrameCount !== 1 || endFrameCount !== 0 || imageRefCount !== 0 || motionSourceCount !== 0) {
+      if (startFrameCount !== 1 || endFrameCount !== 0 || imageRefCount !== 0 || videoRefCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
         throw new VideoGenerationError("invalid_mode", "首帧模式需要且只需要 1 张首帧图。");
       }
       break;
@@ -130,23 +144,23 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
       if (!capabilities.supportsFirstLastFrames) {
         throw new VideoGenerationError("unsupported_capability", "当前模型不支持首尾帧模式。");
       }
-      if (startFrameCount !== 1 || endFrameCount !== 1 || imageRefCount !== 0 || motionSourceCount !== 0) {
+      if (startFrameCount !== 1 || endFrameCount !== 1 || imageRefCount !== 0 || videoRefCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
         throw new VideoGenerationError("invalid_mode", "首尾帧模式需要 1 张首帧图和 1 张尾帧图。");
       }
       break;
     case "multi_image_reference":
       if (!capabilities.supportsMultipleImageReferences) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持多图参考模式。");
+        throw new VideoGenerationError("unsupported_capability", "当前模型不支持全能参考模式。");
       }
-      if (imageRefCount < 1 || startFrameCount !== 0 || endFrameCount !== 0 || motionSourceCount !== 0) {
-        throw new VideoGenerationError("invalid_mode", "多图参考模式需要 1-N 张参考图，且不接收动作视频。");
+      if (imageRefCount + videoRefCount + audioRefCount < 1 || startFrameCount !== 0 || endFrameCount !== 0 || motionSourceCount !== 0) {
+        throw new VideoGenerationError("invalid_mode", "全能参考模式需要至少 1 个图片、视频或音频参考素材，且不接收动作控制视频。");
       }
       break;
     case "motion_control":
       if (!capabilities.supportsMotionControl) {
         throw new VideoGenerationError("unsupported_capability", "当前模型不支持动作控制模式。");
       }
-      if (motionSourceCount !== 1 || endFrameCount !== 0 || imageRefCount > 0) {
+      if (motionSourceCount !== 1 || endFrameCount !== 0 || imageRefCount > 0 || videoRefCount > 0 || audioRefCount > 0) {
         throw new VideoGenerationError("invalid_mode", "动作控制模式需要 1 个动作参考视频，可选 1 张首帧图。");
       }
       if (startFrameCount > 1) {
@@ -183,6 +197,12 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
   const imageReferences = request.references
     .filter((item) => item.role === "image_reference")
     .map((item) => item.url);
+  const videoReferences = request.references
+    .filter((item) => item.role === "video_reference")
+    .map((item) => item.url);
+  const audioReferences = request.references
+    .filter((item) => item.role === "audio_reference")
+    .map((item) => item.url);
   const images = startFrame ? [startFrame.url] : imageReferences;
   const createPayload = isV15
     ? {
@@ -200,6 +220,8 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
         duration: request.durationSeconds,
         model: modelSettings.apiModelName,
         images: images.length > 0 ? images : undefined,
+        videos: videoReferences.length > 0 ? videoReferences : undefined,
+        audios: audioReferences.length > 0 ? audioReferences : undefined,
       };
   const submitPath = typeof modelSettings.providerOptions.submitPath === "string" && modelSettings.providerOptions.submitPath.trim()
     ? modelSettings.providerOptions.submitPath.trim()
@@ -290,6 +312,12 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
   const imageReferences = request.references
     .filter((item) => item.role === "image_reference")
     .map((item) => item.url);
+  const videoReferences = request.references
+    .filter((item) => item.role === "video_reference")
+    .map((item) => item.url);
+  const audioReferences = request.references
+    .filter((item) => item.role === "audio_reference")
+    .map((item) => item.url);
   const motionSource = request.references.find((item) => item.role === "motion_source_video");
   return {
     prompt: request.prompt,
@@ -301,6 +329,8 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
     start_frame_url: startFrame?.url,
     end_frame_url: endFrame?.url,
     image_reference_urls: imageReferences.length > 0 ? imageReferences : undefined,
+    video_reference_urls: videoReferences.length > 0 ? videoReferences : undefined,
+    audio_reference_urls: audioReferences.length > 0 ? audioReferences : undefined,
     motion_video_url: motionSource?.url,
   };
 }
@@ -410,6 +440,12 @@ function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelNam
   const imageReferences = request.references
     .filter((item) => item.role === "image_reference")
     .map((item) => ({ imageUri: item.url }));
+  const videoReferences = request.references
+    .filter((item) => item.role === "video_reference")
+    .map((item) => ({ videoUri: item.url }));
+  const audioReferences = request.references
+    .filter((item) => item.role === "audio_reference")
+    .map((item) => ({ audioUri: item.url }));
   return {
     model: apiModelName,
     prompt: request.prompt,
@@ -420,6 +456,8 @@ function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelNam
     firstFrame: startFrame ? { imageUri: startFrame.url } : undefined,
     lastFrame: endFrame ? { imageUri: endFrame.url } : undefined,
     referenceImages: imageReferences.length > 0 ? imageReferences : undefined,
+    referenceVideos: videoReferences.length > 0 ? videoReferences : undefined,
+    referenceAudios: audioReferences.length > 0 ? audioReferences : undefined,
   };
 }
 
@@ -446,12 +484,17 @@ export function buildVideoCreatePayloadForTest(ctx: ProviderSubmitContext): Reco
           image_urls: startFrame ? [startFrame.url] : undefined,
         };
       }
+      const seedanceImages = ctx.request.references.filter((item) => item.role === "start_frame" || item.role === "image_reference").map((item) => item.url);
+      const seedanceVideos = ctx.request.references.filter((item) => item.role === "video_reference").map((item) => item.url);
+      const seedanceAudios = ctx.request.references.filter((item) => item.role === "audio_reference").map((item) => item.url);
       return {
         prompt: ctx.request.prompt,
         aspect_ratio: ctx.request.aspectRatio,
         duration: ctx.request.durationSeconds,
         model: ctx.modelSettings.apiModelName,
-        images: ctx.request.references.map((item) => item.url),
+        ...(seedanceImages.length > 0 ? { images: seedanceImages } : {}),
+        ...(seedanceVideos.length > 0 ? { videos: seedanceVideos } : {}),
+        ...(seedanceAudios.length > 0 ? { audios: seedanceAudios } : {}),
       };
     case "kling":
       return buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName);

@@ -82,24 +82,37 @@ const klingMotion = validateUnifiedVideoRequest({
 const klingMotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-2.6-motion", klingMotion));
 assert.equal(klingMotionPayload.motion_video_url, "https://example.com/motion.mp4");
 
-const veo = validateUnifiedVideoRequest({
-  modelId: "veo-3.1",
+const allPurpose = validateUnifiedVideoRequest({
+  modelId: "seedance-2.0",
   modeId: "multi_image_reference",
-  prompt: "veo",
-  durationSeconds: 8,
+  prompt: "all purpose",
+  durationSeconds: 5,
   aspectRatio: "16:9",
   resolution: "1080p",
   references: [
     { role: "image_reference", url: "https://example.com/1.png" },
-    { role: "image_reference", url: "https://example.com/2.png" },
+    { role: "video_reference", url: "https://example.com/ref.mp4" },
+    { role: "audio_reference", url: "https://example.com/ref.mp3" },
   ],
 });
-const veoPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veo));
-assert.equal(veoPayload.model, "veo-3.1-generate-001");
-assert.deepEqual(veoPayload.referenceImages, [
-  { imageUri: "https://example.com/1.png" },
-  { imageUri: "https://example.com/2.png" },
-]);
+const allPurposePayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", allPurpose));
+assert.deepEqual(allPurposePayload.images, ["https://example.com/1.png"]);
+assert.deepEqual(allPurposePayload.videos, ["https://example.com/ref.mp4"]);
+assert.deepEqual(allPurposePayload.audios, ["https://example.com/ref.mp3"]);
+
+assert.throws(
+  () =>
+    validateUnifiedVideoRequest({
+      modelId: "veo-3.1",
+      modeId: "multi_image_reference",
+      prompt: "veo",
+      durationSeconds: 8,
+      aspectRatio: "16:9",
+      resolution: "1080p",
+      references: [{ role: "image_reference", url: "https://example.com/1.png" }],
+    }),
+  /不支持/,
+);
 
 assert.throws(
   () =>

@@ -85,6 +85,8 @@ function parseReferences(raw: unknown): UnifiedVideoReference[] {
           row.role === "start_frame" ||
           row.role === "end_frame" ||
           row.role === "image_reference" ||
+          row.role === "video_reference" ||
+          row.role === "audio_reference" ||
           row.role === "motion_source_video"
             ? row.role
             : "image_reference",

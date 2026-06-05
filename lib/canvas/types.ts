@@ -12,7 +12,7 @@ export type CanvasViewport = {
   k: number;
 };
 
-export type CanvasNodeType = "text" | "image" | "video" | "group";
+export type CanvasNodeType = "text" | "image" | "video" | "audio" | "group";
 
 export type CanvasSourcePort = "output";
 
@@ -23,8 +23,10 @@ export type CanvasNodeMetadata = {
   prompt?: string;
   imageUrl?: string;
   videoUrl?: string;
+  audioUrl?: string;
   naturalWidth?: number;
   naturalHeight?: number;
+  audioDurationSeconds?: number;
   mimeType?: string;
   source?: "upload" | "manual";
   /** Group node: ordered list of child node IDs */
@@ -91,6 +93,7 @@ export type CanvasBoardSummary = {
   nodeCount: number;
   imageCount: number;
   videoCount: number;
+  audioCount: number;
 };
 
 export const DEFAULT_CANVAS_VIEWPORT: CanvasViewport = { x: 0, y: 0, k: 1 };

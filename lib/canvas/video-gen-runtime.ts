@@ -96,7 +96,11 @@ function collectReferences(board: CanvasBoard, node: CanvasNode): UnifiedVideoRe
         break;
       case "videoReference":
         if (sourceNode.type !== "video") throw new Error("动作参考输入只能连接视频节点。");
-        refs.push({ role: "motion_source_video", url: getVideoUrl(sourceNode), label: sourceNode.title });
+        refs.push({
+          role: node.metadata?.videoModeId === "multi_image_reference" ? "video_reference" : "motion_source_video",
+          url: getVideoUrl(sourceNode),
+          label: sourceNode.title,
+        });
         break;
       default:
         break;
@@ -118,7 +122,11 @@ function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>):
 
   const refs = promptInfo.mentionedReferences.map((item): UnifiedVideoReference | null => {
     if (item.type === "video") {
-      return { role: "motion_source_video", url: item.url, label: item.label };
+      return {
+        role: item.role === "video_reference" ? "video_reference" : "motion_source_video",
+        url: item.url,
+        label: item.label,
+      };
     }
     if (item.role === "start_frame") return { role: "start_frame", url: item.url, label: item.label };
     if (item.role === "end_frame") return { role: "end_frame", url: item.url, label: item.label };
@@ -190,7 +198,7 @@ export async function executeCanvasVideoGeneration(params: {
   let effectiveModeId: VideoGenerationModeId;
   if (mentionedReferences.some((ref) => ref.role === "motion_source_video")) {
     effectiveModeId = "motion_control";
-  } else if (mentionedReferences.some((ref) => ref.role === "image_reference")) {
+  } else if (mentionedReferences.some((ref) => ref.role === "image_reference" || ref.role === "video_reference" || ref.role === "audio_reference")) {
     effectiveModeId = "multi_image_reference";
   } else if (modeId === "motion_control") {
     effectiveModeId = "motion_control";

@@ -19,6 +19,8 @@ function model(
       durations: number[];
       resolutions: VideoResolution[];
       maxImageReferences: number;
+      maxVideoReferences: number;
+      maxAudioReferences: number;
       supportsFirstLastFrames: boolean;
       supportsMotionControl: boolean;
       supportsNativeAudio: boolean;
@@ -63,7 +65,7 @@ const START_END_FRAME_PROMPT = `# 任务：首尾帧视频
 ## 约束
 {{约束}}`;
 
-const MULTI_IMAGE_PROMPT = `# 任务：多图参考视频
+const MULTI_IMAGE_PROMPT = `# 任务：全能参考视频
 ## 参考图主体关系
 {{参考图关系与主次}}
 
@@ -112,6 +114,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [5, 10, 15],
       resolutions: ["1080p"],
       maxImageReferences: 4,
+      maxVideoReferences: 2,
+      maxAudioReferences: 1,
       supportsFirstLastFrames: false,
       supportsMotionControl: false,
       supportsNativeAudio: false,
@@ -130,6 +134,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [5, 10, 15],
       resolutions: ["1080p"],
       maxImageReferences: 4,
+      maxVideoReferences: 2,
+      maxAudioReferences: 1,
       supportsFirstLastFrames: false,
       supportsMotionControl: false,
       supportsNativeAudio: false,
@@ -148,6 +154,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [4, 8, 12],
       resolutions: ["480p", "720p"],
       maxImageReferences: 1,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
       supportsFirstLastFrames: false,
       supportsMotionControl: false,
       supportsNativeAudio: true,
@@ -166,6 +174,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [5, 10, 15],
       resolutions: ["720p", "1080p"],
       maxImageReferences: 4,
+      maxVideoReferences: 2,
+      maxAudioReferences: 1,
       supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: true,
@@ -184,6 +194,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [5],
       resolutions: ["720p", "1080p"],
       maxImageReferences: 1,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
       supportsFirstLastFrames: false,
       supportsMotionControl: true,
       supportsNativeAudio: false,
@@ -197,11 +209,13 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     label: "Veo 3.1",
     defaultApiModelName: "veo-3.1-generate-001",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame"],
       aspectRatios: ["16:9", "9:16"],
       durations: [4, 6, 8],
       resolutions: ["720p", "1080p", "4k"],
       maxImageReferences: 3,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
       supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: true,
@@ -215,11 +229,13 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     label: "Veo 3.1 Fast",
     defaultApiModelName: "veo-3.1-fast-generate-001",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame"],
       aspectRatios: ["16:9", "9:16"],
       durations: [4, 6, 8],
       resolutions: ["720p", "1080p", "4k"],
       maxImageReferences: 3,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
       supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: false,
@@ -238,6 +254,8 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       durations: [4, 6, 8],
       resolutions: ["720p", "1080p"],
       maxImageReferences: 3,
+      maxVideoReferences: 2,
+      maxAudioReferences: 1,
       supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: true,
@@ -254,12 +272,12 @@ export const DEFAULT_VIDEO_PRESETS: Record<
   "seedance-2.0": {
     text_to_video: preset("Seedance 2.0 · 文生视频", "电影镜头文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Seedance 2.0 · 首帧", "首帧图生视频", START_FRAME_PROMPT),
-    multi_image_reference: preset("Seedance 2.0 · 多图参考", "多图参考视频", MULTI_IMAGE_PROMPT),
+    multi_image_reference: preset("Seedance 2.0 · 全能参考", "全能参考视频", MULTI_IMAGE_PROMPT),
   },
   "seedance-2.0-fast": {
     text_to_video: preset("Seedance 2.0 Fast · 文生视频", "快速文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Seedance 2.0 Fast · 首帧", "快速首帧图生视频", START_FRAME_PROMPT),
-    multi_image_reference: preset("Seedance 2.0 Fast · 多图参考", "快速多图参考视频", MULTI_IMAGE_PROMPT),
+    multi_image_reference: preset("Seedance 2.0 Fast · 全能参考", "快速全能参考视频", MULTI_IMAGE_PROMPT),
   },
   "seedance-1.5": {
     text_to_video: preset("Seedance 1.5 · 文生视频", "1.5 文生视频", TEXT_TO_VIDEO_PROMPT),
@@ -269,7 +287,7 @@ export const DEFAULT_VIDEO_PRESETS: Record<
     text_to_video: preset("可灵 3.0 · 文生视频", "可灵 3.0 单镜头/多镜头视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("可灵 3.0 · 首帧", "可灵 3.0 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("可灵 3.0 · 首尾帧", "可灵 3.0 首尾帧视频", START_END_FRAME_PROMPT),
-    multi_image_reference: preset("可灵 3.0 · 多图参考", "可灵 3.0 元素一致性/多图参考", MULTI_IMAGE_PROMPT),
+    multi_image_reference: preset("可灵 3.0 · 全能参考", "可灵 3.0 元素一致性/全能参考", MULTI_IMAGE_PROMPT),
   },
   "kling-2.6-motion": {
     motion_control: preset("可灵 2.6 · 动作控制", "动作迁移视频", MOTION_CONTROL_PROMPT),
@@ -278,19 +296,17 @@ export const DEFAULT_VIDEO_PRESETS: Record<
     text_to_video: preset("Veo 3.1 · 文生视频", "Veo 文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Veo 3.1 · 首帧", "Veo 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("Veo 3.1 · 首尾帧", "Veo 首尾帧视频", START_END_FRAME_PROMPT),
-    multi_image_reference: preset("Veo 3.1 · 多图参考", "Veo 最多三图参考", MULTI_IMAGE_PROMPT),
   },
   "veo-3.1-fast": {
     text_to_video: preset("Veo 3.1 Fast · 文生视频", "Veo Fast 文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Veo 3.1 Fast · 首帧", "Veo Fast 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("Veo 3.1 Fast · 首尾帧", "Veo Fast 首尾帧视频", START_END_FRAME_PROMPT),
-    multi_image_reference: preset("Veo 3.1 Fast · 多图参考", "Veo Fast 多图参考", MULTI_IMAGE_PROMPT),
   },
   "gemini-omni": {
     text_to_video: preset("Gemini Omni · 文生视频", "独立占位模型，等待可信契约", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Gemini Omni · 首帧", "独立占位模型，等待可信契约", START_FRAME_PROMPT),
     start_end_frame: preset("Gemini Omni · 首尾帧", "独立占位模型，等待可信契约", START_END_FRAME_PROMPT),
-    multi_image_reference: preset("Gemini Omni · 多图参考", "独立占位模型，等待可信契约", MULTI_IMAGE_PROMPT),
+    multi_image_reference: preset("Gemini Omni · 全能参考", "独立占位模型，等待可信契约", MULTI_IMAGE_PROMPT),
   },
 };
 

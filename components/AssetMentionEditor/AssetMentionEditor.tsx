@@ -42,6 +42,7 @@ type AssetMentionEditorProps = {
   onValueChange: (value: string) => void;
   candidates: AssetMentionCandidate[];
   className?: string;
+  placeholderClassName?: string;
   placeholder?: string;
   "aria-label"?: string;
   onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
@@ -260,6 +261,7 @@ export function AssetMentionEditor({
   onValueChange,
   candidates,
   className,
+  placeholderClassName,
   placeholder,
   onPointerDown,
   "aria-label": ariaLabel,
@@ -270,7 +272,7 @@ export function AssetMentionEditor({
       <LexicalComposer initialConfig={initialConfig}>
         <PlainTextPlugin
           contentEditable={<ContentEditable className={[className, styles.editorInput].filter(Boolean).join(" ")} aria-label={ariaLabel} />}
-          placeholder={placeholder ? <div className={[className, styles.placeholder].filter(Boolean).join(" ")}>{placeholder}</div> : null}
+          placeholder={placeholder ? <div className={[styles.placeholder, placeholderClassName].filter(Boolean).join(" ")}>{placeholder}</div> : null}
           ErrorBoundary={LexicalErrorBoundary}
         />
         <HistoryPlugin />

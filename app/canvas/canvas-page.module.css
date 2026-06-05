@@ -40,6 +40,27 @@
   overscroll-behavior: none;
 }
 
+.canvasEditorShell {
+  overflow: hidden;
+}
+
+.canvasEditorShell .canvasPage {
+  position: absolute;
+  inset: 0;
+  flex: none;
+}
+
+.canvasTopbar {
+  position: absolute;
+  inset: 0 18px auto;
+  margin: 12px 0 0;
+  pointer-events: none;
+}
+
+.canvasTopbar > * {
+  pointer-events: auto;
+}
+
 .canvasRoot {
   position: absolute;
   inset: 0;
@@ -361,6 +382,14 @@
   color: #3f3f46;
 }
 
+.textNodePlaceholder {
+  padding: 12px;
+  color: #3f3f46;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .imageFrame {
   position: absolute;
   inset: 0;
@@ -387,6 +416,64 @@
   background: #000;
   object-fit: contain;
   display: block;
+}
+
+.audioFrame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(250, 204, 21, 0.14), transparent 34%),
+    rgba(10, 10, 11, 0.96);
+}
+
+.audioGlyph {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(250, 204, 21, 0.22);
+  border-radius: 10px;
+  background: rgba(250, 204, 21, 0.08);
+  color: #fde68a;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.audioInfo {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.audioTitle,
+.audioMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audioTitle {
+  color: #e4e4e7;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.audioMeta {
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.audioMedia {
+  width: 100%;
+  height: 30px;
+  min-width: 0;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -423,7 +510,8 @@
   position: absolute;
   top: calc(100% + 24px);
   left: 50%;
-  transform: translate(-50%, -8px);
+  transform: translate(-50%, -8px) scale(var(--canvas-zoom-inverse, 1));
+  transform-origin: top center;
   width: 680px;
   height: 140px;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -446,7 +534,7 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, 0) scale(var(--canvas-zoom-inverse, 1));
 }
 
 .generatorBody {
@@ -565,6 +653,14 @@
 
 .generatorPrompt::placeholder {
   color: #52525b;
+}
+
+.generatorPromptPlaceholder {
+  padding: 8px 12px 4px;
+  color: #52525b;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 /* Toolbar row: selects + run button */

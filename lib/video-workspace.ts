@@ -23,7 +23,7 @@ export type UiVideoModeId = "start_end_frame" | "multi_image_reference";
 
 export const UI_VIDEO_MODES: ReadonlyArray<{ id: UiVideoModeId; label: string }> = [
   { id: "start_end_frame", label: "首尾帧" },
-  { id: "multi_image_reference", label: "多图参考" },
+  { id: "multi_image_reference", label: "全能参考" },
 ];
 
 export function inferEffectiveVideoMode(

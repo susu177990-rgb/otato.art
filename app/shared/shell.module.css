@@ -20,7 +20,7 @@
 }
 
 /* `.body` 是 flex column 的可滚动子容器，跟 `.page` 配合时由它独占滚动条，
-   topbar 自然「钉」在最顶。 */
+   顶部操作区自然「钉」在最顶。 */
 .body {
   flex: 1;
   min-height: 0;
@@ -63,18 +63,18 @@
   position: relative;
   z-index: 40;
   flex-shrink: 0;
-  margin: 14px 18px 0;
-  min-height: 58px;
+  margin: 12px 18px 0;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 10px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  background: rgba(10, 10, 12, 0.78);
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(22px);
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .topbarLeft {
@@ -142,7 +142,7 @@
   padding: 0 18px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(14, 14, 16, 0.72);
   color: #f4f4f5;
   font-family: inherit;
   font-size: 13px;
@@ -150,13 +150,14 @@
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(18px);
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
 }
 
 .navLink:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(26, 26, 30, 0.84);
   color: #f4f4f5;
 }
 

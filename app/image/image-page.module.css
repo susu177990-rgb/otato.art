@@ -1073,6 +1073,14 @@
   color: #52525b;
 }
 
+.promptPlaceholder {
+  padding: 16px 20px;
+  color: #52525b;
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+}
+
 .promptDualGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

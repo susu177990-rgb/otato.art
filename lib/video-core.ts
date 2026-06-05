@@ -32,6 +32,8 @@ export type UnifiedVideoReferenceRole =
   | "start_frame"
   | "end_frame"
   | "image_reference"
+  | "video_reference"
+  | "audio_reference"
   | "motion_source_video";
 
 export type UnifiedVideoReference = {
@@ -60,6 +62,8 @@ export type VideoCapabilitySet = {
   durations: number[];
   resolutions: VideoResolution[];
   maxImageReferences: number;
+  maxVideoReferences: number;
+  maxAudioReferences: number;
   supportsFirstLastFrames: boolean;
   supportsMotionControl: boolean;
   supportsNativeAudio: boolean;
@@ -85,7 +89,7 @@ export const VIDEO_GENERATION_MODES: ReadonlyArray<{ id: VideoGenerationModeId; 
   { id: "text_to_video", label: "文生视频" },
   { id: "start_frame", label: "首帧" },
   { id: "start_end_frame", label: "首尾帧" },
-  { id: "multi_image_reference", label: "多图参考" },
+  { id: "multi_image_reference", label: "全能参考" },
   { id: "motion_control", label: "动作控制" },
 ];
 

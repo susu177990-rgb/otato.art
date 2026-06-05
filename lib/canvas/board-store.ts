@@ -57,7 +57,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
   if (rawType === "imageGen") rawType = "image";
   if (rawType === "videoGen") rawType = "video";
   const type =
-    rawType === "image" || rawType === "text" || rawType === "video" || rawType === "group"
+    rawType === "image" || rawType === "text" || rawType === "video" || rawType === "audio" || rawType === "group"
       ? rawType
       : null;
   const id = typeof value.id === "string" ? value.id : "";
@@ -68,8 +68,9 @@ function normalizeNode(value: unknown): CanvasNode | null {
   const metadata = isObject(value.metadata) ? value.metadata : {};
   const imageUrl = typeof metadata.imageUrl === "string" ? metadata.imageUrl : undefined;
   const videoUrl = typeof metadata.videoUrl === "string" ? metadata.videoUrl : undefined;
-  const fallbackWidth = type === "image" || type === "video" ? 280 : type === "group" ? 400 : 260;
-  const fallbackHeight = type === "image" || type === "video" ? 220 : type === "group" ? 300 : 150;
+  const audioUrl = typeof metadata.audioUrl === "string" ? metadata.audioUrl : undefined;
+  const fallbackWidth = type === "image" || type === "video" ? 280 : type === "audio" ? 320 : type === "group" ? 400 : 260;
+  const fallbackHeight = type === "image" || type === "video" ? 220 : type === "audio" ? 96 : type === "group" ? 300 : 150;
   const imageModelId = normalizeImageModelId(metadata.imageModelId ?? metadata.modelId);
   const aspectRatio = normalizeImageAspectRatio(metadata.aspectRatio);
   const imageSize = normalizeImageSizeTier(metadata.imageSize);
@@ -91,8 +92,10 @@ function normalizeNode(value: unknown): CanvasNode | null {
       prompt: typeof metadata.prompt === "string" ? metadata.prompt : undefined,
       imageUrl: imageUrl && !isUnsafeMediaString(imageUrl) ? imageUrl : undefined,
       videoUrl: videoUrl && !isUnsafeMediaString(videoUrl) ? videoUrl : undefined,
+      audioUrl: audioUrl && !isUnsafeMediaString(audioUrl) ? audioUrl : undefined,
       naturalWidth: Number.isFinite(Number(metadata.naturalWidth)) ? Number(metadata.naturalWidth) : undefined,
       naturalHeight: Number.isFinite(Number(metadata.naturalHeight)) ? Number(metadata.naturalHeight) : undefined,
+      audioDurationSeconds: Number.isFinite(Number(metadata.audioDurationSeconds)) ? Number(metadata.audioDurationSeconds) : undefined,
       mimeType: typeof metadata.mimeType === "string" ? metadata.mimeType : undefined,
       source: metadata.source === "upload" ? "upload" : metadata.source === "manual" ? "manual" : undefined,
       children: Array.isArray(metadata.children) ? metadata.children.filter((c): c is string => typeof c === "string") : undefined,
@@ -202,6 +205,7 @@ function normalizeImageNodeStatus(value: unknown): "idle" | "running" | "success
 function defaultNodeTitle(type: CanvasNode["type"]): string {
   if (type === "image") return "图片";
   if (type === "video") return "视频";
+  if (type === "audio") return "音频";
   if (type === "group") return "素材组";
   return "文本";
 }
@@ -247,7 +251,7 @@ function normalizeConnection(value: unknown, nodeMap: Map<string, CanvasNode>, e
 }
 
 function isUnsafeMediaString(value: string): boolean {
-  return /^data:(image|video)\//i.test(value.trim()) || /^blob:/i.test(value.trim());
+  return /^data:(image|video|audio)\//i.test(value.trim()) || /^blob:/i.test(value.trim());
 }
 
 function assertNoInlineMedia(value: unknown): void {
@@ -303,6 +307,7 @@ function rowToSummary(row: CanvasBoardRow): CanvasBoardSummary {
     nodeCount: board.nodes.length,
     imageCount: board.nodes.filter((node) => node.type === "image").length,
     videoCount: board.nodes.filter((node) => node.type === "video").length,
+    audioCount: board.nodes.filter((node) => node.type === "audio").length,
   };
 }
 

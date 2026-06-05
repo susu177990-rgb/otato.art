@@ -1033,6 +1033,7 @@ export default function ImagePage() {
                     }
                     candidates={mentionCandidates}
                     placeholder={composerPlaceholder(selectedModeId, placeholderOccurrences, i)}
+                    placeholderClassName={styles.promptPlaceholder}
                     aria-label={`作图输入槽位 ${i + 1}`}
                     className={styles.promptInput}
                   />

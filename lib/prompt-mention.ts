@@ -6,7 +6,7 @@ import {
   type ParsedAssetMention,
 } from "./asset-mentions";
 
-export type MentionType = "slot" | "node" | "gallery-image" | "gallery-video";
+export type MentionType = "slot" | "node" | "gallery-image" | "gallery-video" | "gallery-audio";
 
 export type MentionItem = {
   name: string;
@@ -18,15 +18,15 @@ export type CanvasMentionNode = {
   id: string;
   type: string;
   title: string;
-  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string };
+  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string; audioUrl?: string };
 };
 
 export type CanvasMentionReference = {
   id: string;
-  type: "image" | "video";
+  type: "image" | "video" | "audio";
   url: string;
   label: string;
-  role?: "prompt" | "image_reference" | "start_frame" | "end_frame" | "video_reference";
+  role?: "prompt" | "image_reference" | "start_frame" | "end_frame" | "video_reference" | "motion_source_video" | "audio_reference";
 };
 
 /**
@@ -46,21 +46,24 @@ function candidateForCanvasNode(node: CanvasMentionNode): AssetMentionCandidate 
       ? "prompt"
       : node.type === "video"
         ? "video_reference"
-        : "image_reference";
+        : node.type === "audio"
+          ? "audio_reference"
+          : "image_reference";
   return {
     id: node.id,
-    label: node.title || (node.type === "image" ? "图片" : node.type === "video" ? "视频" : "输入"),
+    label: node.title || (node.type === "image" ? "图片" : node.type === "video" ? "视频" : node.type === "audio" ? "音频" : "输入"),
     type: "node",
     role,
-    nodeType: node.type === "image" || node.type === "video" || node.type === "text" ? node.type : undefined,
+    nodeType: node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "text" ? node.type : undefined,
     text: node.metadata?.text,
-    url: node.metadata?.imageUrl || node.metadata?.previewImageUrl || node.metadata?.videoUrl || node.metadata?.previewVideoUrl,
+    url: node.metadata?.imageUrl || node.metadata?.previewImageUrl || node.metadata?.videoUrl || node.metadata?.previewVideoUrl || node.metadata?.audioUrl,
   };
 }
 
 function urlForCanvasNode(node: CanvasMentionNode): string {
   if (node.type === "image") return node.metadata?.imageUrl?.trim() || node.metadata?.previewImageUrl?.trim() || "";
   if (node.type === "video") return node.metadata?.videoUrl?.trim() || node.metadata?.previewVideoUrl?.trim() || "";
+  if (node.type === "audio") return node.metadata?.audioUrl?.trim() || "";
   return "";
 }
 
@@ -77,7 +80,7 @@ function resolveCanvasNodeMention(
       resolvedTextNodeId: node.id,
     };
   }
-  if (node.type === "image" || node.type === "video") {
+  if (node.type === "image" || node.type === "video" || node.type === "audio") {
     const url = urlForCanvasNode(node);
     return {
       replacement: node.title || mention.label,
