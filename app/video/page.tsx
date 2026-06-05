@@ -27,11 +27,13 @@ import {
   type VideoGenerationModeId,
   type VideoModelId,
   type VideoResolution,
+  type UiVideoModeId,
+  UI_VIDEO_MODES as UI_MODES,
+  inferEffectiveVideoMode,
 } from "@/lib/video-workspace";
 
 const MEDIA_BUCKET = "generated-images";
 
-type UiVideoModeId = "start_end_frame" | "multi_image_reference";
 type RefSlot = { url: string; previewUrl: string; label: string } | null;
 type PresetRailItem = {
   id: string;
@@ -39,11 +41,6 @@ type PresetRailItem = {
   promptTemplate: string;
   coverUrl: string;
 };
-
-const UI_MODES: ReadonlyArray<{ id: UiVideoModeId; label: string }> = [
-  { id: "start_end_frame", label: "首尾帧" },
-  { id: "multi_image_reference", label: "多图参考" },
-];
 
 const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => id !== "kling-2.6-motion");
 
@@ -87,15 +84,7 @@ function effectiveModeFromUi(
   uiModeId: UiVideoModeId,
   refSlots: RefSlot[],
 ): { modeId: VideoGenerationModeId; error?: string } {
-  if (uiModeId === "multi_image_reference") {
-    return { modeId: "multi_image_reference" };
-  }
-  const first = refSlots[0];
-  const second = refSlots[1];
-  if (!first && !second) return { modeId: "text_to_video" };
-  if (second && !first) return { modeId: "start_end_frame", error: "请先上传首帧图，再上传尾帧图。" };
-  if (first && !second) return { modeId: "start_frame" };
-  return { modeId: "start_end_frame" };
+  return inferEffectiveVideoMode(uiModeId, Boolean(refSlots[0]), Boolean(refSlots[1]));
 }
 
 function visibleSlotCount(uiModeId: UiVideoModeId): number {

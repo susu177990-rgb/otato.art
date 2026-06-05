@@ -19,6 +19,28 @@ import { VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS } from "@/lib/video-core";
 export * from "@/lib/video-core";
 export { VIDEO_MODEL_ORDER, VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS, getVideoModelDefinition };
 
+export type UiVideoModeId = "start_end_frame" | "multi_image_reference";
+
+export const UI_VIDEO_MODES: ReadonlyArray<{ id: UiVideoModeId; label: string }> = [
+  { id: "start_end_frame", label: "首尾帧" },
+  { id: "multi_image_reference", label: "多图参考" },
+];
+
+export function inferEffectiveVideoMode(
+  uiModeId: UiVideoModeId | string,
+  hasStartFrame: boolean,
+  hasEndFrame: boolean,
+): { modeId: VideoGenerationModeId; error?: string } {
+  if (uiModeId === "multi_image_reference") {
+    return { modeId: "multi_image_reference" };
+  }
+  // Default to "start_end_frame" branch for anything else
+  if (!hasStartFrame && !hasEndFrame) return { modeId: "text_to_video" };
+  if (hasEndFrame && !hasStartFrame) return { modeId: "start_end_frame", error: "请先连接或上传首帧图，再连接或上传尾帧图。" };
+  if (hasStartFrame && !hasEndFrame) return { modeId: "start_frame" };
+  return { modeId: "start_end_frame" };
+}
+
 export type VideoPromptModeId =
   | "free";
 

@@ -16,6 +16,8 @@ import {
   type UnifiedVideoReference,
   type VideoGenerationModeId,
   type VideoModelId,
+  type UiVideoModeId,
+  inferEffectiveVideoMode,
 } from "@/lib/video-workspace";
 
 type CanvasVideoGenerationResult = {
@@ -137,9 +139,27 @@ export async function executeCanvasVideoGeneration(params: {
   const prompt = buildPrompt(params.board, sourceNode);
   const references = collectReferences(params.board, sourceNode);
 
+  const hasStartFrame = references.some((ref) => ref.role === "start_frame");
+  const hasEndFrame = references.some((ref) => ref.role === "end_frame");
+
+  let effectiveModeId: VideoGenerationModeId;
+  if (modeId === "motion_control") {
+    effectiveModeId = "motion_control";
+  } else {
+    const { modeId: inferredMode, error: modeError } = inferEffectiveVideoMode(
+      modeId,
+      hasStartFrame,
+      hasEndFrame,
+    );
+    if (modeError) {
+      throw new Error(modeError);
+    }
+    effectiveModeId = inferredMode;
+  }
+
   const request: UnifiedVideoGenerateRequest = {
     modelId,
-    modeId,
+    modeId: effectiveModeId,
     prompt,
     durationSeconds: sourceNode.metadata?.videoDurationSeconds ?? capabilities.durations[0] ?? 5,
     aspectRatio: sourceNode.metadata?.videoAspectRatio ?? capabilities.aspectRatios[0],
@@ -176,7 +196,7 @@ export async function executeCanvasVideoGeneration(params: {
     prompt,
     node: nextSourceNode,
     modelId,
-    modeId,
+    modeId: effectiveModeId,
     references,
   });
   await prependVideoGalleryRecord(params.supabase, galleryRecord);

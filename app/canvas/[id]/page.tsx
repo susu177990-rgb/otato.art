@@ -36,6 +36,8 @@ import {
   type VideoModelId,
   type VideoResolution,
   type VideoWorkspaceSettings,
+  type UiVideoModeId,
+  UI_VIDEO_MODES,
 } from "@/lib/video-workspace";
 import type {
   CanvasBoard,
@@ -1170,10 +1172,9 @@ export default function CanvasBoardPage() {
       const nextMetadata = { ...node.metadata, ...patch };
       if (patch.videoModelId) {
         const capabilities = getVideoCapabilities(patch.videoModelId);
-        const nextMode = nextMetadata.videoModeId && capabilities.supportedModes.includes(nextMetadata.videoModeId)
-          ? nextMetadata.videoModeId
-          : capabilities.supportedModes[0];
-        nextMetadata.videoModeId = nextMode;
+        if (!nextMetadata.videoModeId) {
+          nextMetadata.videoModeId = "start_end_frame";
+        }
         if (!nextMetadata.videoAspectRatio || !capabilities.aspectRatios.includes(nextMetadata.videoAspectRatio)) {
           nextMetadata.videoAspectRatio = capabilities.aspectRatios[0];
         }
@@ -1182,12 +1183,6 @@ export default function CanvasBoardPage() {
         }
         if (!nextMetadata.videoDurationSeconds || !capabilities.durations.includes(nextMetadata.videoDurationSeconds)) {
           nextMetadata.videoDurationSeconds = capabilities.durations[0];
-        }
-      }
-      if (patch.videoModeId && nextMetadata.videoModelId) {
-        const capabilities = getVideoCapabilities(nextMetadata.videoModelId);
-        if (!capabilities.supportedModes.includes(patch.videoModeId)) {
-          nextMetadata.videoModeId = capabilities.supportedModes[0];
         }
       }
       return { ...node, metadata: nextMetadata };
@@ -2321,16 +2316,20 @@ export default function CanvasBoardPage() {
                               </select>
                               <select
                                 className={styles.generatorPill}
-                                value={node.metadata?.videoModeId ?? "text_to_video"}
+                                value={
+                                  node.metadata?.videoModeId === "multi_image_reference"
+                                    ? "multi_image_reference"
+                                    : "start_end_frame"
+                                }
                                 onChange={(e) =>
                                   updateVideoGenNodeSettings(node.id, {
-                                    videoModeId: e.target.value as VideoGenerationModeId,
+                                    videoModeId: e.target.value as any,
                                   })
                                 }
                               >
-                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).supportedModes.map((modeId) => (
-                                  <option key={modeId} value={modeId}>
-                                    {VIDEO_MODE_LABELS[modeId]}
+                                {UI_VIDEO_MODES.map((mode) => (
+                                  <option key={mode.id} value={mode.id}>
+                                    {mode.label}
                                   </option>
                                 ))}
                               </select>
