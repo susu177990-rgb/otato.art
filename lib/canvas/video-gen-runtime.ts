@@ -17,7 +17,6 @@ import {
   type UnifiedVideoReference,
   type VideoGenerationModeId,
   type VideoModelId,
-  type UiVideoModeId,
   inferEffectiveVideoMode,
 } from "@/lib/video-workspace";
 
@@ -33,11 +32,12 @@ function mustBeVideoNode(node: CanvasNode | undefined): CanvasNode {
   return node;
 }
 
-function buildPrompt(board: CanvasBoard, node: CanvasNode): { prompt: string; resolvedNodeIds: string[] } {
+function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof resolveMentions> & { prompt: string } {
   const ownPrompt = node.metadata?.prompt?.trim() ?? "";
-  const { cleanedPrompt, resolvedNodeIds } = resolveMentions(ownPrompt, {
+  const mentionResult = resolveMentions(ownPrompt, {
     canvasNodes: board.nodes,
   });
+  const { cleanedPrompt, resolvedNodeIds } = mentionResult;
 
   const connectedPrompts = board.connections
     .filter((conn) => conn.toNodeId === node.id && conn.targetPort === "prompt")
@@ -54,8 +54,8 @@ function buildPrompt(board: CanvasBoard, node: CanvasNode): { prompt: string; re
     throw new Error("生视频节点缺少提示词：请填写节点提示词，或接入文本节点。");
   }
   return {
+    ...mentionResult,
     prompt: parts.join("\n\n"),
-    resolvedNodeIds,
   };
 }
 
@@ -105,6 +105,36 @@ function collectReferences(board: CanvasBoard, node: CanvasNode): UnifiedVideoRe
   return refs;
 }
 
+function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>): UnifiedVideoReference[] {
+  const missingMediaMention = promptInfo.resolution.mentions.find(
+    (mention) =>
+      mention.candidate?.type === "node" &&
+      (mention.candidate.nodeType === "image" || mention.candidate.nodeType === "video") &&
+      !mention.candidate.url,
+  );
+  if (missingMediaMention) {
+    throw new Error(`参考节点「${missingMediaMention.label}」还没有可用媒体。`);
+  }
+
+  const refs = promptInfo.mentionedReferences.map((item): UnifiedVideoReference | null => {
+    if (item.type === "video") {
+      return { role: "motion_source_video", url: item.url, label: item.label };
+    }
+    if (item.role === "start_frame") return { role: "start_frame", url: item.url, label: item.label };
+    if (item.role === "end_frame") return { role: "end_frame", url: item.url, label: item.label };
+    return { role: "image_reference", url: item.url, label: item.label };
+  });
+
+  const seen = new Set<string>();
+  return refs.filter((ref): ref is UnifiedVideoReference => {
+    if (!ref) return false;
+    const key = `${ref.role}:${ref.url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function buildGalleryRecord(params: {
   result: UnifiedVideoGenerationSuccess;
   prompt: string;
@@ -149,14 +179,20 @@ export async function executeCanvasVideoGeneration(params: {
   const capabilities = getVideoCapabilities(modelId);
   
   // 核心：构建并清洗提示词，解析内联文本节点引用
-  const { prompt } = buildPrompt(params.board, sourceNode);
-  const references = collectReferences(params.board, sourceNode);
+  const promptInfo = buildPrompt(params.board, sourceNode);
+  const { prompt } = promptInfo;
+  const mentionedReferences = collectMentionedReferences(promptInfo);
+  const references = mentionedReferences.length > 0 ? mentionedReferences : collectReferences(params.board, sourceNode);
 
   const hasStartFrame = references.some((ref) => ref.role === "start_frame");
   const hasEndFrame = references.some((ref) => ref.role === "end_frame");
 
   let effectiveModeId: VideoGenerationModeId;
-  if (modeId === "motion_control") {
+  if (mentionedReferences.some((ref) => ref.role === "motion_source_video")) {
+    effectiveModeId = "motion_control";
+  } else if (mentionedReferences.some((ref) => ref.role === "image_reference")) {
+    effectiveModeId = "multi_image_reference";
+  } else if (modeId === "motion_control") {
     effectiveModeId = "motion_control";
   } else {
     const { modeId: inferredMode, error: modeError } = inferEffectiveVideoMode(

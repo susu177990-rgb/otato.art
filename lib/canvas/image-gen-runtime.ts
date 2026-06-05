@@ -31,11 +31,12 @@ function resolveImageModel(snapshot: WorkspaceSnapshot, node: CanvasNode): Image
   return model;
 }
 
-function buildPrompt(board: CanvasBoard, node: CanvasNode): { prompt: string; resolvedNodeIds: string[] } {
+function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof resolveMentions> & { prompt: string } {
   const ownPrompt = node.metadata?.prompt?.trim() ?? "";
-  const { cleanedPrompt, resolvedNodeIds } = resolveMentions(ownPrompt, {
+  const mentionResult = resolveMentions(ownPrompt, {
     canvasNodes: board.nodes,
   });
+  const { cleanedPrompt, resolvedNodeIds } = mentionResult;
 
   const connectedPrompts = board.connections
     .filter((conn) => conn.toNodeId === node.id && conn.targetPort === "prompt")
@@ -52,8 +53,8 @@ function buildPrompt(board: CanvasBoard, node: CanvasNode): { prompt: string; re
     throw new Error("生图节点缺少提示词：请填写节点提示词，或接入文本节点。");
   }
   return {
+    ...mentionResult,
     prompt: parts.join("\n\n"),
-    resolvedNodeIds,
   };
 }
 
@@ -80,6 +81,20 @@ function collectReferenceImages(board: CanvasBoard, node: CanvasNode): string[] 
     }
   }
   return urls;
+}
+
+function collectMentionedReferenceImages(promptInfo: ReturnType<typeof buildPrompt>): string[] {
+  const missingImageMention = promptInfo.resolution.mentions.find(
+    (mention) => mention.candidate?.type === "node" && mention.candidate.nodeType === "image" && !mention.candidate.url,
+  );
+  if (missingImageMention) {
+    throw new Error(`参考节点「${missingImageMention.label}」还没有图片。`);
+  }
+  const urls = promptInfo.mentionedReferences
+    .filter((item) => item.type === "image")
+    .map((item) => item.url)
+    .filter(Boolean);
+  return Array.from(new Set(urls));
 }
 
 
@@ -150,8 +165,10 @@ export async function executeCanvasImageGeneration(params: {
   const model = resolveImageModel(params.workspaceSnapshot, sourceNode);
   
   // 核心：构建并清洗提示词，解析内联文本节点引用
-  const { prompt } = buildPrompt(params.board, sourceNode);
-  const refImages = collectReferenceImages(params.board, sourceNode);
+  const promptInfo = buildPrompt(params.board, sourceNode);
+  const { prompt } = promptInfo;
+  const mentionedRefImages = collectMentionedReferenceImages(promptInfo);
+  const refImages = mentionedRefImages.length > 0 ? mentionedRefImages : collectReferenceImages(params.board, sourceNode);
 
   const result = await generateImage({
     model,

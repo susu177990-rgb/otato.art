@@ -36,10 +36,10 @@ import {
   type VideoModelId,
   type VideoResolution,
   type VideoWorkspaceSettings,
-  type UiVideoModeId,
   UI_VIDEO_MODES,
 } from "@/lib/video-workspace";
-import { MentionTextarea } from "@/components/MentionTextarea";
+import { AssetMentionEditor } from "@/components/AssetMentionEditor";
+import type { AssetMentionCandidate, AssetMentionRole } from "@/lib/asset-mentions";
 import type {
   CanvasBoard,
   CanvasBoardData,
@@ -488,20 +488,37 @@ export default function CanvasBoardPage() {
 
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
-  const getCandidatesForNode = useCallback((currentNodeId: string) => {
-    const connectedFromNodeIds = connections
-      .filter((conn) => conn.toNodeId === currentNodeId)
-      .map((conn) => conn.fromNodeId);
-
-    return nodes
-      .filter((n) => connectedFromNodeIds.includes(n.id) && n.id !== currentNodeId)
-      .map((n, idx) => {
-        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : "输入";
-        return {
+  const getCandidatesForNode = useCallback((currentNodeId: string): AssetMentionCandidate[] => {
+    const incomingConnections = connections.filter((conn) => conn.toNodeId === currentNodeId);
+    const typeCounts: Record<string, number> = {};
+    return incomingConnections
+      .flatMap((conn): AssetMentionCandidate[] => {
+        const n = nodes.find((node) => node.id === conn.fromNodeId);
+        if (!n || n.id === currentNodeId) return [];
+        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : "文本";
+        typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
+        const role: AssetMentionRole =
+          conn.targetPort === "prompt"
+            ? "prompt"
+            : conn.targetPort === "firstFrame"
+              ? "start_frame"
+              : conn.targetPort === "lastFrame"
+                ? "end_frame"
+                : conn.targetPort === "videoReference"
+                  ? "video_reference"
+                  : "image_reference";
+        return [{
           id: n.id,
-          name: n.title || `${typeName}${idx + 1}`,
+          label: `${typeName}${typeCounts[typeName]}`,
           type: "node" as const,
-        };
+          role,
+          nodeType: n.type === "text" || n.type === "image" || n.type === "video" ? n.type : undefined,
+          groupLabel: "已连接素材",
+          description: conn.targetPort,
+          thumbnailUrl: n.metadata?.previewImageUrl || n.metadata?.imageUrl,
+          url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl,
+          text: n.metadata?.text,
+        }];
       });
   }, [nodes, connections]);
 
@@ -2252,7 +2269,7 @@ export default function CanvasBoardPage() {
 
                       {/* ── Bottom card: composer (prompt + toolbar) ── */}
                       <div className={styles.genComposerBox} onPointerDown={(e) => e.stopPropagation()}>
-                        <MentionTextarea
+                        <AssetMentionEditor
                           className={styles.generatorPrompt}
                           value={node.metadata?.prompt ?? ""}
                           placeholder={node.type === "image" ? "描述任何你想要生成的内容" : "描述你想要生成的视频内容"}
@@ -2342,7 +2359,7 @@ export default function CanvasBoardPage() {
                                 }
                                 onChange={(e) =>
                                   updateVideoGenNodeSettings(node.id, {
-                                    videoModeId: e.target.value as any,
+                                    videoModeId: e.target.value as VideoGenerationModeId,
                                   })
                                 }
                               >
@@ -2431,7 +2448,7 @@ export default function CanvasBoardPage() {
                       }}
                     >
                       {node.type === "text" ? (
-                        <MentionTextarea
+                        <AssetMentionEditor
                           className={styles.textNodeInput}
                           value={node.metadata?.text ?? ""}
                           placeholder="输入文本、提示词或分镜备注"

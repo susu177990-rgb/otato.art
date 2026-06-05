@@ -1,4 +1,12 @@
-export type MentionType = "slot" | "node";
+import {
+  parseAssetMentions,
+  resolveAssetMentions,
+  type AssetMentionCandidate,
+  type AssetMentionResolution,
+  type ParsedAssetMention,
+} from "./asset-mentions";
+
+export type MentionType = "slot" | "node" | "gallery-image" | "gallery-video";
 
 export type MentionItem = {
   name: string;
@@ -6,64 +14,123 @@ export type MentionItem = {
   id: string;
 };
 
+export type CanvasMentionNode = {
+  id: string;
+  type: string;
+  title: string;
+  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string };
+};
+
+export type CanvasMentionReference = {
+  id: string;
+  type: "image" | "video";
+  url: string;
+  label: string;
+  role?: "prompt" | "image_reference" | "start_frame" | "end_frame" | "video_reference";
+};
+
 /**
- * 提取所有 @[Name](type:id) 引用，其中 type 可为 slot 或 node
+ * Backward-compatible parser for all stored asset mention strings.
  */
 export function parseMentions(prompt: string): MentionItem[] {
-  const regex = /@\[([^\]]+)\]\((slot|node):([^\)]+)\)/g;
-  const matches: MentionItem[] = [];
-  let match;
-  while ((match = regex.exec(prompt)) !== null) {
-    matches.push({
-      name: match[1],
-      type: match[2] as MentionType,
-      id: match[3],
-    });
+  return parseAssetMentions(prompt).map((mention) => ({
+    name: mention.label,
+    type: mention.type,
+    id: mention.id,
+  }));
+}
+
+function candidateForCanvasNode(node: CanvasMentionNode): AssetMentionCandidate {
+  const role =
+    node.type === "text"
+      ? "prompt"
+      : node.type === "video"
+        ? "video_reference"
+        : "image_reference";
+  return {
+    id: node.id,
+    label: node.title || (node.type === "image" ? "图片" : node.type === "video" ? "视频" : "输入"),
+    type: "node",
+    role,
+    nodeType: node.type === "image" || node.type === "video" || node.type === "text" ? node.type : undefined,
+    text: node.metadata?.text,
+    url: node.metadata?.imageUrl || node.metadata?.previewImageUrl || node.metadata?.videoUrl || node.metadata?.previewVideoUrl,
+  };
+}
+
+function urlForCanvasNode(node: CanvasMentionNode): string {
+  if (node.type === "image") return node.metadata?.imageUrl?.trim() || node.metadata?.previewImageUrl?.trim() || "";
+  if (node.type === "video") return node.metadata?.videoUrl?.trim() || node.metadata?.previewVideoUrl?.trim() || "";
+  return "";
+}
+
+function resolveCanvasNodeMention(
+  mention: ParsedAssetMention,
+  canvasNodes: CanvasMentionNode[],
+): { replacement: string; resolvedTextNodeId?: string; reference?: CanvasMentionReference } {
+  if (mention.type !== "node") return { replacement: mention.label };
+  const node = canvasNodes.find((item) => item.id === mention.id);
+  if (!node) return { replacement: mention.label };
+  if (node.type === "text") {
+    return {
+      replacement: node.metadata?.text ?? "",
+      resolvedTextNodeId: node.id,
+    };
   }
-  return matches;
+  if (node.type === "image" || node.type === "video") {
+    const url = urlForCanvasNode(node);
+    return {
+      replacement: node.title || mention.label,
+      reference: url
+        ? {
+            id: node.id,
+            type: node.type,
+            url,
+            label: node.title || mention.label,
+            role: mention.role,
+          }
+        : undefined,
+    };
+  }
+  return { replacement: mention.label };
 }
 
 /**
- * 解析并清洗提示词，对于连线的文本节点进行 inline 替换，而对图片槽位等资产仅清洗格式为纯文本“名称”。
- * 同时返回被 inline 替换展开的文本节点 ID 列表，以便在外部构建最终提示词时剔除，避免重复拼接在末尾。
+ * Resolve prompt mentions and keep the legacy return shape used by image/video/canvas runtimes.
+ * Text canvas node mentions are expanded inline; image/video node mentions are returned as references.
  */
 export function resolveMentions(
   prompt: string,
   options: {
-    canvasNodes?: Array<{
-      id: string;
-      type: string;
-      title: string;
-      metadata?: { text?: string; [key: string]: any };
-    }>;
+    canvasNodes?: CanvasMentionNode[];
+    candidates?: AssetMentionCandidate[];
   },
 ): {
   cleanedPrompt: string;
-  resolvedNodeIds: string[]; // 记录已被 inline 替换的文本节点 ID
+  resolvedNodeIds: string[];
+  mentionedReferences: CanvasMentionReference[];
+  resolution: AssetMentionResolution;
 } {
   const canvasNodes = options.canvasNodes ?? [];
+  const candidates = [...(options.candidates ?? []), ...canvasNodes.map(candidateForCanvasNode)];
   const resolvedNodeIds: string[] = [];
+  const mentionedReferences: CanvasMentionReference[] = [];
 
-  const cleanedPrompt = prompt.replace(
-    /@\[([^\]]+)\]\((slot|node):([^\)]+)\)/g,
-    (match, name, type, id) => {
-      if (type === "node") {
-        const node = canvasNodes.find((n) => n.id === id);
-        if (node) {
-          if (node.type === "text") {
-            resolvedNodeIds.push(id);
-            // 文本节点：直接 inline 展开其文本内容
-            return node.metadata?.text ?? "";
-          }
-        }
-      }
-      // 对于 slot 或非文本 node，直接替换为纯文本的“名称”
-      return name;
+  const resolution = resolveAssetMentions(prompt, candidates, {
+    replaceMention: (mention) => {
+      const canvasMention = resolveCanvasNodeMention(mention, canvasNodes);
+      if (canvasMention.resolvedTextNodeId) resolvedNodeIds.push(canvasMention.resolvedTextNodeId);
+      if (canvasMention.reference) mentionedReferences.push(canvasMention.reference);
+      return canvasMention.replacement;
     },
-  );
+  });
 
   return {
-    cleanedPrompt,
+    cleanedPrompt: resolution.prompt,
     resolvedNodeIds: Array.from(new Set(resolvedNodeIds)),
+    mentionedReferences: Array.from(new Map(mentionedReferences.map((item) => [item.id, item])).values()),
+    resolution,
   };
 }
+
+export { parseAssetMentions, resolveAssetMentions };

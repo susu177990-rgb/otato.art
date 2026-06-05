@@ -21,8 +21,8 @@ import {
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
-import { MentionTextarea } from "@/components/MentionTextarea";
-import { resolveMentions } from "@/lib/prompt-mention";
+import { AssetMentionEditor } from "@/components/AssetMentionEditor";
+import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
   mergeCachedImageUrls,
@@ -288,14 +288,18 @@ export default function ImagePage() {
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const mentionCandidates = useMemo(() => {
-    const candidates: Array<{ id: string; name: string; type: "slot" }> = [];
+  const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
+    const candidates: AssetMentionCandidate[] = [];
     refSlots.forEach((slot, index) => {
-      if (slot && slot.file) {
+      if (slot?.previewUrl) {
         candidates.push({
           id: String(index),
-          name: `图${index + 1}`,
+          label: `图${index + 1}`,
           type: "slot",
+          role: "image_reference",
+          groupLabel: "当前参考图",
+          description: slot.file?.name || "当前素材",
+          thumbnailUrl: slot.previewUrl,
         });
       }
     });
@@ -669,8 +673,12 @@ export default function ImagePage() {
     const liveModel = liveSettings.models[selectedModelId];
     const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
     const promptForRequest = buildImagePromptFromSlots(liveTemplate, slotInputs);
-    // 解析提示词中的 @ 引用
-    const { cleanedPrompt } = resolveMentions(promptForRequest, {});
+    const mentionResolution = resolveAssetMentions(promptForRequest, mentionCandidates);
+    if (mentionResolution.missingMentions.length > 0) {
+      setError(`素材引用失效：${mentionResolution.missingMentions.map((item) => `@${item.label}`).join("、")}。请重新选择或删除这些标签。`);
+      return;
+    }
+    const cleanedPrompt = mentionResolution.prompt;
 
     const liveReady = Boolean(
       liveModel.endpointUrl && liveModel.apiKey && liveModel.modelName,
@@ -688,7 +696,15 @@ export default function ImagePage() {
     let runtimeState: ImageGenerationRuntimeState | null = null;
     try {
       const refSlotsSnapshot = normalizeRefSlots(refSlots);
-      const fileRefs = await snapshotReferenceImages(refSlotsSnapshot);
+      const mentionedSlots = new Set(
+        mentionResolution.mentions
+          .filter((mention) => mention.candidate?.type === "slot")
+          .map((mention) => mention.candidate!.id),
+      );
+      const requestSlots = mentionResolution.hasMentions
+        ? refSlotsSnapshot.map((slot, index) => (mentionedSlots.has(String(index)) ? slot : null))
+        : refSlotsSnapshot;
+      const fileRefs = await snapshotReferenceImages(requestSlots);
       referenceImages = fileRefs;
       refSlotsUserEditedRef.current = false;
       runtimeState = {
@@ -715,10 +731,10 @@ export default function ImagePage() {
           aspectRatio,
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
-          refImages: [], // 传入解析的图片链接
+          refImages: [],
         }),
       );
-      for (const slot of refSlotsSnapshot) {
+      for (const slot of requestSlots) {
         if (slot?.file) fd.append("ref", slot.file, slot.file.name || "reference.png");
       }
 
@@ -1006,7 +1022,7 @@ export default function ImagePage() {
             >
               {slotInputs.map((val, i) => (
                 <div key={i} className={styles.promptSlotPane}>
-                  <MentionTextarea
+                  <AssetMentionEditor
                     value={val}
                     onValueChange={(newVal) =>
                       setSlotInputs((prev) => {

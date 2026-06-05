@@ -20,6 +20,7 @@
     "smoke:canvas-connections": "npx tsx lib/canvas/connection-rules.smoke.ts",
     "smoke:video-workspace": "npx tsx lib/video-workspace.smoke.ts",
     "smoke:video-generation": "npx tsx lib/video-generation-service.smoke.ts",
+    "smoke:asset-mentions": "npx tsx lib/asset-mentions.smoke.ts",
     "smoke:legacy-baseline": "npx tsx scripts/check-script-agent-legacy-baseline.ts",
     "smoke:direction-shadow": "npx tsx scripts/check-script-agent-direction-shadow.ts",
     "smoke:prompt-modular": "npx tsx scripts/check-script-agent-prompt-modular.ts",
@@ -33,6 +34,10 @@
     "db:push": "npx tsx scripts/push-supabase-migrations.ts"
   },
   "dependencies": {
+    "@lexical/history": "^0.45.0",
+    "@lexical/plain-text": "^0.45.0",
+    "@lexical/react": "^0.45.0",
+    "@lexical/utils": "^0.45.0",
     "@rjsf/core": "^6.5.3",
     "@rjsf/utils": "^6.5.3",
     "@rjsf/validator-ajv8": "^6.5.3",
@@ -40,6 +45,7 @@
     "@supabase/supabase-js": "^2.106.0",
     "ajv": "^8.20.0",
     "jszip": "^3.10.1",
+    "lexical": "^0.45.0",
     "mammoth": "^1.12.0",
     "nanoid": "^5.1.7",
     "next": "16.2.3",

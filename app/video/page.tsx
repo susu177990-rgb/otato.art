@@ -9,12 +9,11 @@ import { useApiSettings } from "@/components/ApiSettingsProvider";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import {
   fetchVideoGalleryRecords,
-  fetchGalleryRecords,
   fetchWorkspaceSnapshot,
   prependVideoGalleryRecordApi,
 } from "@/lib/workspace-api";
-import { MentionTextarea } from "@/components/MentionTextarea";
-import { resolveMentions } from "@/lib/prompt-mention";
+import { AssetMentionEditor } from "@/components/AssetMentionEditor";
+import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import {
   VIDEO_MODEL_ORDER,
   VIDEO_MODES,
@@ -144,7 +143,6 @@ function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReferen
 export default function VideoPage() {
   const { videoWorkspace, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
-  const [imageRecords, setImageRecords] = useState<any[]>([]);
   const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
   const [selectedPresetId, setSelectedPresetId] = useState("free");
   const [selectedModelId, setSelectedModelId] = useState<VideoModelId>(videoWorkspace.uiDefaults.defaultModelId);
@@ -210,24 +208,29 @@ export default function VideoPage() {
     void fetchVideoGalleryRecords()
       .then((rows) => setRecords(rows))
       .catch((e) => console.warn("[video] gallery load failed", e));
-    void fetchGalleryRecords()
-      .then((rows) => setImageRecords(rows))
-      .catch((e) => console.warn("[image] gallery load failed", e));
   }, [workspaceReady]);
 
-  const mentionCandidates = useMemo(() => {
-    const candidates: Array<{ id: string; name: string; type: "slot" }> = [];
+  const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
+    const candidates: AssetMentionCandidate[] = [];
     refSlots.forEach((slot, index) => {
       if (slot) {
+        const role = selectedUiModeId === "start_end_frame"
+          ? index === 0 ? "start_frame" : "end_frame"
+          : "image_reference";
         candidates.push({
           id: String(index),
-          name: index === 0 ? "首帧" : "尾帧",
+          label: slotLabel(selectedUiModeId, index),
           type: "slot",
+          role,
+          groupLabel: "当前参考图",
+          description: slot.label,
+          thumbnailUrl: slot.previewUrl,
+          url: slot.url,
         });
       }
     });
     return candidates;
-  }, [refSlots]);
+  }, [refSlots, selectedUiModeId]);
 
   useEffect(() => {
     setSelectedModelId((current) =>
@@ -359,22 +362,6 @@ export default function VideoPage() {
 
   async function handleGenerate() {
     setError("");
-    if (modeError) {
-      setError(modeError);
-      return;
-    }
-    if (selectedUiModeId === "multi_image_reference" && !refSlots[0]) {
-      setError("多图参考模式至少需要上传一张参考图。");
-      return;
-    }
-    if (effectiveModeId === "start_end_frame" && !capabilities.supportedModes.includes("start_end_frame")) {
-      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持首尾帧模式。`);
-      return;
-    }
-    if (effectiveModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
-      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持多图参考模式。`);
-      return;
-    }
 
     const prompt = buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs).trim();
     if (!prompt) {
@@ -382,14 +369,46 @@ export default function VideoPage() {
       return;
     }
 
-    const { cleanedPrompt } = resolveMentions(prompt, {});
+    const mentionResolution = resolveAssetMentions(prompt, mentionCandidates);
+    if (mentionResolution.missingMentions.length > 0) {
+      setError(`素材引用失效：${mentionResolution.missingMentions.map((item) => `@${item.label}`).join("、")}。请重新选择或删除这些标签。`);
+      return;
+    }
+    const cleanedPrompt = mentionResolution.prompt;
 
-    const allReferences = buildReferences(selectedUiModeId, refSlots);
+    const mentionedReferences: UnifiedVideoReference[] = mentionResolution.mentions
+      .map((mention) => mention.candidate)
+      .filter((candidate): candidate is AssetMentionCandidate => Boolean(candidate))
+      .filter((candidate) => Boolean(candidate.url))
+      .map((candidate) => ({
+        role:
+          candidate.role === "start_frame" || candidate.role === "end_frame" || candidate.role === "video_reference"
+            ? candidate.role === "video_reference" ? "motion_source_video" : candidate.role
+            : "image_reference",
+        url: candidate.url!,
+        label: candidate.label,
+        mimeType: candidate.type === "gallery-video" ? "video/mp4" : "image/png",
+      }));
+    const allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, refSlots);
+    if (modeError && !mentionResolution.hasMentions) {
+      setError(modeError);
+      return;
+    }
+    if (selectedUiModeId === "multi_image_reference" && allReferences.length === 0) {
+      setError("多图参考模式至少需要上传或 @ 引用一张参考图。");
+      return;
+    }
     const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
     const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
+    const hasImageReferences = allReferences.some((ref) => ref.role === "image_reference");
+    const hasMotionSourceVideo = allReferences.some((ref) => ref.role === "motion_source_video");
 
     let finalEffectiveModeId = effectiveModeId;
-    if (selectedUiModeId === "start_end_frame") {
+    if (mentionResolution.hasMentions && hasMotionSourceVideo) {
+      finalEffectiveModeId = "motion_control";
+    } else if (mentionResolution.hasMentions && hasImageReferences) {
+      finalEffectiveModeId = "multi_image_reference";
+    } else if (selectedUiModeId === "start_end_frame") {
       const { modeId: inferredMode } = inferEffectiveVideoMode(selectedUiModeId, hasStartFrame, hasEndFrame);
       finalEffectiveModeId = inferredMode;
     }
@@ -611,7 +630,7 @@ export default function VideoPage() {
             >
               {slotInputs.map((value, index) => (
                 <div key={index} className={styles.promptSlotPane}>
-                  <MentionTextarea
+                  <AssetMentionEditor
                     value={value}
                     onValueChange={(newVal) =>
                       setSlotInputs((prev) => {
