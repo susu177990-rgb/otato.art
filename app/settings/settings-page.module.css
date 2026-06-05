@@ -1,30 +1,121 @@
-/* /settings 页：通用 page / topbar / segmented / card / field / button 已抽到 shell.module.css。
- * 这里只保留：tabBar 居中容器 + panel 节奏 + 默认提示词文本框尺寸。 */
+/* /settings 页当前作为新 UI 结构试点：保留草图的信息架构，
+ * 视觉继续使用项目的深色玻璃悬浮卡语言。 */
 
-.tabBar {
-  display: flex;
+.settingsPage {
+  --settings-ink: #f4f4f5;
+  --settings-surface: rgba(18, 18, 21, 0.72);
+  --settings-surface-strong: rgba(28, 28, 32, 0.82);
+  --settings-border: rgba(255, 255, 255, 0.12);
+  --settings-border-strong: rgba(255, 255, 255, 0.22);
+  --settings-muted: #8b8b94;
+  --settings-active-bg: #fafafa;
+  --settings-active-ink: #09090b;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(82, 82, 91, 0.34), rgba(5, 5, 6, 0) 32%),
+    radial-gradient(circle at 78% 18%, rgba(39, 39, 42, 0.42), rgba(5, 5, 6, 0) 28%),
+    linear-gradient(180deg, #08080a 0%, #030304 100%);
+  color: var(--settings-ink);
+}
+
+.subnavPill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 8px 0 4px;
-}
-
-.workspacePersistNotice {
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #a1a1aa;
-  background: rgba(39, 39, 42, 0.55);
-  border: 1px solid rgba(63, 63, 70, 0.85);
-  border-radius: 8px;
-}
-
-.workspacePersistNotice code {
-  font-size: 10px;
-}
-
-.workspacePersistNotice strong {
-  color: #e4e4e7;
+  min-width: 136px;
+  height: 34px;
+  padding: 0 18px;
+  border: 1px solid var(--settings-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--settings-ink);
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.subnavPill:hover {
+  border-color: var(--settings-border-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.subnavPillActive {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: var(--settings-active-bg);
+  color: var(--settings-active-ink);
+  box-shadow: 0 10px 34px rgba(255, 255, 255, 0.14);
+}
+
+.subnavPill:active {
+  transform: translateY(1px);
+}
+
+.subnavPill:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.45);
+  outline-offset: 3px;
+}
+
+.saveButton {
+  min-width: 84px;
+}
+
+.savedHint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6ee7b7;
+  white-space: nowrap;
+}
+
+.settingsBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 18px 32px;
+}
+
+.settingsWorkspace {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  align-items: start;
+  gap: 26px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.subnav {
+  position: sticky;
+  top: 18px;
+  min-height: calc(100vh - 132px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--settings-border);
+  border-radius: 24px;
+  background: var(--settings-surface);
+  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(20px);
+}
+
+.subnavPill {
+  min-width: 0;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+}
+
+.settingsContent {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .panel {
@@ -33,9 +124,75 @@
   gap: 16px;
 }
 
+.apiCardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  align-items: stretch;
+}
+
+.floatCard {
+  border: 1px solid var(--settings-border);
+  border-radius: 22px;
+  background: var(--settings-surface);
+  color: var(--settings-ink);
+  box-shadow: 0 18px 64px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(20px);
+}
+
+.settingsContent h2,
+.settingsContent h3 {
+  color: var(--settings-ink);
+}
+
+.settingsContent p {
+  color: var(--settings-muted);
+}
+
+.settingsContent input,
+.settingsContent select,
+.settingsContent textarea {
+  border: 1px solid var(--settings-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--settings-ink);
+  box-shadow: none;
+}
+
+.settingsContent input:focus,
+.settingsContent select:focus,
+.settingsContent textarea:focus {
+  border-color: var(--settings-border);
+  background: rgba(255, 255, 255, 0.055);
+  outline: 1px solid rgba(250, 250, 250, 0.28);
+  outline-offset: 2px;
+}
+
+.settingsContent input::placeholder,
+.settingsContent textarea::placeholder {
+  color: #52525b;
+}
+
+.settingsContent label span,
+.settingsContent code {
+  color: var(--settings-muted);
+}
+
+.settingsContent button:not(.promptModeCoverDelete) {
+  border-color: var(--settings-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--settings-ink);
+  box-shadow: none;
+}
+
+.settingsContent button:not(.promptModeCoverDelete):hover:not(:disabled) {
+  border-color: var(--settings-border-strong);
+  background: rgba(255, 255, 255, 0.075);
+  color: var(--settings-ink);
+}
+
 /* 生图提示词 tab：比默认 shell 更宽，便于 4 列卡片与编辑区并排 */
 .promptModeShell {
-  max-width: 1360px !important;
+  grid-template-columns: 188px minmax(0, 1fr);
 }
 
 /* 生图提示词：4 列宫格 */
@@ -47,14 +204,61 @@
 }
 
 @media (max-width: 1200px) {
+  .apiCardGrid {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+
   .promptModeGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
+  .settingsWorkspace,
+  .promptModeShell {
+    grid-template-columns: 1fr;
+  }
+
+  .subnav {
+    position: static;
+    min-height: 0;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-radius: 26px;
+  }
+
+  .subnavPill {
+    flex: 1 1 120px;
+  }
+
+  .apiCardGrid {
+    grid-template-columns: 1fr;
+  }
+
   .promptModeGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .settingsBody {
+    margin-left: 10px;
+    margin-right: 10px;
+    padding: 16px 10px 28px;
+  }
+
+  .promptModeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .promptModeEditBody {
+    flex-direction: column;
+  }
+
+  .promptModeCoverSlot {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
   }
 }
 
@@ -68,7 +272,7 @@
 .promptModeCardHead {
   margin: 0;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--settings-border);
 }
 
 .promptModeCardTitle {
@@ -77,7 +281,7 @@
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #fafafa;
+  color: var(--settings-ink);
   line-height: 1.35;
 }
 
@@ -260,13 +464,13 @@
 .promptModeCoverLabel {
   font-size: 11px;
   font-weight: 600;
-  color: #a1a1aa;
+  color: var(--settings-ink);
   line-height: 1.35;
 }
 
 .promptModeCoverHint {
   font-size: 10px;
-  color: #71717a;
+  color: var(--settings-muted);
   line-height: 1.4;
 }
 
@@ -293,6 +497,21 @@
   flex-shrink: 0;
 }
 
+.chatPromptColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.noResize {
+  resize: none !important;
+  height: 160px;
+  min-height: 160px;
+  max-height: 160px;
+}
+
 .promptModeLabelEdit {
   flex: 1;
   min-width: 0;
@@ -305,87 +524,19 @@
   color: #c4b5fd;
 }
 
-.promptIntroStrong {
-  display: block;
-  margin-top: 8px;
-  font-weight: 600;
-  color: #e4e4e7;
-}
-
-.promptModeRefHintsWrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.promptModeRefHintsLabel {
-  font-size: 11px;
-  color: #a1a1aa;
-  line-height: 1.35;
-}
-
 .promptPreviewBlock {
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--settings-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.035);
   padding: 10px 12px;
-  color: #e4e4e7;
+  color: var(--settings-ink);
   font-size: 11px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 160px;
   overflow: auto;
-}
-
-.promptModeRefHintsList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.promptModeRefHintRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.promptModeRefHintIdx {
-  flex: 0 0 auto;
-  min-width: 2.25em;
-  font-size: 11px;
-  color: #a1a1aa;
-}
-
-.promptModeRefHintInput {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 8px;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.promptModeRefHintPlusBtn {
-  flex-shrink: 0;
-  box-sizing: border-box;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.promptModeRefHintRowBtn {
-  flex-shrink: 0;
-  padding: 3px 8px;
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .visuallyHidden {

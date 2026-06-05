@@ -1,14 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  ChatMode,
   ChatConversation,
   ChatConversationSummary,
   ChatMessage,
   ConversationAttachmentEntry,
 } from "@/lib/chat/types";
 
-function normalizeEnabledSkillPackIds(ids: string[] | null): string[] | undefined {
-  if (!ids?.length) return undefined;
-  return [ids[0]!];
+function normalizeChatMode(mode: string | null | undefined): ChatMode {
+  return mode === "skill" ? "skill" : "prompt";
+}
+
+function normalizeSelectedSkillPackId(
+  selectedId: string | null | undefined,
+  legacyIds: string[] | null | undefined,
+): string | null {
+  if (selectedId?.trim()) return selectedId.trim();
+  const legacy = legacyIds?.[0]?.trim();
+  return legacy || null;
+}
+
+function normalizeSelectedChatPresetId(selectedId: string | null | undefined): string | null {
+  return selectedId?.trim() || null;
 }
 
 function rowToConversation(row: {
@@ -16,6 +29,9 @@ function rowToConversation(row: {
   title: string;
   messages: unknown;
   attachments: unknown;
+  chat_mode?: string | null;
+  selected_skill_pack_id?: string | null;
+  selected_chat_preset_id?: string | null;
   enabled_skill_pack_ids: string[] | null;
   updated_at: string;
 }): ChatConversation {
@@ -25,7 +41,9 @@ function rowToConversation(row: {
     updatedAt: new Date(row.updated_at).getTime(),
     messages: (Array.isArray(row.messages) ? row.messages : []) as ChatMessage[],
     attachments: (Array.isArray(row.attachments) ? row.attachments : []) as ConversationAttachmentEntry[],
-    enabledSkillPackIds: normalizeEnabledSkillPackIds(row.enabled_skill_pack_ids),
+    chatMode: normalizeChatMode(row.chat_mode),
+    selectedSkillPackId: normalizeSelectedSkillPackId(row.selected_skill_pack_id, row.enabled_skill_pack_ids),
+    selectedChatPresetId: normalizeSelectedChatPresetId(row.selected_chat_preset_id),
   };
 }
 
@@ -55,7 +73,9 @@ export async function getChatConversation(
 ): Promise<ChatConversation | null> {
   const { data, error } = await supabase
     .from("chat_conversations")
-    .select("id, title, messages, attachments, enabled_skill_pack_ids, updated_at")
+    .select(
+      "id, title, messages, attachments, chat_mode, selected_skill_pack_id, selected_chat_preset_id, enabled_skill_pack_ids, updated_at",
+    )
     .eq("user_id", userId)
     .eq("id", id)
     .maybeSingle();
@@ -78,6 +98,7 @@ export async function createChatConversation(
     title,
     messages: [],
     attachments: [],
+    chat_mode: "prompt",
     updated_at: now,
   });
   if (error) throw error;
@@ -86,6 +107,9 @@ export async function createChatConversation(
     title,
     updatedAt: Date.now(),
     messages: [],
+    chatMode: "prompt",
+    selectedSkillPackId: null,
+    selectedChatPresetId: null,
     attachments: [],
   };
 }
@@ -101,7 +125,10 @@ export async function saveChatConversation(
       title: conv.title,
       messages: conv.messages,
       attachments: conv.attachments ?? [],
-      enabled_skill_pack_ids: conv.enabledSkillPackIds ?? null,
+      chat_mode: conv.chatMode === "skill" ? "skill" : "prompt",
+      selected_skill_pack_id: conv.selectedSkillPackId?.trim() || null,
+      selected_chat_preset_id: conv.selectedChatPresetId?.trim() || null,
+      enabled_skill_pack_ids: conv.selectedSkillPackId?.trim() ? [conv.selectedSkillPackId.trim()] : null,
       updated_at: new Date(conv.updatedAt).toISOString(),
     })
     .eq("user_id", userId)

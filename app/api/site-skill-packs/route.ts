@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
     if (!(await canManageSiteSettings(supabase))) {
-      return NextResponse.json({ error: "只有管理员可以导入全站 Skill 包" }, { status: 403 });
+      return NextResponse.json({ error: "当前账号无权导入全站 Skill 包" }, { status: 403 });
     }
 
     const form = await req.formData();
@@ -62,7 +62,7 @@ export async function PATCH(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
     if (!(await canManageSiteSettings(supabase))) {
-      return NextResponse.json({ error: "只有管理员可以修改全站 Skill 包" }, { status: 403 });
+      return NextResponse.json({ error: "当前账号无权修改全站 Skill 包" }, { status: 403 });
     }
 
     const body = (await req.json()) as {
@@ -97,7 +97,7 @@ export async function DELETE(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
     if (!(await canManageSiteSettings(supabase))) {
-      return NextResponse.json({ error: "只有管理员可以删除全站 Skill 包" }, { status: 403 });
+      return NextResponse.json({ error: "当前账号无权删除全站 Skill 包" }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);

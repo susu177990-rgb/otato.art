@@ -51,11 +51,13 @@ type AgentDecision =
 
 function buildAgentSystemText(
   skillBlocks: string[],
+  chatPromptPresetBlock: string | null,
   defaultImageModel?: { id: ImageModelId; label: string },
   willGenerateImage?: boolean,
 ): string {
-  const skillsSection =
-    skillBlocks.length === 0 ? "（当前未挂载 Skill 文档）" : skillBlocks.join("\n\n---\n\n");
+  const activePresetSection = chatPromptPresetBlock?.trim()
+    ? `## 对话提示词预设\n${chatPromptPresetBlock}`
+    : `## Skill 文档\n${skillBlocks.length === 0 ? "（当前未挂载 Skill 文档）" : skillBlocks.join("\n\n---\n\n")}`;
 
   const imageDefaultLine = defaultImageModel
     ? `- 用户默认生图模型：\`${defaultImageModel.id}\`（${defaultImageModel.label}）。`
@@ -74,8 +76,7 @@ function buildAgentSystemText(
 ## 作图（事实约束）
 ${imageRules}
 
-## Skill 文档
-${skillsSection}`;
+${activePresetSection}`;
 }
 
 function buildImageResultContextMessage(toolJson: string, ok: boolean): ChatMessage {
@@ -289,6 +290,7 @@ export async function runAgentChatTurn(params: {
   defaultImageModelId: ImageModelId;
   conversationMessages: ChatMessage[];
   skillMarkdownBlocks: string[];
+  chatPromptPresetBlock?: string | null;
   conversationAttachments?: ConversationAttachmentEntry[];
   maxIterations?: number;
   supabase?: SupabaseClient;
@@ -300,6 +302,7 @@ export async function runAgentChatTurn(params: {
     defaultImageModelId,
     conversationMessages,
     skillMarkdownBlocks,
+    chatPromptPresetBlock,
     conversationAttachments,
     supabase,
     userId,
@@ -353,7 +356,12 @@ export async function runAgentChatTurn(params: {
     parts: [
       {
         type: "text",
-        text: buildAgentSystemText(skillMarkdownBlocks, { id: resolvedModelId, label: modelLabel }, runGenerateImage),
+        text: buildAgentSystemText(
+          skillMarkdownBlocks,
+          chatPromptPresetBlock ?? null,
+          { id: resolvedModelId, label: modelLabel },
+          runGenerateImage,
+        ),
       },
     ],
   };

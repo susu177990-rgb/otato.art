@@ -67,7 +67,7 @@ export interface ImageWorkspaceSettings {
   /** 接在内置 {@link IMAGE_MODES} 之后展示 */
   customModes: CustomImageMode[];
   /**
-   * 作图页参考图槽说明：modeId → 与「图1、图2…」顺序对应的短文（管理员在设置里逐行填写）。
+   * 作图页参考图槽说明：modeId → 与「图1、图2…」顺序对应的短文（在设置页逐行填写）。
    * 某行留空则该槽仅显示「图n」。
    */
   refSlotHintsByMode: Record<string, string[]>;

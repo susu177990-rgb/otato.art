@@ -68,6 +68,8 @@ export interface SkillPackRecord {
   optimizedSystemPrompt?: string | null;
 }
 
+export type ChatMode = "skill" | "prompt";
+
 export interface ConversationAttachmentEntry {
   id: string;
   messageId: string;
@@ -83,8 +85,11 @@ export interface ChatConversation {
   title: string;
   updatedAt: number;
   messages: ChatMessage[];
-  /** 至多一个 Skill 包；缺省或空表示「无」、不挂载 Skill */
-  enabledSkillPackIds?: string[];
+  chatMode?: ChatMode;
+  /** 当前会话记住的 Skill 选择 */
+  selectedSkillPackId?: string | null;
+  /** 当前会话记住的对话提示词预设选择 */
+  selectedChatPresetId?: string | null;
   attachments?: ConversationAttachmentEntry[];
   /** 对话 Agent 调用 generate_image 时的默认作图模型 */
   preferredImageModelId?: ImageModelId;

@@ -1890,7 +1890,7 @@ export default function CanvasBoardPage() {
   if (loading) return <main className={shellStyles.page}><div className={shellStyles.empty}>正在加载画布...</div></main>;
   if (loadError) return (
     <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}><div className={shellStyles.topbarLeft}><Link href="/canvas" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>返回画布库</Link></div></header>
+      <header className={shellStyles.topbar}><div className={shellStyles.topbarLeft}><Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link></div></header>
       <div className={shellStyles.empty}>{loadError}</div>
     </main>
   );
@@ -1900,7 +1900,7 @@ export default function CanvasBoardPage() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/canvas" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>返回画布库</Link>
+          <Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link>
           <div className={shellStyles.topbarTagline}>
             <input className={[shellStyles.input, shellStyles.inputCompact].join(" ")} value={title} onChange={(e) => { setTitle(e.target.value); markDirty(); }} aria-label="画布标题" style={{ width: 220 }} />
           </div>

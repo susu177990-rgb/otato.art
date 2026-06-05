@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import shellStyles from "@/app/shared/shell.module.css";
+import settingsStyles from "@/app/settings/settings-page.module.css";
 import { SkillZipUploader } from "@/components/skill/SkillZipUploader";
 import { skillPackDisplayLabel, skillPackHasFormInterface } from "@/lib/chat/skill-pack";
 import type { SkillPackRecord } from "@/lib/chat/types";
@@ -12,7 +13,6 @@ import {
   importSiteSkillPack,
   updateSiteSkillPackApi,
 } from "@/lib/skill-packs-api-client";
-import styles from "./skill-packs-panel.module.css";
 
 function formatImportedAt(ts: number): string {
   try {
@@ -22,19 +22,7 @@ function formatImportedAt(ts: number): string {
   }
 }
 
-function PencilIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const settingsCardClass = [shellStyles.card, settingsStyles.floatCard].join(" ");
 
 export function SkillPacksPanel() {
   const [skillPacks, setSkillPacks] = useState<SkillPackRecord[]>([]);
@@ -43,8 +31,7 @@ export function SkillPacksPanel() {
   const [status, setStatus] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
-  const [editingHintId, setEditingHintId] = useState<string | null>(null);
-  const [hintDraft, setHintDraft] = useState("");
+  const [hintDraftById, setHintDraftById] = useState<Record<string, string>>({});
   const [canManage, setCanManage] = useState(true);
 
   const reload = useCallback(async () => {
@@ -81,44 +68,25 @@ export function SkillPacksPanel() {
 
   const startEdit = (pack: SkillPackRecord) => {
     if (!canManage) return;
-    setEditingHintId(null);
     setEditingId(pack.id);
     setEditDraft(skillPackDisplayLabel(pack));
+    setHintDraftById((prev) => ({ ...prev, [pack.id]: pack.chatUsageHint ?? "" }));
   };
 
-  const commitEdit = async () => {
-    if (!editingId || !canManage) return;
+  const commitEdit = async (packId: string) => {
+    if (!canManage) return;
     const label = editDraft.trim();
     if (!label) {
       setError("显示名不能为空");
       return;
     }
     setError(null);
+    const hint = hintDraftById[packId] ?? "";
     try {
-      const updated = await updateSiteSkillPackApi(editingId, { displayLabel: label });
+      const updated = await updateSiteSkillPackApi(packId, { displayLabel: label, chatUsageHint: hint });
       setSkillPacks((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
       setEditingId(null);
-      flashStatus("已更新显示名");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "保存失败");
-    }
-  };
-
-  const startEditHint = (pack: SkillPackRecord) => {
-    if (!canManage) return;
-    setEditingId(null);
-    setEditingHintId(pack.id);
-    setHintDraft(pack.chatUsageHint ?? "");
-  };
-
-  const commitHint = async () => {
-    if (!editingHintId || !canManage) return;
-    setError(null);
-    try {
-      const updated = await updateSiteSkillPackApi(editingHintId, { chatUsageHint: hintDraft });
-      setSkillPacks((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setEditingHintId(null);
-      flashStatus("已保存对话页说明");
+      flashStatus("已保存");
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存失败");
     }
@@ -130,11 +98,11 @@ export function SkillPacksPanel() {
       setError("只有管理员可以删除全站 Skill 包");
       return;
     }
+    if (!window.confirm("确定删除该 Skill 包？")) return;
     try {
       await deleteSiteSkillPackApi(id);
       setSkillPacks((prev) => prev.filter((p) => p.id !== id));
       if (editingId === id) setEditingId(null);
-      if (editingHintId === id) setEditingHintId(null);
       flashStatus("已删除");
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
@@ -142,123 +110,111 @@ export function SkillPacksPanel() {
   };
 
   return (
-    <section className={styles.panel}>
-      <p className={styles.lead}>
-        全站 Skill 包：用户在「对话」页单选一个 Skill 后注入 Agent。ZIP 须含 <code>SKILL.md</code>，上传后立即写入云端。
-        可修改<strong>左侧显示名</strong>，并在下方填写<strong>对话页说明</strong>（Markdown，空对话时居中展示）。
-      </p>
-
-      {!canManage ? <p className={shellStyles.banner}>当前账号只有读取权限，不能修改全站 Skill 包。</p> : null}
-
-      {canManage ? <SkillZipUploader maxZipBytes={MAX_SKILL_ZIP_BYTES} onImportZip={handleImport} /> : null}
-
-      {status ? <p className={styles.statusOk}>{status}</p> : null}
-      {error ? <p className={shellStyles.bannerError}>{error}</p> : null}
-
-      <div className={styles.listSection}>
-        <div className={styles.listHead}>
-          <span>已上传</span>
-          <span>{skillPacks.length} 个</span>
+    <section className={settingsStyles.panel}>
+      <div className={settingsCardClass}>
+        <div className={shellStyles.cardHead}>
+          <div>
+            <h2 className={shellStyles.cardTitle}>Skill 包预设</h2>
+            <p className={shellStyles.cardSubtitle}>
+              全站 Skill 包：用户在「对话」页单选一个 Skill 后注入 Agent。ZIP 须含 <code>SKILL.md</code>，上传后立即写入云端。
+            </p>
+            {!canManage ? <p className={shellStyles.banner}>当前账号只有读取权限，不能修改全站 Skill 包。</p> : null}
+            {canManage ? (
+              <div className={settingsStyles.promptIntroActions} style={{ maxWidth: "240px" }}>
+                <SkillZipUploader maxZipBytes={MAX_SKILL_ZIP_BYTES} onImportZip={handleImport} />
+              </div>
+            ) : null}
+            {status ? <p style={{ fontSize: "12px", color: "#86efac", marginTop: "8px", marginBottom: 0 }}>{status}</p> : null}
+            {error ? <p className={shellStyles.bannerError} style={{ marginTop: "8px" }}>{error}</p> : null}
+          </div>
         </div>
+      </div>
+
+      <div className={settingsStyles.promptModeGrid}>
         {loading ? (
-          <p className={styles.empty}>加载中…</p>
+          <p style={{ padding: "16px", color: "var(--settings-muted)", gridColumn: "1 / -1" }}>加载中…</p>
         ) : skillPacks.length === 0 ? (
-          <p className={styles.empty}>尚未上传 Skill 包。</p>
+          <p style={{ padding: "16px", color: "var(--settings-muted)", gridColumn: "1 / -1" }}>尚未上传 Skill 包。</p>
         ) : (
-          <ul className={styles.list}>
-            {skillPacks.map((p) => {
-              const editing = editingId === p.id;
-              const editingHint = editingHintId === p.id;
-              return (
-                <li key={p.id} className={styles.rowBlock}>
-                  <div className={styles.row}>
-                    <div className={styles.rowMain}>
-                      {editing ? (
-                        <input
-                          className={[shellStyles.inputCompact, styles.renameInput].join(" ")}
-                          value={editDraft}
-                          onChange={(e) => setEditDraft(e.target.value)}
-                          onBlur={() => void commitEdit()}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void commitEdit();
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                          autoFocus
-                          aria-label="对话页显示名"
-                        />
-                      ) : (
-                        <span className={styles.rowTitle}>{skillPackDisplayLabel(p)}</span>
-                      )}
-                      <span className={styles.rowMeta}>
-                        ZIP：{p.title} · {p.skills.length} 个 skill ·{" "}
-                        {skillPackHasFormInterface(p) ? "表单模式" : "对话模式"} ·{" "}
-                        {formatImportedAt(p.importedAt)}
-                      </span>
+          skillPacks.map((p) => {
+            const editing = editingId === p.id;
+            const hintValue = editing ? (hintDraftById[p.id] ?? p.chatUsageHint ?? "") : (p.chatUsageHint ?? "");
+
+            return (
+              <article key={p.id} className={[settingsCardClass, settingsStyles.promptModeCard].join(" ")}>
+                <header className={[shellStyles.cardHead, settingsStyles.promptModeCardHead].join(" ")}>
+                  {editing ? (
+                    <label className={settingsStyles.promptModeLabelEdit}>
+                      <span className={settingsStyles.visuallyHidden}>显示名</span>
+                      <input
+                        className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        autoFocus
+                        aria-label="对话页显示名"
+                        placeholder="显示名"
+                      />
+                    </label>
+                  ) : (
+                    <h3 className={settingsStyles.promptModeCardTitle}>{skillPackDisplayLabel(p)}</h3>
+                  )}
+                  <div className={settingsStyles.promptModeCardActions}>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      disabled={!canManage}
+                      onClick={() => void handleDelete(p.id)}
+                    >
+                      删除
+                    </button>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      disabled={!canManage}
+                      onClick={() => (editing ? void commitEdit(p.id) : startEdit(p))}
+                    >
+                      {editing ? "保存" : "编辑"}
+                    </button>
+                  </div>
+                </header>
+                <div className={settingsStyles.promptModeEditBody} style={{ flexDirection: "column" }}>
+                  <div style={{ fontSize: "11px", color: "var(--settings-muted)", padding: "4px 0", lineHeight: 1.5 }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.title}>
+                      ZIP: {p.title}
                     </div>
-                    <div className={styles.rowActions}>
-                      {!editing ? (
-                        <button
-                          type="button"
-                          className={styles.editBtn}
-                          aria-label="编辑显示名"
-                          disabled={!canManage}
-                          onClick={() => startEdit(p)}
-                        >
-                          <PencilIcon />
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={styles.hintBtn}
-                        disabled={!canManage}
-                        onClick={() => (editingHint ? setEditingHintId(null) : startEditHint(p))}
-                      >
-                        {editingHint ? "收起说明" : "对话页说明"}
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.deleteBtn}
-                        disabled={!canManage}
-                        onClick={() => void handleDelete(p.id)}
-                      >
-                        删除
-                      </button>
+                    <div>
+                      {p.skills.length} 个 skill · {skillPackHasFormInterface(p) ? "表单" : "对话"} · {formatImportedAt(p.importedAt).split(" ")[0]}
                     </div>
                   </div>
-
-                  {editingHint ? (
-                    <div className={styles.hintEdit}>
-                      <label className={styles.hintLabel} htmlFor={`hint-${p.id}`}>
-                        对话页说明（Markdown；换行即换行，列表用 - /指令 — 说明）
-                      </label>
-                      <textarea
-                        id={`hint-${p.id}`}
-                        className={styles.hintTextarea}
-                        value={hintDraft}
-                        onChange={(e) => setHintDraft(e.target.value)}
-                        placeholder={`## ${skillPackDisplayLabel(p)}\n\n- /start — 查看菜单\n- /asset — 输出模板`}
-                        rows={8}
-                      />
-                      <div className={styles.hintActions}>
-                        <button type="button" className={styles.hintSaveBtn} onClick={() => void commitHint()}>
-                          保存说明
-                        </button>
-                        <button type="button" className={styles.hintCancelBtn} onClick={() => setEditingHintId(null)}>
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : p.chatUsageHint?.trim() ? (
-                    <p className={styles.hintPreview}>
-                      已填写对话页说明（{p.chatUsageHint.trim().length} 字）
-                    </p>
-                  ) : (
-                    <p className={styles.hintPreviewMuted}>未填写对话页说明</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  <textarea
+                    className={[
+                      shellStyles.textarea,
+                      shellStyles.mono,
+                      settingsStyles.promptModeTextarea,
+                      !editing ? settingsStyles.promptModeTextareaReadOnly : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={{ minHeight: "140px", maxHeight: "240px", flex: 1 }}
+                    value={hintValue}
+                    readOnly={!editing}
+                    spellCheck={false}
+                    placeholder={`## ${skillPackDisplayLabel(p)}\n\n- /start — 查看菜单\n- /asset — 输出模板`}
+                    onChange={(e) => {
+                      if (!editing) return;
+                      setHintDraftById((prev) => ({ ...prev, [p.id]: e.target.value }));
+                    }}
+                    onClick={() => {
+                      if (!editing) startEdit(p);
+                    }}
+                    onFocus={() => {
+                      if (!editing) startEdit(p);
+                    }}
+                  />
+                </div>
+              </article>
+            );
+          })
         )}
       </div>
     </section>

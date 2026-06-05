@@ -85,9 +85,10 @@ flowchart LR
 
 - **LLM API**：各用途的 Endpoint、Key、模型 ID。  
 - **生图 API**：按模型槽位配置网关与模型名。  
-- **生图提示词**：各模式固定模版与参考图槽提示。  
+- **预设库**：分为生图提示词预设、生视频提示词预设；第一版保留名称、提示词模板、封面和生图参考图槽说明。
+- **Skill**：全站 Skill 包导入和对话页说明。
 
-配置写入 Supabase `site_settings` / `site_skill_packs`；**所有登录用户共享** 同一套全站配置，登录后均可在设置页修改（详见 `AGENTS.md`）。
+配置写入 Supabase `site_settings` / `site_prompt_presets` / `site_skill_packs`；**所有登录用户共享** 同一套全站配置，登录后均可在设置页修改（详见 `AGENTS.md`）。
 
 ### 账号与数据
 
@@ -201,14 +202,14 @@ npm run start
 | `WATTPAD_API_URL` | Wattpad 子服务地址（可选，默认 `http://127.0.0.1:8765`） |
 | `PORT` | 容器 / PaaS 注入的 HTTP 端口 |
 
-LLM 与生图的具体 Endpoint、Key、模型名、提示词模版均在应用内 **设置** 维护，无需为每个模型单独写环境变量（默认值可参考 `lib/baked-api-defaults.ts`）。
+LLM、生图、生视频的具体 Endpoint、Key、模型名，以及生图/生视频提示词预设均在应用内 **设置** 维护，无需为每个模型单独写环境变量（默认值可参考 `lib/baked-api-defaults.ts`）。
 
 ### 数据库结构约定
 
 - `projects.data` 保留完整项目快照；列表常用字段同步到真实列（如 `name`、`creative_direction_id`、`current_stage`），用于轻量查询和索引。
 - `chat_conversations.messages` 暂保留 JSON 快照；同步 `message_count`、`last_message_at` 作为列表与后续拆表迁移的过渡层。
 - `image_gallery_records.data` 只允许轻量元数据，图片像素必须进 Supabase Storage 的 `generated-images` 桶。
-- 全站配置表是站点共享数据；当前产品策略是任意已登录用户都可修改 `site_settings`。
+- 全站配置与预设库是站点共享数据；当前产品策略是任意已登录用户都可修改 `site_settings` 与 `site_prompt_presets`。
 
 ---
 
@@ -238,6 +239,7 @@ npm run migrate:supabase -- --owner-email=你的邮箱@example.com
 | 编剧辅助 | `episode-stats` |
 | 生图 | `image/generate`、`image/gallery` |
 | 工作区配置 | `workspace-settings` |
+| 预设库 | `site_prompt_presets`（当前通过 `workspace-settings` 桥接读写） |
 | Wattpad | `wattpad/search`、`export-*`、`translate-synopsis` |
 | 认证 | `auth/logout` |
 

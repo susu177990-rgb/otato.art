@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SkillPacksPanel } from "@/components/settings/SkillPacksPanel";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./settings-page.module.css";
@@ -21,12 +21,9 @@ import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
-  IMAGE_REF_SLOT_COUNT,
   defaultImageModePrompt,
   extractPromptPlaceholderOccurrences,
   newCustomImageModeId,
-  refSlotHintsDraftRowsToStored,
-  refSlotHintsStoredToDraftRows,
   type ImageModeId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
@@ -42,23 +39,39 @@ import {
   type VideoPromptModeId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
+import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
+import { fetchSitePromptPresets, replaceSitePromptPresets } from "@/lib/prompt-preset-api-client";
 
-type Tab = "llmApi" | "imageApi" | "imagePrompts" | "videoApi" | "videoPrompts" | "skillPacks";
+type SettingsCategory = "api" | "prompts";
+type Tab = "llmApi" | "imageApi" | "videoApi" | "imagePrompts" | "videoPrompts" | "chatPrompts" | "skillPacks";
 
-const TAB_DEFS: ReadonlyArray<{ id: Tab; label: string }> = [
-  { id: "llmApi", label: "LLM API" },
-  { id: "imageApi", label: "生图 API" },
-  { id: "imagePrompts", label: "生图 提示词" },
-  { id: "videoApi", label: "生视频 API" },
-  { id: "videoPrompts", label: "生视频 提示词" },
-  { id: "skillPacks", label: "Skill" },
+const CATEGORY_DEFS: ReadonlyArray<{ id: SettingsCategory; label: string; defaultTab: Tab }> = [
+  { id: "api", label: "API设置", defaultTab: "llmApi" },
+  { id: "prompts", label: "预设库", defaultTab: "imagePrompts" },
 ];
+
+const SUBPAGE_DEFS: Record<SettingsCategory, ReadonlyArray<{ id: Tab; label: string }>> = {
+  api: [
+    { id: "llmApi", label: "LLM" },
+    { id: "imageApi", label: "图片" },
+    { id: "videoApi", label: "视频" },
+  ],
+  prompts: [
+    { id: "imagePrompts", label: "生图提示词预设" },
+    { id: "videoPrompts", label: "生视频提示词预设" },
+    { id: "chatPrompts", label: "对话提示词预设" },
+    { id: "skillPacks", label: "Skill设置" },
+  ],
+};
+
+const settingsCardClass = [shellStyles.card, styles.floatCard].join(" ");
 
 function tabFromSearchParam(raw: string | null): Tab | null {
   if (
     raw === "llmApi" ||
     raw === "imageApi" ||
     raw === "imagePrompts" ||
+    raw === "chatPrompts" ||
     raw === "videoApi" ||
     raw === "videoPrompts" ||
     raw === "skillPacks"
@@ -66,6 +79,11 @@ function tabFromSearchParam(raw: string | null): Tab | null {
     return raw;
   }
   return null;
+}
+
+function categoryForTab(tab: Tab): SettingsCategory {
+  if (tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "skillPacks") return "prompts";
+  return "api";
 }
 
 function SettingsPageInner() {
@@ -83,6 +101,7 @@ function SettingsPageInner() {
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
+  const [chatPromptPresets, setChatPromptPresets] = useState<SitePromptPreset[]>([]);
   const imagePromptsPersistMergeRef = useRef<(() => ImageWorkspaceSettings) | null>(null);
   const videoPromptsPersistMergeRef = useRef<(() => VideoWorkspaceSettings) | null>(null);
 
@@ -91,12 +110,22 @@ function SettingsPageInner() {
     if (fromUrl) setTab(fromUrl);
   }, [searchParams]);
 
+  const category = categoryForTab(tab);
+  const subpages = SUBPAGE_DEFS[category];
+
   useEffect(() => {
     if (!workspaceReady) return;
     setLlmSettings(loadedLlm);
     setImageSettings(loadedImage);
     setVideoSettings(loadedVideo);
   }, [workspaceReady, loadedLlm, loadedImage, loadedVideo]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    void fetchSitePromptPresets("chat")
+      .then(setChatPromptPresets)
+      .catch(() => {});
+  }, [workspaceReady]);
 
   async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings, video: VideoWorkspaceSettings) {
     const normalizedLlm = { ...llm, model: normalizeModel(llm.model) };
@@ -126,98 +155,310 @@ function SettingsPageInner() {
   }
 
   return (
-    <main className={shellStyles.page}>
+    <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
       <header className={shellStyles.topbar}>
-        <div className={shellStyles.topbarLeft}>
-          <Link href="/" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+        <nav className={shellStyles.topbarLeft} aria-label="设置分类">
+          <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>项目设置</p>
-          </div>
-        </div>
-        <nav className={shellStyles.topnav}>
-          {savedMessage ? <span className={shellStyles.savedHint}>{savedMessage}</span> : null}
+          {CATEGORY_DEFS.map((def) => {
+            const active = category === def.id;
+            return (
+              <button
+                key={def.id}
+                type="button"
+                onClick={() => setTab(def.defaultTab)}
+                className={[shellStyles.navLink, active ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}
+                aria-pressed={active}
+              >
+                {def.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div className={shellStyles.topnav}>
+          {savedMessage ? <span className={styles.savedHint}>{savedMessage}</span> : null}
           <button
             type="button"
             onClick={saveAll}
-            className={[shellStyles.navLink, shellStyles.navLinkPrimary].join(" ")}
+            className={[shellStyles.navLink, styles.saveButton].join(" ")}
           >
             保存
           </button>
-        </nav>
+        </div>
       </header>
 
-      <div className={shellStyles.body}>
+      <div className={styles.settingsBody}>
         <div
-          className={[shellStyles.shell, tab === "imagePrompts" || tab === "videoPrompts" ? styles.promptModeShell : ""]
+          className={[styles.settingsWorkspace, tab === "imagePrompts" || tab === "videoPrompts" ? styles.promptModeShell : ""]
             .filter(Boolean)
             .join(" ")}
         >
-          <p className={styles.workspacePersistNotice}>
-            <strong>全站配置</strong>保存在 Supabase。这里修改的 LLM / 生图 / 生视频 API Key、提示词与 Skill 包是 SaaS 全局设置，
-            所有登录账号与设备都会读取同一份配置；项目、对话会话与画廊仍按用户账号隔离。
-          </p>
-          <div className={styles.tabBar}>
-            <div className={shellStyles.segmented}>
-              {TAB_DEFS.map((def) => {
-                const active = tab === def.id;
-                return (
-                  <button
-                    key={def.id}
-                    type="button"
-                    onClick={() => setTab(def.id)}
-                    className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].filter(Boolean).join(" ")}
-                  >
-                    {def.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <aside className={styles.subnav} aria-label="设置子页面">
+            {subpages.map((def) => {
+              const active = tab === def.id;
+              return (
+                <button
+                  key={def.id}
+                  type="button"
+                  onClick={() => setTab(def.id)}
+                  className={[styles.subnavPill, active ? styles.subnavPillActive : ""].filter(Boolean).join(" ")}
+                  aria-pressed={active}
+                >
+                  {def.label}
+                </button>
+              );
+            })}
+          </aside>
 
-          {tab === "llmApi" ? (
-            <LlmApiPanel value={llmSettings} onChange={setLlmSettings} />
-          ) : null}
+          <section className={styles.settingsContent}>
+            {tab === "llmApi" ? (
+              <LlmApiPanel value={llmSettings} onChange={setLlmSettings} />
+            ) : null}
 
-          {tab === "imagePrompts" ? (
-            <ImagePromptsPanel
-              value={imageSettings}
-              onChange={setImageSettings}
-              persistMergeRef={imagePromptsPersistMergeRef}
-              onRefreshWorkspace={refreshWorkspace}
-              onPersistImage={async (next) => {
-                setImageSettings(next);
-                await persistWorkspace(llmSettings, next, videoSettings);
-              }}
-            />
-          ) : null}
+            {tab === "imagePrompts" ? (
+              <ImagePromptsPanel
+                value={imageSettings}
+                onChange={setImageSettings}
+                persistMergeRef={imagePromptsPersistMergeRef}
+                onRefreshWorkspace={refreshWorkspace}
+                onPersistImage={async (next) => {
+                  setImageSettings(next);
+                  await persistWorkspace(llmSettings, next, videoSettings);
+                }}
+              />
+            ) : null}
 
-          {tab === "imageApi" ? (
-            <ImageApiPanel value={imageSettings} onChange={setImageSettings} />
-          ) : null}
+            {tab === "imageApi" ? (
+              <ImageApiPanel value={imageSettings} onChange={setImageSettings} />
+            ) : null}
 
-          {tab === "videoPrompts" ? (
-            <VideoPromptsPanel
-              value={videoSettings}
-              onChange={setVideoSettings}
-              persistMergeRef={videoPromptsPersistMergeRef}
-              onRefreshWorkspace={refreshWorkspace}
-              onPersistVideo={async (next) => {
-                setVideoSettings(next);
-                await persistWorkspace(llmSettings, imageSettings, next);
-              }}
-            />
-          ) : null}
+            {tab === "videoPrompts" ? (
+              <VideoPromptsPanel
+                value={videoSettings}
+                onChange={setVideoSettings}
+                persistMergeRef={videoPromptsPersistMergeRef}
+                onRefreshWorkspace={refreshWorkspace}
+                onPersistVideo={async (next) => {
+                  setVideoSettings(next);
+                  await persistWorkspace(llmSettings, imageSettings, next);
+                }}
+              />
+            ) : null}
 
-          {tab === "videoApi" ? (
-            <VideoApiPanel value={videoSettings} onChange={setVideoSettings} />
-          ) : null}
+            {tab === "chatPrompts" ? (
+              <ChatPromptsPanel value={chatPromptPresets} onChange={setChatPromptPresets} />
+            ) : null}
 
-          {tab === "skillPacks" ? <SkillPacksPanel /> : null}
+            {tab === "videoApi" ? (
+              <VideoApiPanel value={videoSettings} onChange={setVideoSettings} />
+            ) : null}
+
+            {tab === "skillPacks" ? <SkillPacksPanel /> : null}
+          </section>
         </div>
       </div>
     </main>
+  );
+}
+
+type PromptPresetRow = SitePromptPreset & { isCustom: true };
+
+function newChatPromptPresetId(): string {
+  return `chat_preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function ChatPromptsPanel({
+  value,
+  onChange,
+}: {
+  value: SitePromptPreset[];
+  onChange: (next: SitePromptPreset[]) => void;
+}) {
+  const allRows = useMemo<PromptPresetRow[]>(
+    () =>
+      value.map((preset) => ({
+        ...preset,
+        isCustom: true,
+      })),
+    [value],
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitleById, setDraftTitleById] = useState<Record<string, string>>({});
+  const [draftPromptById, setDraftPromptById] = useState<Record<string, string>>({});
+  const [draftDescriptionById, setDraftDescriptionById] = useState<Record<string, string>>({});
+
+  function seedDraft(preset: SitePromptPreset) {
+    setDraftTitleById((prev) => ({ ...prev, [preset.id]: preset.title }));
+    setDraftPromptById((prev) => ({ ...prev, [preset.id]: preset.promptTemplate }));
+    setDraftDescriptionById((prev) => ({ ...prev, [preset.id]: preset.description ?? "" }));
+  }
+
+  async function persist(next: SitePromptPreset[]) {
+    const saved = await replaceSitePromptPresets("chat", next);
+    onChange(saved);
+  }
+
+  function handleAdd() {
+    const id = newChatPromptPresetId();
+    const nextPreset: SitePromptPreset = {
+      id,
+      kind: "chat",
+      title: `对话预设 ${value.length + 1}`,
+      promptTemplate: "",
+      coverImageUrl: "",
+      refSlotHints: [],
+    };
+    onChange([nextPreset, ...value]);
+    seedDraft(nextPreset);
+    setEditingId(id);
+  }
+
+  function handleEdit(preset: SitePromptPreset) {
+    seedDraft(preset);
+    setEditingId(preset.id);
+  }
+
+  async function handleSave(id: string) {
+    const next = value.map((preset) =>
+      preset.id === id
+        ? {
+            ...preset,
+            title: draftTitleById[id]?.trim() || preset.title,
+            promptTemplate: draftPromptById[id] ?? preset.promptTemplate,
+            description: draftDescriptionById[id]?.trim() || undefined,
+          }
+        : preset,
+    );
+    await persist(next);
+    setEditingId((cur) => (cur === id ? null : cur));
+  }
+
+  async function handleDelete(id: string) {
+    const next = value.filter((preset) => preset.id !== id);
+    await persist(next);
+    setEditingId((cur) => (cur === id ? null : cur));
+  }
+
+  return (
+    <section className={styles.panel}>
+      <div className={settingsCardClass}>
+        <div className={shellStyles.cardHead}>
+          <div>
+            <h2 className={shellStyles.cardTitle}>对话提示词预设</h2>
+            <p className={shellStyles.cardSubtitle}>
+              对话页普通聊天模式用这里的预设。它只负责给 Agent 注入系统级提示，不承担 Skill 表单能力。
+            </p>
+            <div className={styles.promptIntroActions}>
+              <button type="button" className={shellStyles.buttonSubtle} onClick={handleAdd}>
+                添加对话预设
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.promptModeGrid}>
+        {allRows.map((preset) => {
+          const isEditing = editingId === preset.id;
+          const titleValue = isEditing ? (draftTitleById[preset.id] ?? preset.title) : preset.title;
+          const promptValue = isEditing ? (draftPromptById[preset.id] ?? preset.promptTemplate) : preset.promptTemplate;
+          const descriptionValue = isEditing ? (draftDescriptionById[preset.id] ?? (preset.description ?? "")) : (preset.description ?? "");
+
+          return (
+            <article key={preset.id} className={[settingsCardClass, styles.promptModeCard].join(" ")}>
+              <header className={[shellStyles.cardHead, styles.promptModeCardHead].join(" ")}>
+                {isEditing ? (
+                  <label className={styles.promptModeLabelEdit}>
+                    <span className={styles.visuallyHidden}>预设名称</span>
+                    <input
+                      className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                      value={titleValue}
+                      onChange={(e) => setDraftTitleById((prev) => ({ ...prev, [preset.id]: e.target.value }))}
+                      aria-label="对话预设名称"
+                    />
+                  </label>
+                ) : (
+                  <h3 className={styles.promptModeCardTitle}>{preset.title}</h3>
+                )}
+                <div className={styles.promptModeCardActions}>
+                  <button type="button" className={shellStyles.buttonSubtle} onClick={() => void handleDelete(preset.id)}>
+                    删除
+                  </button>
+                  <button
+                    type="button"
+                    className={shellStyles.buttonSubtle}
+                    onClick={() => (isEditing ? void handleSave(preset.id) : handleEdit(preset))}
+                  >
+                    {isEditing ? "保存" : "编辑"}
+                  </button>
+                </div>
+              </header>
+              <div className={styles.promptModeEditBody}>
+                <div className={styles.chatPromptColumn}>
+                  <label className={shellStyles.field}>
+                    <span className={shellStyles.fieldLabel}>提示词内容</span>
+                    <textarea
+                      className={[
+                        shellStyles.textarea,
+                        shellStyles.mono,
+                        styles.promptModeTextarea,
+                        styles.noResize,
+                        !isEditing ? styles.promptModeTextareaReadOnly : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      value={promptValue}
+                      readOnly={!isEditing}
+                      spellCheck={false}
+                      aria-readonly={!isEditing}
+                      onClick={() => {
+                        if (!isEditing) handleEdit(preset);
+                      }}
+                      onFocus={() => {
+                        if (!isEditing) handleEdit(preset);
+                      }}
+                      onChange={(e) => {
+                        if (!isEditing) return;
+                        setDraftPromptById((prev) => ({ ...prev, [preset.id]: e.target.value }));
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className={styles.chatPromptColumn}>
+                  <label className={shellStyles.field}>
+                    <span className={shellStyles.fieldLabel}>使用说明 (可选)</span>
+                    <textarea
+                      className={[
+                        shellStyles.textarea,
+                        styles.promptModeTextarea,
+                        styles.noResize,
+                        !isEditing ? styles.promptModeTextareaReadOnly : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      value={descriptionValue}
+                      readOnly={!isEditing}
+                      onClick={() => {
+                        if (!isEditing) handleEdit(preset);
+                      }}
+                      onFocus={() => {
+                        if (!isEditing) handleEdit(preset);
+                      }}
+                      onChange={(e) => {
+                        if (!isEditing) return;
+                        setDraftDescriptionById((prev) => ({ ...prev, [preset.id]: e.target.value }));
+                      }}
+                      placeholder="简述这个预设的用途..."
+                    />
+                  </label>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -238,12 +479,12 @@ function LlmApiPanel({
 }) {
   return (
     <section className={styles.panel}>
-      <div className={shellStyles.card}>
+      <div className={settingsCardClass}>
         <div className={shellStyles.cardHead}>
           <div>
             <h2 className={shellStyles.cardTitle}>LLM API</h2>
             <p className={shellStyles.cardSubtitle}>
-              所有文本大模型（编剧室、策划对话、首页「对话」工作模式、英语简报等）共用这一套 OpenAI 兼容网关；修改后点击顶部「保存」写入云端。
+              所有文本能力共用这一套接口。
             </p>
           </div>
         </div>
@@ -317,7 +558,6 @@ function ImagePromptsPanel({
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
-  const [draftRefHintRows, setDraftRefHintRows] = useState<Partial<Record<string, string[]>>>({});
   const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
   const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
 
@@ -342,7 +582,7 @@ function ImagePromptsPanel({
 
   async function handleDeleteCover(modeId: string) {
     if (!value.coverImageUrlByMode?.[modeId]) return;
-    if (!window.confirm("确定删除该模式的封面图？")) return;
+    if (!window.confirm("确定删除该预设的封面图？")) return;
     setCoverBusyModeId(modeId);
     setCoverErrorByMode((prev) => {
       const copy = { ...prev };
@@ -378,17 +618,9 @@ function ImagePromptsPanel({
       if (editingPromptModeId === null) return value;
       const id = editingPromptModeId;
       const text = draftPrompts[id] ?? value.prompts[id] ?? "";
-      const rows =
-        draftRefHintRows[id] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[id]);
-      const parsedHints = refSlotHintsDraftRowsToStored(rows);
-      const hintsMap = { ...value.refSlotHintsByMode };
-      if (parsedHints.length === 0) delete hintsMap[id];
-      else hintsMap[id] = parsedHints;
-
       let merged: ImageWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [id]: text },
-        refSlotHintsByMode: hintsMap,
       };
       if (id.startsWith("custom_")) {
         const labelRaw =
@@ -410,22 +642,13 @@ function ImagePromptsPanel({
     editingPromptModeId,
     draftPrompts,
     draftLabels,
-    draftRefHintRows,
   ]);
 
   function handleSavePrompt(modeId: string) {
     const text = draftPrompts[modeId] ?? value.prompts[modeId] ?? "";
-    const rows =
-      draftRefHintRows[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]);
-    const parsedHints = refSlotHintsDraftRowsToStored(rows);
-    const hintsMap = { ...value.refSlotHintsByMode };
-    if (parsedHints.length === 0) delete hintsMap[modeId];
-    else hintsMap[modeId] = parsedHints;
-
     let next: ImageWorkspaceSettings = {
       ...value,
       prompts: { ...value.prompts, [modeId]: text },
-      refSlotHintsByMode: hintsMap,
     };
     if (modeId.startsWith("custom_")) {
       const labelRaw =
@@ -449,11 +672,6 @@ function ImagePromptsPanel({
       delete copy[modeId];
       return copy;
     });
-    setDraftRefHintRows((prev) => {
-      const copy = { ...prev };
-      delete copy[modeId];
-      return copy;
-    });
   }
 
   function handleEditPrompt(modeId: string) {
@@ -463,14 +681,6 @@ function ImagePromptsPanel({
         delete copy[editingPromptModeId];
       }
       copy[modeId] = value.prompts[modeId] ?? "";
-      return copy;
-    });
-    setDraftRefHintRows((prev) => {
-      const copy = { ...prev };
-      if (editingPromptModeId !== null && editingPromptModeId !== modeId) {
-        delete copy[editingPromptModeId];
-      }
-      copy[modeId] = refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]);
       return copy;
     });
     if (modeId.startsWith("custom_")) {
@@ -486,7 +696,7 @@ function ImagePromptsPanel({
     const id = newCustomImageModeId();
     const next: ImageWorkspaceSettings = {
       ...value,
-      customModes: [...(value.customModes ?? []), { id, label: `自定义模式 ${(value.customModes?.length ?? 0) + 1}` }],
+      customModes: [...(value.customModes ?? []), { id, label: `生图预设 ${(value.customModes?.length ?? 0) + 1}` }],
       prompts: { ...value.prompts, [id]: "" },
     };
     onChange(next);
@@ -506,13 +716,10 @@ function ImagePromptsPanel({
       }
       const restPrompts = { ...value.prompts };
       delete restPrompts[modeId];
-      const restHints = { ...value.refSlotHintsByMode };
-      delete restHints[modeId];
       const next: ImageWorkspaceSettings = {
         ...value,
         customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
         prompts: restPrompts,
-        refSlotHintsByMode: restHints,
         coverImageUrlByMode,
       };
       onChange(next);
@@ -528,11 +735,6 @@ function ImagePromptsPanel({
         delete copy[modeId];
         return copy;
       });
-      setDraftRefHintRows((prev) => {
-        const copy = { ...prev };
-        delete copy[modeId];
-        return copy;
-      });
     })();
   }
 
@@ -543,7 +745,7 @@ function ImagePromptsPanel({
     }
     if (
       !window.confirm(
-        `「${mode.label}」将恢复为内置默认提示词，并清空该模式的参考图槽说明与封面图（当前模版修改会丢失），确定？`,
+        `「${mode.label}」将恢复为内置默认提示词并清空封面图，确定？`,
       )
     ) {
       return;
@@ -557,12 +759,9 @@ function ImagePromptsPanel({
         return;
       }
       const defaultPrompt = defaultImageModePrompt(mode.id as ImageModeId);
-      const restHints = { ...value.refSlotHintsByMode };
-      delete restHints[mode.id];
       const next: ImageWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [mode.id]: defaultPrompt },
-        refSlotHintsByMode: restHints,
         coverImageUrlByMode,
       };
       onChange(next);
@@ -573,60 +772,21 @@ function ImagePromptsPanel({
         delete copy[mode.id];
         return copy;
       });
-      setDraftRefHintRows((prev) => {
-        const copy = { ...prev };
-        delete copy[mode.id];
-        return copy;
-      });
     })();
-  }
-
-  function handleAddRefHintRow(modeId: string) {
-    setDraftRefHintRows((prev) => {
-      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
-      if (cur.length >= IMAGE_REF_SLOT_COUNT) return prev;
-      return { ...prev, [modeId]: [...cur, ""] };
-    });
-  }
-
-  function handleRemoveRefHintRow(modeId: string, index: number) {
-    setDraftRefHintRows((prev) => {
-      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
-      if (cur.length <= 1) return prev;
-      cur.splice(index, 1);
-      return { ...prev, [modeId]: cur };
-    });
-  }
-
-  function handleChangeRefHintRow(modeId: string, index: number, text: string) {
-    setDraftRefHintRows((prev) => {
-      const cur = [...(prev[modeId] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[modeId]))];
-      cur[index] = text;
-      return { ...prev, [modeId]: cur };
-    });
   }
 
   return (
     <section className={styles.panel}>
-      <div className={shellStyles.card}>
+      <div className={settingsCardClass}>
         <div className={shellStyles.cardHead}>
           <div>
-            <h2 className={shellStyles.cardTitle}>生图模式 · 固定提示词</h2>
+            <h2 className={shellStyles.cardTitle}>生图提示词预设库</h2>
             <p className={shellStyles.cardSubtitle}>
-              4 列宫格对应作图页各模式（内置 + 你添加的自定义模式）。默认只读；点「编辑」或点击模版文本框进入编辑，「保存」后写入本机。模版中每出现一处{" "}
-              <code className={shellStyles.mono}>{"{{…}}"}</code>{" "}
-              占位符，作图页会对应多一栏输入（从左到右依次填入）；输入框内的灰色说明文字取自对应占位符「括号里的内容」，请在{" "}
-              <code className={shellStyles.mono}>{"{{此处写提示}}"}</code>{" "}
-              中写好管理者面向用户的说明。
-              <strong className={styles.promptIntroStrong}>
-                下方「参考图槽」按「图1」「图2」逐栏填写说明：每栏一个小输入框；在最后一栏输入框右侧点「+」可增加一栏（最多 {IMAGE_REF_SLOT_COUNT}{" "}
-                栏）。未填的槽在作图页仅显示「图n」。不再尝试从正文自动识别。
-              </strong>
-              超过 6 处占位时窄屏可能较挤。编辑态可在右侧上传模式封面（PNG / JPG / WebP / GIF，最大 5MB）；系统会先按原比例缩小为缩略图并转为 WebP 再上传至 Supabase Storage。每张卡片均有「删除」：自定义模式为移除该模式；内置模式为恢复默认模版（含清空该模式参考图说明与封面）。顶部「保存」会并入正在编辑中的草稿。
+              作图页用这里的预设。点击卡片或「编辑」即可修改；<code className={shellStyles.mono}>{"{{…}}"}</code> 会生成对应输入框，右侧可上传封面。
             </p>
             <div className={styles.promptIntroActions}>
               <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
-                添加自定义模式
+                添加生图预设
               </button>
             </div>
           </div>
@@ -639,26 +799,23 @@ function ImagePromptsPanel({
           const savedText = value.prompts[mode.id] ?? "";
           const textareaValue = isEditing ? (draftPrompts[mode.id] ?? savedText) : savedText;
           const occCount = extractPromptPlaceholderOccurrences(savedText).length;
-          const refRowsForMode = isEditing
-            ? (draftRefHintRows[mode.id] ?? refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]))
-            : refSlotHintsStoredToDraftRows(value.refSlotHintsByMode[mode.id]);
           const coverUrl = value.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
           const coverBusy = coverBusyModeId === mode.id;
           const coverError = coverErrorByMode[mode.id];
 
           return (
-            <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
+            <article key={mode.id} className={[settingsCardClass, styles.promptModeCard].join(" ")}>
               <header className={[shellStyles.cardHead, styles.promptModeCardHead].join(" ")}>
                 {mode.isCustom && isEditing ? (
                   <label className={styles.promptModeLabelEdit}>
-                    <span className={styles.visuallyHidden}>模式名称</span>
+                    <span className={styles.visuallyHidden}>预设名称</span>
                     <input
                       className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
                       value={draftLabels[mode.id] ?? mode.label}
                       onChange={(e) =>
                         setDraftLabels((prev) => ({ ...prev, [mode.id]: e.target.value }))
                       }
-                      aria-label="自定义模式名称"
+                      aria-label="自定义预设名称"
                     />
                   </label>
                 ) : (
@@ -669,7 +826,7 @@ function ImagePromptsPanel({
                     type="button"
                     className={shellStyles.buttonSubtle}
                     onClick={() => handleDeletePromptRow(mode)}
-                    aria-label={mode.isCustom ? `删除自定义模式 ${mode.label}` : `恢复 ${mode.label} 默认提示词`}
+                    aria-label={mode.isCustom ? `删除自定义预设 ${mode.label}` : `恢复 ${mode.label} 默认提示词`}
                   >
                     删除
                   </button>
@@ -683,7 +840,7 @@ function ImagePromptsPanel({
                 </div>
               </header>
               {occCount > 6 ? (
-                <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，作图页将显示 {occCount} 栏输入。</p>
+                <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，作图页会显示 {occCount} 个输入框。</p>
               ) : null}
               <div className={styles.promptModeEditBody}>
                 <textarea
@@ -710,7 +867,7 @@ function ImagePromptsPanel({
                     setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
                   }}
                 />
-                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 模式封面`}>
+                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 预设封面`}>
                   <div
                     className={[
                       styles.promptModeCoverFrame,
@@ -777,72 +934,13 @@ function ImagePromptsPanel({
                       </label>
                     ) : (
                       <>
-                        <span className={styles.promptModeCoverLabel}>模式封面</span>
+                        <span className={styles.promptModeCoverLabel}>预设封面</span>
                         <span className={styles.promptModeCoverHint}>未设置</span>
                       </>
                     )}
                     {coverBusy ? <span className={styles.promptModeCoverBusy}>处理中…</span> : null}
                   </div>
                   {coverError ? <p className={styles.promptModeCoverError}>{coverError}</p> : null}
-                </div>
-              </div>
-              <div className={styles.promptModeRefHintsWrap}>
-                <span className={styles.promptModeRefHintsLabel}>
-                  参考图槽说明（每栏对应作图页「图1」「图2」…，最多 {IMAGE_REF_SLOT_COUNT} 栏）
-                </span>
-                <div className={styles.promptModeRefHintsList}>
-                  {refRowsForMode.map((hintText, idx) => (
-                    <div key={idx} className={styles.promptModeRefHintRow}>
-                      <span className={styles.promptModeRefHintIdx}>图{idx + 1}</span>
-                      <input
-                        type="text"
-                        className={[
-                          shellStyles.input,
-                          styles.promptModeRefHintInput,
-                          !isEditing ? styles.promptModeTextareaReadOnly : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        value={hintText}
-                        readOnly={!isEditing}
-                        placeholder={idx === 0 ? "例如：面部参考" : "可选说明"}
-                        spellCheck={false}
-                        aria-label={`参考图槽图${idx + 1}说明`}
-                        onClick={() => {
-                          if (!isEditing) handleEditPrompt(mode.id);
-                        }}
-                        onFocus={() => {
-                          if (!isEditing) handleEditPrompt(mode.id);
-                        }}
-                        onChange={(e) => {
-                          if (!isEditing) return;
-                          handleChangeRefHintRow(mode.id, idx, e.target.value);
-                        }}
-                      />
-                      {isEditing &&
-                      idx === refRowsForMode.length - 1 &&
-                      refRowsForMode.length < IMAGE_REF_SLOT_COUNT ? (
-                        <button
-                          type="button"
-                          className={[shellStyles.buttonSubtle, styles.promptModeRefHintPlusBtn].join(" ")}
-                          onClick={() => handleAddRefHintRow(mode.id)}
-                          aria-label="添加一栏参考图槽说明"
-                        >
-                          +
-                        </button>
-                      ) : null}
-                      {isEditing && refRowsForMode.length > 1 ? (
-                        <button
-                          type="button"
-                          className={[shellStyles.buttonSubtle, styles.promptModeRefHintRowBtn].join(" ")}
-                          onClick={() => handleRemoveRefHintRow(mode.id, idx)}
-                          aria-label={`移除图${idx + 1}说明栏`}
-                        >
-                          移除
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
                 </div>
               </div>
             </article>
@@ -861,11 +959,11 @@ function ImageApiPanel({
   onChange: (next: ImageWorkspaceSettings) => void;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={[styles.panel, styles.apiCardGrid].join(" ")}>
       {IMAGE_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         return (
-          <div key={id} className={shellStyles.card}>
+          <div key={id} className={settingsCardClass}>
             <div className={shellStyles.cardHead}>
               <div>
                 <h2 className={shellStyles.cardTitle}>{model.label}</h2>
@@ -945,12 +1043,12 @@ function VideoApiPanel({
   onChange: (next: VideoWorkspaceSettings) => void;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={[styles.panel, styles.apiCardGrid].join(" ")}>
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
         return (
-          <div key={id} className={shellStyles.card}>
+          <div key={id} className={settingsCardClass}>
             <div className={shellStyles.cardHead}>
               <div>
                 <h2 className={shellStyles.cardTitle}>{model.label}</h2>
@@ -1100,7 +1198,7 @@ function VideoPromptsPanel({
 
   async function handleDeleteCover(modeId: string) {
     if (!value.coverImageUrlByMode?.[modeId]) return;
-    if (!window.confirm("确定删除该模式的封面图？")) return;
+    if (!window.confirm("确定删除该预设的封面图？")) return;
     setCoverBusyModeId(modeId);
     setCoverErrorByMode((prev) => {
       const copy = { ...prev };
@@ -1206,7 +1304,7 @@ function VideoPromptsPanel({
     const id = newCustomVideoModeId();
     const next: VideoWorkspaceSettings = {
       ...value,
-      customModes: [...(value.customModes ?? []), { id, label: `自定义模式 ${(value.customModes?.length ?? 0) + 1}` }],
+      customModes: [...(value.customModes ?? []), { id, label: `生视频预设 ${(value.customModes?.length ?? 0) + 1}` }],
       prompts: { ...value.prompts, [id]: "" },
     };
     onChange(next);
@@ -1280,17 +1378,16 @@ function VideoPromptsPanel({
 
   return (
     <section className={styles.panel}>
-      <div className={shellStyles.card}>
+      <div className={settingsCardClass}>
         <div className={shellStyles.cardHead}>
           <div>
-            <h2 className={shellStyles.cardTitle}>生视频模式 · 固定提示词</h2>
+            <h2 className={shellStyles.cardTitle}>生视频提示词预设库</h2>
             <p className={shellStyles.cardSubtitle}>
-              与生图提示词一致：每张卡保存一个视频提示词模版。模版内每出现一处 <code className={shellStyles.mono}>{"{{…}}"}</code>{" "}
-              占位符，视频页会对应多一栏输入。编辑态可上传封面，系统会缩略并转为 WebP。
+              生视频页用这里的预设。<code className={shellStyles.mono}>{"{{…}}"}</code> 会生成对应输入框，右侧可上传封面。
             </p>
             <div className={styles.promptIntroActions}>
               <button type="button" className={shellStyles.buttonSubtle} onClick={handleAddCustomMode}>
-                添加自定义模式
+                添加生视频预设
               </button>
             </div>
           </div>
@@ -1308,16 +1405,16 @@ function VideoPromptsPanel({
           const coverError = coverErrorByMode[mode.id];
 
           return (
-            <article key={mode.id} className={[shellStyles.card, styles.promptModeCard].join(" ")}>
+            <article key={mode.id} className={[settingsCardClass, styles.promptModeCard].join(" ")}>
               <header className={[shellStyles.cardHead, styles.promptModeCardHead].join(" ")}>
                 {mode.isCustom && isEditing ? (
                   <label className={styles.promptModeLabelEdit}>
-                    <span className={styles.visuallyHidden}>模式名称</span>
+                    <span className={styles.visuallyHidden}>预设名称</span>
                     <input
                       className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
                       value={draftLabels[mode.id] ?? mode.label}
                       onChange={(e) => setDraftLabels((prev) => ({ ...prev, [mode.id]: e.target.value }))}
-                      aria-label="自定义模式名称"
+                      aria-label="自定义预设名称"
                     />
                   </label>
                 ) : (
@@ -1328,7 +1425,7 @@ function VideoPromptsPanel({
                     type="button"
                     className={shellStyles.buttonSubtle}
                     onClick={() => handleDeletePromptRow(mode)}
-                    aria-label={mode.isCustom ? `删除自定义模式 ${mode.label}` : `恢复 ${mode.label} 默认提示词`}
+                    aria-label={mode.isCustom ? `删除自定义预设 ${mode.label}` : `恢复 ${mode.label} 默认提示词`}
                   >
                     删除
                   </button>
@@ -1369,7 +1466,7 @@ function VideoPromptsPanel({
                     setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
                   }}
                 />
-                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 模式封面`}>
+                <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 预设封面`}>
                   <div
                     className={[
                       styles.promptModeCoverFrame,
@@ -1436,7 +1533,7 @@ function VideoPromptsPanel({
                       </label>
                     ) : (
                       <>
-                        <span className={styles.promptModeCoverLabel}>模式封面</span>
+                        <span className={styles.promptModeCoverLabel}>预设封面</span>
                         <span className={styles.promptModeCoverHint}>未设置</span>
                       </>
                     )}

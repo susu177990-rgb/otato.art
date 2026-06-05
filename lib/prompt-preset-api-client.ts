@@ -1,0 +1,27 @@
+import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
+
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  return data.error?.trim() || fallback;
+}
+
+export async function fetchSitePromptPresets(kind: PromptPresetKind): Promise<SitePromptPreset[]> {
+  const res = await fetch(`/api/site-prompt-presets?kind=${encodeURIComponent(kind)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res, "无法加载预设库"));
+  const data = (await res.json()) as { presets: SitePromptPreset[] };
+  return data.presets;
+}
+
+export async function replaceSitePromptPresets(
+  kind: PromptPresetKind,
+  presets: SitePromptPreset[],
+): Promise<SitePromptPreset[]> {
+  const res = await fetch("/api/site-prompt-presets", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, presets }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, "无法保存预设库"));
+  const data = (await res.json()) as { presets: SitePromptPreset[] };
+  return data.presets;
+}

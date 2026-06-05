@@ -105,7 +105,7 @@ function ProjectsHubInner() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+          <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
           <div className={shellStyles.topbarTagline}>

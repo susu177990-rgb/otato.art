@@ -785,7 +785,7 @@ export default function OnboardingPage() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/projects" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+          <Link href="/projects" className={shellStyles.navLink}>
             返回项目列表
           </Link>
           <div className={shellStyles.topbarTagline}>

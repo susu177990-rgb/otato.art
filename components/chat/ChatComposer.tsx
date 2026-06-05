@@ -2,8 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import type { ChatAttachment } from "@/lib/chat/types";
+import type { ChatMode } from "@/lib/chat/types";
 import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } from "@/lib/image-workspace";
 import imageStyles from "@/app/image/image-page.module.css";
+import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-composer.module.css";
 
 export function ChatComposer({
@@ -18,6 +20,8 @@ export function ChatComposer({
   imageWorkspace,
   selectedImageModelId,
   onImageModelChange,
+  chatMode,
+  onSetChatMode,
 }: {
   inputText: string;
   onInputTextChange: (value: string) => void;
@@ -30,6 +34,8 @@ export function ChatComposer({
   imageWorkspace: ImageWorkspaceSettings;
   selectedImageModelId: ImageModelId;
   onImageModelChange: (id: ImageModelId) => void;
+  chatMode: ChatMode;
+  onSetChatMode: (mode: ChatMode) => void | Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLElement>(null);
@@ -131,8 +137,23 @@ export function ChatComposer({
             />
             <span className={styles.addPlus}>+</span>
           </label>
+          <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
+            {(["prompt", "skill"] as const).map((mode) => {
+              const active = chatMode === mode;
+              const label = mode === "prompt" ? "常规模式" : "Skill 模式";
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => void onSetChatMode(mode)}
+                  className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].join(" ")}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
           <div className={styles.modelGroup}>
-            <span className={styles.modelHint}>调用生图模型</span>
             <select
               value={selectedImageModelId}
               disabled={isSending}

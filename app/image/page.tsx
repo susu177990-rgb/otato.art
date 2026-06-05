@@ -750,10 +750,10 @@ export default function ImagePage() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+          <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <Link href="/image/gallery" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+          <Link href="/image/gallery" className={shellStyles.navLink}>
             画廊
           </Link>
           <div className={shellStyles.topbarTagline}>

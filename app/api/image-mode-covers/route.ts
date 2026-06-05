@@ -22,7 +22,7 @@ async function requireSiteAdmin() {
     return { error: NextResponse.json({ error: "请先登录" }, { status: 401 }) };
   }
   if (!(await canManageSiteSettings(supabase))) {
-    return { error: NextResponse.json({ error: "只有管理员可以修改全站配置" }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "当前账号无权修改全站配置" }, { status: 403 }) };
   }
   return { supabase };
 }

@@ -1027,7 +1027,7 @@ function StudioInner() {
       <main className={shellStyles.page}>
         <header className={shellStyles.topbar}>
           <div className={shellStyles.topbarLeft}>
-            <Link href="/projects" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+            <Link href="/projects" className={shellStyles.navLink}>
               返回项目页
             </Link>
           </div>
@@ -1058,7 +1058,7 @@ function StudioInner() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={[shellStyles.topbarLeft, styles.topbarLeftCompact].join(" ")}>
-          <Link href="/projects" className={[shellStyles.plainDockText, shellStyles.dockTextLink].join(" ")}>
+          <Link href="/projects" className={shellStyles.navLink}>
             返回
           </Link>
           <div className={styles.titleStack}>

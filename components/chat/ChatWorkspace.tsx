@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { ChatComposer } from "@/components/chat/ChatComposer";
+import { ChatPromptPresetRail } from "@/components/chat/ChatPromptPresetRail";
 import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
 import { SkillFormPanel } from "@/components/skill-form/SkillFormPanel";
 import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/completion";
+import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import type {
   ChatAttachment,
   ChatAttachmentKind,
+  ChatMode,
   ChatConversation,
   ChatConversationSummary,
   ChatMessage,
@@ -25,8 +28,9 @@ import {
   saveChatConversation,
   sendChatAgentTurn,
 } from "@/lib/chat-api-client";
-import { buildChatEmptyGuideMarkdown } from "@/lib/chat/chat-empty-guide";
+import { buildChatEmptyGuideMarkdown, buildChatPromptPresetGuideMarkdown } from "@/lib/chat/chat-empty-guide";
 import { skillPackHasFormInterface } from "@/lib/chat/skill-pack";
+import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
 import { fetchSiteSkillPacks, runSkillFormApi } from "@/lib/skill-packs-api-client";
 import type { ImageModelId } from "@/lib/image-workspace";
 import shellStyles from "@/app/shared/shell.module.css";
@@ -182,6 +186,7 @@ export function ChatWorkspace() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [skillPacks, setSkillPacks] = useState<SkillPackRecord[]>([]);
+  const [chatPromptPresets, setChatPromptPresets] = useState<SitePromptPreset[]>([]);
   const [inputText, setInputText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -209,9 +214,14 @@ export function ChatWorkspace() {
   }, []);
 
   const loadLists = useCallback(async () => {
-    const [convs, packsRes] = await Promise.all([fetchChatConversations(), fetchSiteSkillPacks()]);
+    const [convs, packsRes, promptPresets] = await Promise.all([
+      fetchChatConversations(),
+      fetchSiteSkillPacks(),
+      fetchSitePromptPresets("chat"),
+    ]);
     setSummaries(convs);
     setSkillPacks(packsRes.skillPacks);
+    setChatPromptPresets(promptPresets);
     if (!activeId && convs[0]) setActiveId(convs[0].id);
   }, [activeId]);
 
@@ -224,11 +234,11 @@ export function ChatWorkspace() {
     if (!workspaceReady) return;
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void loadSkillPacks().catch(() => {});
+        void Promise.all([loadSkillPacks(), fetchSitePromptPresets("chat").then(setChatPromptPresets)]).catch(() => {});
       }
     };
     const onFocus = () => {
-      void loadSkillPacks().catch(() => {});
+      void Promise.all([loadSkillPacks(), fetchSitePromptPresets("chat").then(setChatPromptPresets)]).catch(() => {});
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
@@ -307,25 +317,35 @@ export function ChatWorkspace() {
   }, [conversation?.messages, isSending]);
 
   const selectedSkillPackId = conversationMatchesActive
-    ? (conversation?.enabledSkillPackIds?.[0] ?? null)
+    ? (conversation?.selectedSkillPackId ?? null)
     : null;
+  const selectedChatPresetId = conversationMatchesActive ? (conversation?.selectedChatPresetId ?? null) : null;
+  const chatMode: ChatMode = conversationMatchesActive ? conversation?.chatMode ?? "prompt" : "prompt";
 
   const selectedPack = useMemo(
     () => skillPacks.find((p) => p.id === selectedSkillPackId) ?? null,
     [skillPacks, selectedSkillPackId],
   );
-  const isFormMode = Boolean(selectedPack && skillPackHasFormInterface(selectedPack));
+  const selectedPromptPreset = useMemo(
+    () => chatPromptPresets.find((preset) => preset.id === selectedChatPresetId) ?? null,
+    [chatPromptPresets, selectedChatPresetId],
+  );
+  const isSkillMode = chatMode === "skill";
+  const isFormMode = Boolean(isSkillMode && selectedPack && skillPackHasFormInterface(selectedPack));
 
   const emptyGuideMarkdown = useMemo(() => {
-    if (!selectedSkillPackId) return buildChatEmptyGuideMarkdown(null);
-    const pack = skillPacks.find((p) => p.id === selectedSkillPackId);
-    return buildChatEmptyGuideMarkdown(pack);
-  }, [selectedSkillPackId, skillPacks]);
+    if (isSkillMode) {
+      if (!selectedSkillPackId) return buildChatEmptyGuideMarkdown(null);
+      const pack = skillPacks.find((p) => p.id === selectedSkillPackId);
+      return buildChatEmptyGuideMarkdown(pack);
+    }
+    return buildChatPromptPresetGuideMarkdown(selectedPromptPreset);
+  }, [isSkillMode, selectedSkillPackId, skillPacks, selectedPromptPreset]);
 
   useEffect(() => {
     setSkillRunResult(null);
     setError(null);
-  }, [selectedSkillPackId, activeId]);
+  }, [selectedSkillPackId, selectedChatPresetId, chatMode, activeId]);
 
   const handleSkillFormSubmit = async (payload: unknown) => {
     if (!selectedPack?.inputSchema || isRunningSkillForm) return;
@@ -385,10 +405,97 @@ export function ChatWorkspace() {
     const targetId = convId;
     const updated = {
       ...conv,
-      enabledSkillPackIds: packId ? [packId] : undefined,
+      chatMode: "skill" as ChatMode,
+      selectedSkillPackId: packId,
       updatedAt: Date.now(),
     };
     if (activeIdRef.current === targetId) {
+      setConversation(updated);
+    }
+
+    try {
+      const saved = await saveChatConversation(updated);
+      if (activeIdRef.current === saved.id) {
+        setConversation(saved);
+      }
+    } catch (e) {
+      if (activeIdRef.current === convId) setConversation(conv);
+      throw e;
+    } finally {
+      setIsSavingSkill(false);
+    }
+  };
+
+  const selectChatPromptPreset = async (presetId: string | null) => {
+    if (isSavingSkill) return;
+    setError(null);
+    setIsSavingSkill(true);
+    let convId = activeIdRef.current;
+    let conv = conversation?.id === convId ? conversation : null;
+
+    if (!convId) {
+      const created = await createChatConversation();
+      convId = created.id;
+      conv = created;
+      activeIdRef.current = created.id;
+      setActiveId(created.id);
+      setSummaries((prev) => [{ id: created.id, title: created.title, updatedAt: created.updatedAt }, ...prev]);
+    }
+
+    if (!conv) {
+      conv = await fetchChatConversation(convId);
+    }
+
+    const targetId = convId;
+    const updated = {
+      ...conv,
+      chatMode: "prompt" as ChatMode,
+      selectedChatPresetId: presetId,
+      updatedAt: Date.now(),
+    };
+    if (activeIdRef.current === targetId) {
+      setConversation(updated);
+    }
+
+    try {
+      const saved = await saveChatConversation(updated);
+      if (activeIdRef.current === saved.id) {
+        setConversation(saved);
+      }
+    } catch (e) {
+      if (activeIdRef.current === convId) setConversation(conv);
+      throw e;
+    } finally {
+      setIsSavingSkill(false);
+    }
+  };
+
+  const setChatModeValue = async (nextMode: ChatMode) => {
+    if (isSavingSkill) return;
+    setError(null);
+    setIsSavingSkill(true);
+    let convId = activeIdRef.current;
+    let conv = conversation?.id === convId ? conversation : null;
+
+    if (!convId) {
+      const created = await createChatConversation();
+      convId = created.id;
+      conv = created;
+      activeIdRef.current = created.id;
+      setActiveId(created.id);
+      setSummaries((prev) => [{ id: created.id, title: created.title, updatedAt: created.updatedAt }, ...prev]);
+    }
+
+    if (!conv) {
+      conv = await fetchChatConversation(convId);
+    }
+
+    const updated = {
+      ...conv,
+      chatMode: nextMode,
+      updatedAt: Date.now(),
+    };
+    if (activeIdRef.current === convId) {
       setConversation(updated);
     }
 
@@ -537,16 +644,29 @@ export function ChatWorkspace() {
 
   return (
     <div className={styles.stage}>
-      <ChatSkillRail
-        skillPacks={skillPacks}
-        selectedPackId={selectedSkillPackId}
-        skillSwitchDisabled={isSavingSkill}
-        onSelectPack={(id) =>
-          void selectSkillPack(id).catch((e) =>
-            setError(e instanceof Error ? e.message : "保存 Skill 选择失败"),
-          )
-        }
-      />
+      {isSkillMode ? (
+        <ChatSkillRail
+          skillPacks={skillPacks}
+          selectedPackId={selectedSkillPackId}
+          skillSwitchDisabled={isSavingSkill}
+          onSelectPack={(id) =>
+            void selectSkillPack(id).catch((e) =>
+              setError(e instanceof Error ? e.message : "保存 Skill 选择失败"),
+            )
+          }
+        />
+      ) : (
+        <ChatPromptPresetRail
+          presets={chatPromptPresets}
+          selectedPresetId={selectedChatPresetId}
+          switchDisabled={isSavingSkill}
+          onSelectPreset={(id) =>
+            void selectChatPromptPreset(id).catch((e) =>
+              setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
+            )
+          }
+        />
+      )}
 
       <div ref={scrollRef} className={[styles.messages, isFormMode ? styles.messagesForm : ""].filter(Boolean).join(" ")}>
         {isFormMode && selectedPack ? (
@@ -593,6 +713,12 @@ export function ChatWorkspace() {
           imageWorkspace={imageWorkspace}
           selectedImageModelId={selectedImageModelId}
           onImageModelChange={handleImageModelChange}
+          chatMode={chatMode}
+          onSetChatMode={(mode) =>
+            void setChatModeValue(mode).catch((e) =>
+              setError(e instanceof Error ? e.message : "切换对话模式失败"),
+            )
+          }
         />
       ) : null}
 
