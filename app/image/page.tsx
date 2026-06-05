@@ -289,13 +289,18 @@ export default function ImagePage() {
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const mentionCandidates = useMemo(() => {
-    return records.map((record) => ({
-      id: record.id,
-      name: record.finalPrompt ? (record.finalPrompt.length > 25 ? record.finalPrompt.slice(0, 25) + "..." : record.finalPrompt) : "画廊图片",
-      type: "gallery" as const,
-      imageUrl: record.imageUrl,
-    }));
-  }, [records]);
+    const candidates: Array<{ id: string; name: string; type: "slot" }> = [];
+    refSlots.forEach((slot, index) => {
+      if (slot && slot.file) {
+        candidates.push({
+          id: String(index),
+          name: `图${index + 1}`,
+          type: "slot",
+        });
+      }
+    });
+    return candidates;
+  }, [refSlots]);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
@@ -665,9 +670,7 @@ export default function ImagePage() {
     const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
     const promptForRequest = buildImagePromptFromSlots(liveTemplate, slotInputs);
     // 解析提示词中的 @ 引用
-    const { cleanedPrompt, refImages: resolvedImages } = resolveMentions(promptForRequest, {
-      galleryRecords: records,
-    });
+    const { cleanedPrompt } = resolveMentions(promptForRequest, {});
 
     const liveReady = Boolean(
       liveModel.endpointUrl && liveModel.apiKey && liveModel.modelName,
@@ -686,13 +689,7 @@ export default function ImagePage() {
     try {
       const refSlotsSnapshot = normalizeRefSlots(refSlots);
       const fileRefs = await snapshotReferenceImages(refSlotsSnapshot);
-      const resolvedRefs: ImageGalleryReferenceImage[] = resolvedImages.map((url, idx) => ({
-        slotIndex: fileRefs.length + idx,
-        dataUrl: url,
-        name: `Prompt Ref ${idx + 1}`,
-        type: "image/png",
-      }));
-      referenceImages = [...fileRefs, ...resolvedRefs];
+      referenceImages = fileRefs;
       refSlotsUserEditedRef.current = false;
       runtimeState = {
         taskId: crypto.randomUUID(),
@@ -718,7 +715,7 @@ export default function ImagePage() {
           aspectRatio,
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
-          refImages: resolvedImages, // 传入解析的图片链接
+          refImages: [], // 传入解析的图片链接
         }),
       );
       for (const slot of refSlotsSnapshot) {

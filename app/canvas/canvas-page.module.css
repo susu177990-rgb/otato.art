@@ -430,7 +430,7 @@
   border-radius: 16px;
   background: rgba(24, 24, 27, 0.96);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   z-index: 20;

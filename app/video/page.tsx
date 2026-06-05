@@ -216,21 +216,18 @@ export default function VideoPage() {
   }, [workspaceReady]);
 
   const mentionCandidates = useMemo(() => {
-    const images = imageRecords.map((r) => ({
-      id: r.id,
-      name: r.finalPrompt ? (r.finalPrompt.length > 25 ? r.finalPrompt.slice(0, 25) + "..." : r.finalPrompt) : "画廊图片",
-      type: "gallery" as const,
-      subType: "image",
-      imageUrl: r.imageUrl,
-    }));
-    const videos = records.map((r) => ({
-      id: r.id,
-      name: r.finalPrompt ? (r.finalPrompt.length > 25 ? r.finalPrompt.slice(0, 25) + "..." : r.finalPrompt) : "画廊视频",
-      type: "gallery" as const,
-      subType: "video",
-    }));
-    return [...images, ...videos];
-  }, [imageRecords, records]);
+    const candidates: Array<{ id: string; name: string; type: "slot" }> = [];
+    refSlots.forEach((slot, index) => {
+      if (slot) {
+        candidates.push({
+          id: String(index),
+          name: index === 0 ? "首帧" : "尾帧",
+          type: "slot",
+        });
+      }
+    });
+    return candidates;
+  }, [refSlots]);
 
   useEffect(() => {
     setSelectedModelId((current) =>
@@ -385,29 +382,9 @@ export default function VideoPage() {
       return;
     }
 
-    const { cleanedPrompt, refImages: resolvedImages, refVideos: resolvedVideos } = resolveMentions(prompt, {
-      galleryRecords: [...imageRecords, ...records],
-    });
+    const { cleanedPrompt } = resolveMentions(prompt, {});
 
-    const extraRefs: UnifiedVideoReference[] = [];
-    resolvedImages.forEach((url, i) => {
-      extraRefs.push({
-        role: "image_reference",
-        url,
-        label: `Prompt Ref Image ${i + 1}`,
-        mimeType: "image/png",
-      });
-    });
-    resolvedVideos.forEach((url, i) => {
-      extraRefs.push({
-        role: "motion_source_video",
-        url,
-        label: `Prompt Ref Video ${i + 1}`,
-        mimeType: "video/mp4",
-      });
-    });
-
-    const allReferences = [...buildReferences(selectedUiModeId, refSlots), ...extraRefs];
+    const allReferences = buildReferences(selectedUiModeId, refSlots);
     const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
     const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
 

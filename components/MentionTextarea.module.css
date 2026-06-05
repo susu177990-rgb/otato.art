@@ -1,0 +1,75 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  z-index: 1;
+  color: inherit; /* will inherit from the standard textarea class applied to it */
+  box-sizing: border-box;
+}
+
+.overlayText {
+  color: inherit;
+}
+
+.pill {
+  display: inline-block;
+  vertical-align: baseline;
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 500;
+  margin: 0 2px;
+  line-height: 1.3;
+}
+
+.textarea {
+  position: absolute !important;
+  inset: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: #f4f4f5 !important;
+  z-index: 2 !important;
+  resize: none !important;
+  margin: 0 !important;
+}
+
+.textarea::placeholder {
+  color: #52525b !important;
+}
+
+.contentEditable {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.contentEditable[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: #52525b;
+  pointer-events: none;
+  display: block;
+}

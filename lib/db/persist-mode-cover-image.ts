@@ -9,7 +9,8 @@ export function sanitizeModeCoverModeId(modeId: string): string {
 }
 
 export function modeCoverStoragePath(modeId: string): string {
-  return `${MODE_COVER_STORAGE_PREFIX}/${sanitizeModeCoverModeId(modeId)}.webp`;
+  const nonce = Math.random().toString(36).slice(2, 7);
+  return `${MODE_COVER_STORAGE_PREFIX}/${sanitizeModeCoverModeId(modeId)}_${nonce}.webp`;
 }
 
 export function storagePathFromPublicUrl(url: string, bucket = GENERATED_IMAGES_BUCKET): string | null {
@@ -18,7 +19,16 @@ export function storagePathFromPublicUrl(url: string, bucket = GENERATED_IMAGES_
   const marker = `/storage/v1/object/public/${bucket}/`;
   const idx = trimmed.indexOf(marker);
   if (idx === -1) return null;
-  return decodeURIComponent(trimmed.slice(idx + marker.length));
+  let pathAndQuery = trimmed.slice(idx + marker.length);
+  const qMark = pathAndQuery.indexOf('?');
+  if (qMark !== -1) {
+    pathAndQuery = pathAndQuery.slice(0, qMark);
+  }
+  const hashMark = pathAndQuery.indexOf('#');
+  if (hashMark !== -1) {
+    pathAndQuery = pathAndQuery.slice(0, hashMark);
+  }
+  return decodeURIComponent(pathAndQuery);
 }
 
 export function isStoredModeCoverUrl(url: string): boolean {

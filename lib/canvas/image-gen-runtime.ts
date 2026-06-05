@@ -5,7 +5,7 @@ import type { ImageAspectRatio, ImageGalleryRecord, ImageModelSettings } from "@
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { generateImage } from "@/lib/image-generate";
 import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
-import { prependGalleryRecord, listGalleryRecords } from "@/lib/db/gallery-store";
+import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import { resolveMentions } from "@/lib/prompt-mention";
 
 
@@ -31,20 +31,30 @@ function resolveImageModel(snapshot: WorkspaceSnapshot, node: CanvasNode): Image
   return model;
 }
 
-function buildPrompt(board: CanvasBoard, node: CanvasNode): string {
+function buildPrompt(board: CanvasBoard, node: CanvasNode): { prompt: string; resolvedNodeIds: string[] } {
   const ownPrompt = node.metadata?.prompt?.trim() ?? "";
+  const { cleanedPrompt, resolvedNodeIds } = resolveMentions(ownPrompt, {
+    canvasNodes: board.nodes,
+  });
+
   const connectedPrompts = board.connections
     .filter((conn) => conn.toNodeId === node.id && conn.targetPort === "prompt")
+    // 过滤掉已经在提示词内被显式 @ 引用过的文本节点 ID，避免重复拼接
+    .filter((conn) => !resolvedNodeIds.includes(conn.fromNodeId))
     .map((conn) => board.nodes.find((item) => item.id === conn.fromNodeId))
     .filter((item): item is CanvasNode => Boolean(item))
     .filter((item) => item.type === "text")
     .map((item) => item.metadata?.text?.trim() ?? "")
     .filter(Boolean);
-  const parts = [ownPrompt, ...connectedPrompts].filter(Boolean);
+
+  const parts = [cleanedPrompt, ...connectedPrompts].filter(Boolean);
   if (parts.length === 0) {
     throw new Error("生图节点缺少提示词：请填写节点提示词，或接入文本节点。");
   }
-  return parts.join("\n\n");
+  return {
+    prompt: parts.join("\n\n"),
+    resolvedNodeIds,
+  };
 }
 
 function resolveReferenceImageUrl(board: CanvasBoard, sourceNode: CanvasNode): string {
@@ -138,25 +148,14 @@ export async function executeCanvasImageGeneration(params: {
 }): Promise<CanvasImageGenerationResult> {
   const sourceNode = mustBeImageNode(params.board.nodes.find((node) => node.id === params.nodeId));
   const model = resolveImageModel(params.workspaceSnapshot, sourceNode);
-  const prompt = buildPrompt(params.board, sourceNode);
-
-  // 获取用户历史画廊记录以解析可能存在的画廊图片 @ 引用
-  const galleryRecords = await listGalleryRecords(params.supabase, 100).catch(() => []);
-  const { cleanedPrompt, refImages: resolvedImages } = resolveMentions(prompt, {
-    galleryRecords,
-    canvasNodes: params.board.nodes,
-  });
-
-  const refImages = Array.from(
-    new Set([
-      ...collectReferenceImages(params.board, sourceNode),
-      ...resolvedImages,
-    ])
-  );
+  
+  // 核心：构建并清洗提示词，解析内联文本节点引用
+  const { prompt } = buildPrompt(params.board, sourceNode);
+  const refImages = collectReferenceImages(params.board, sourceNode);
 
   const result = await generateImage({
     model,
-    prompt: cleanedPrompt,
+    prompt,
     aspectRatio: sourceNode.metadata?.aspectRatio ?? "4:3",
     imageSize: sourceNode.metadata?.imageSize ?? "1K",
     gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
@@ -187,7 +186,7 @@ export async function executeCanvasImageGeneration(params: {
     imageUrl,
     model,
     sourceNode: nextSourceNode,
-    prompt: cleanedPrompt,
+    prompt,
     refImageCount: refImages.length,
   });
   await prependGalleryRecord(params.supabase, galleryRecord);

@@ -388,8 +388,7 @@
 }
 
 .composer {
-  overflow-x: hidden;
-  overflow-y: visible;
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 30px;
   background: rgba(8, 8, 9, 0.94);
@@ -510,7 +509,7 @@
   flex-direction: column;
   height: 112px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
