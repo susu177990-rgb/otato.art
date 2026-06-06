@@ -200,6 +200,9 @@ export async function sendChatCompletionRaw(
   if (!endpointUrl || !modelName || !apiKey) {
     throw new Error("请先在设置 → LLM API 中填写 API URL、模型与 API Key");
   }
+  if (/[^\x00-\x7F]/.test(apiKey)) {
+    throw new Error("API Key 包含非法字符（如中文）。请检查设置并确保只包含英文字母、数字和常规符号。");
+  }
 
   validateMessagesForSend(messages);
 

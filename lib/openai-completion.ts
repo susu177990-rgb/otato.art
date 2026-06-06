@@ -15,6 +15,9 @@ export async function completeChatNonStream(params: {
   if (!settings?.apiKey) {
     return { ok: false, error: "缺少 API Key" };
   }
+  if (/[^\x00-\x7F]/.test(settings.apiKey)) {
+    return { ok: false, error: "API Key 包含非法字符（如中文）。请检查设置并确保只包含英文字母、数字和常规符号。" };
+  }
   const apiUrl = settings.apiUrl || "https://api.openai.com/v1/chat/completions";
   try {
     const upstream = await fetchWithRetry(apiUrl, {
