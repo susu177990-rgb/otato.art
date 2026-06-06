@@ -73,32 +73,12 @@ type DragState = {
 
 type PanState = { startX: number; startY: number; initial: CanvasViewport };
 type UploadKind = "image" | "video" | "audio";
-type AssetKind = "text" | "image" | "video" | "audio";
-
 type MenuState =
   | { kind: "canvas"; x: number; y: number; world: CanvasPosition }
   | { kind: "node"; x: number; y: number; nodeId: string }
   | { kind: "connection"; x: number; y: number; connectionId: string }
   | null;
 
-type AssetDrawerState = { open: boolean; insertAt: CanvasPosition | null };
-
-type TextAsset = {
-  id: string;
-  title: string;
-  text: string;
-  createdAt: string;
-};
-
-type AssetItem = {
-  id: string;
-  kind: AssetKind;
-  title: string;
-  subtitle: string;
-  url?: string;
-  text?: string;
-  source: "gallery" | "canvas" | "local";
-};
 
 type CanvasImageGenerateResponse = {
   sourceNode: CanvasNode;
@@ -144,7 +124,6 @@ const GROUP_PAD = 28;
 const DRAG_THRESHOLD = 5;
 const PORT_SNAP_RADIUS = 80;
 const GRID_SIZE = 32;
-const CANVAS_EXPORT_VERSION = 1;
 const TEXT_ASSET_STORAGE_KEY = "gleam-canvas-text-assets";
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
@@ -429,20 +408,6 @@ function nodeTypeColor(type: CanvasNodeType) {
   return "#6ee7b7";
 }
 
-function sanitizeImportedBoard(value: unknown): CanvasBoardData | null {
-  if (!value || typeof value !== "object") return null;
-  const maybeWrapper = value as { board?: unknown };
-  const board = maybeWrapper.board && typeof maybeWrapper.board === "object" ? maybeWrapper.board : value;
-  const data = board as Partial<CanvasBoardData>;
-  if (!Array.isArray(data.nodes) || !Array.isArray(data.connections) || !data.viewport) return null;
-  return {
-    nodes: data.nodes,
-    connections: data.connections,
-    viewport: data.viewport,
-    snapToGrid: data.snapToGrid === true,
-  };
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CanvasBoardPage() {
@@ -466,7 +431,6 @@ export default function CanvasBoardPage() {
   const canvasPendingRef = useRef<CanvasPending | null>(null);
   const menuWorldRef = useRef<CanvasPosition | null>(null);
   const minimapRef = useRef<HTMLDivElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
   const nodesRef = useRef<CanvasNode[]>([]);
   const connectionsRef = useRef<CanvasConnection[]>([]);
   const connectionDraftRef = useRef<ConnectionDraft | null>(null);
@@ -499,16 +463,8 @@ export default function CanvasBoardPage() {
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [assetDrawer, setAssetDrawer] = useState<AssetDrawerState>({ open: false, insertAt: null });
-  const [assetQuery, setAssetQuery] = useState("");
-  const [imageAssets, setImageAssets] = useState<ImageGalleryRecord[]>([]);
-  const [videoAssets, setVideoAssets] = useState<VideoGalleryRecord[]>([]);
-  const [textAssets, setTextAssets] = useState<TextAsset[]>([]);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
-  const [assetLoading, setAssetLoading] = useState(false);
-  const [assetError, setAssetError] = useState("");
-  const [assetNotice, setAssetNotice] = useState("");
   /** Whether Space key is held — drives cursor CSS class */
   const [spacePanMode, setSpacePanMode] = useState(false);
   /** Whether pointer is actively panning */
@@ -634,37 +590,6 @@ export default function CanvasBoardPage() {
     };
   }, [videoSettings]);
 
-  const loadTextAssets = useCallback(() => {
-    try {
-      const raw = window.localStorage.getItem(TEXT_ASSET_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setTextAssets(Array.isArray(parsed) ? parsed.filter((item): item is TextAsset => (
-        item &&
-        typeof item.id === "string" &&
-        typeof item.title === "string" &&
-        typeof item.text === "string" &&
-        typeof item.createdAt === "string"
-      )) : []);
-    } catch {
-      setTextAssets([]);
-    }
-  }, []);
-
-  const saveTextAssets = useCallback((items: TextAsset[]) => {
-    setTextAssets(items);
-    window.localStorage.setItem(TEXT_ASSET_STORAGE_KEY, JSON.stringify(items.slice(0, 80)));
-  }, []);
-
-  const openAssetDrawer = useCallback((insertAt: CanvasPosition | null = null) => {
-    setAssetDrawer({ open: true, insertAt });
-    setAssetNotice("");
-  }, []);
-
-  const closeAssetDrawer = useCallback(() => {
-    setAssetDrawer({ open: false, insertAt: null });
-    setAssetQuery("");
-  }, []);
-
   const handleCanvasWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("textarea,input,select,video,audio,[data-canvas-no-zoom]")) return;
@@ -731,10 +656,6 @@ export default function CanvasBoardPage() {
   }, [boardId, setSnapToGridBoth, setViewportBoth]);
 
   useEffect(() => {
-    loadTextAssets();
-  }, [loadTextAssets]);
-
-  useEffect(() => {
     let cancelled = false;
     void fetchWorkspaceSnapshot()
       .then((snapshot) => {
@@ -754,25 +675,6 @@ export default function CanvasBoardPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!assetDrawer.open) return;
-    let cancelled = false;
-    setAssetLoading(true);
-    setAssetError("");
-    Promise.all([
-      fetchGalleryRecords().catch(() => [] as ImageGalleryRecord[]),
-      fetchVideoGalleryRecords().catch(() => [] as VideoGalleryRecord[]),
-    ]).then(([images, videos]) => {
-      if (cancelled) return;
-      setImageAssets(images);
-      setVideoAssets(videos);
-    }).catch((e) => {
-      if (!cancelled) setAssetError(e instanceof Error ? e.message : "素材库加载失败");
-    }).finally(() => {
-      if (!cancelled) setAssetLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [assetDrawer.open]);
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1455,94 +1357,6 @@ export default function CanvasBoardPage() {
     markDirty();
   }, [markDirty]);
 
-  const insertAsset = useCallback((asset: AssetItem) => {
-    const target = assetDrawer.insertAt ?? worldCenter();
-    if (asset.kind === "text") {
-      appendNode({
-        ...makeTextNode(target),
-        title: asset.title || "文本素材",
-        metadata: { text: asset.text ?? "" },
-      });
-      closeAssetDrawer();
-      return;
-    }
-    if (!asset.url) return;
-    appendNode(makeMediaNodeFromAsset(target, asset.kind, { url: asset.url, title: asset.title }));
-    closeAssetDrawer();
-  }, [appendNode, assetDrawer.insertAt, closeAssetDrawer, worldCenter]);
-
-  const saveNodeToAssets = useCallback(async (nodeId: string) => {
-    const node = nodesRef.current.find((n) => n.id === nodeId);
-    if (!node) return;
-    setAssetNotice("");
-    try {
-      if (node.type === "text") {
-        const text = node.metadata?.text?.trim();
-        if (!text) {
-          setAssetNotice("文本节点为空，未保存");
-          return;
-        }
-        const next: TextAsset = {
-          id: `text-asset-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          title: node.title || "文本素材",
-          text,
-          createdAt: new Date().toISOString(),
-        };
-        saveTextAssets([next, ...textAssets.filter((item) => item.text !== text)]);
-        setAssetNotice("已保存为文本素材");
-        return;
-      }
-      if (node.type === "image" && node.metadata?.imageUrl) {
-        const record: ImageGalleryRecord = {
-          id: `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          createdAt: new Date().toISOString(),
-          modeId: "canvas",
-          modeName: "无限画布",
-          modelId: "gpt-image-2",
-          modelName: "canvas asset",
-          finalPrompt: node.title,
-          userInput: node.title,
-          aspectRatio: "auto",
-          imageSize: "1K",
-          imageUrl: node.metadata.imageUrl,
-          refImageCount: 0,
-          status: "success",
-        };
-        const records = await prependGalleryRecordApi(record);
-        setImageAssets(records);
-        setAssetNotice("图片已加入素材库");
-        return;
-      }
-      if (node.type === "video" && node.metadata?.videoUrl) {
-        const record: VideoGalleryRecord = {
-          id: `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          createdAt: new Date().toISOString(),
-          modelId: node.metadata.videoModelId ?? "seedance-2.0",
-          modelName: "canvas asset",
-          modeId: node.metadata.videoModeId ?? "text_to_video",
-          modeName: VIDEO_MODE_LABELS[node.metadata.videoModeId ?? "text_to_video"],
-          finalPrompt: node.title,
-          aspectRatio: node.metadata.videoAspectRatio ?? "16:9",
-          durationSeconds: node.metadata.videoDurationSeconds ?? 5,
-          resolution: node.metadata.videoResolution ?? "1080p",
-          videoUrl: node.metadata.videoUrl,
-          status: "success",
-        };
-        const records = await prependVideoGalleryRecordApi(record);
-        setVideoAssets(records);
-        setAssetNotice("视频已加入素材库");
-        return;
-      }
-      if (node.type === "audio" && node.metadata?.audioUrl) {
-        setAssetNotice("音频已在当前画布素材库可用");
-        return;
-      }
-      setAssetNotice("当前节点不能加入素材库");
-    } catch {
-      setAssetNotice("加入素材库失败");
-    }
-  }, [saveTextAssets, textAssets]);
-
   const runImageGenNode = useCallback(async (nodeId: string) => {
     const targetNode = nodesRef.current.find((node) => node.id === nodeId);
     if (!targetNode || targetNode.type !== "image") return;
@@ -1639,52 +1453,6 @@ export default function CanvasBoardPage() {
       setAssetNotice("");
     }
   }, [boardId, markDirty, updateVideoGenNodeSettings]);
-
-  const exportCanvas = useCallback(() => {
-    const payload = {
-      version: CANVAS_EXPORT_VERSION,
-      exportedAt: new Date().toISOString(),
-      board: { title, nodes, connections, viewport, snapToGrid } satisfies CanvasBoardData & { title: string },
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title.trim() || "canvas"}-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [connections, nodes, snapToGrid, title, viewport]);
-
-  const importCanvasFile = useCallback(async (file?: File) => {
-    if (!file) return;
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      const data = sanitizeImportedBoard(parsed);
-      if (!data) throw new Error("invalid");
-      const importedTitle =
-        parsed && typeof parsed === "object" && "board" in parsed && parsed.board && typeof parsed.board === "object" && "title" in parsed.board && typeof parsed.board.title === "string"
-          ? `导入 - ${parsed.board.title}`
-          : `导入 - ${title}`;
-      const createRes = await fetch("/api/canvas-boards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: importedTitle }),
-      });
-      if (!createRes.ok) throw new Error("create_failed");
-      const created = (await createRes.json()) as CanvasBoard;
-      const putRes = await fetch(`/api/canvas-boards/${created.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: importedTitle, data }),
-      });
-      if (!putRes.ok) throw new Error("save_failed");
-      router.push(`/canvas/${created.id}`);
-    } catch {
-      setSaveStatus("error");
-    } finally {
-      if (importInputRef.current) importInputRef.current.value = "";
-    }
-  }, [router, title]);
 
   const focusNode = useCallback((node: CanvasNode) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -1844,75 +1612,6 @@ export default function CanvasBoardPage() {
     return { x: minX - pad, y: minY - pad, width: (maxX - minX) + pad * 2, height: (maxY - minY) + pad * 2 };
   }, [hasMultiSelection, selectedNodes]);
 
-  const assetItems = useMemo<AssetItem[]>(() => {
-    const images: AssetItem[] = imageAssets
-      .filter((record) => record.status === "success" && Boolean(record.imageUrl))
-      .map((record) => ({
-        id: `gallery-image-${record.id}`,
-        kind: "image",
-        title: record.modeName || "图片素材",
-        subtitle: record.modelName || record.createdAt,
-        url: record.imageUrl,
-        source: "gallery",
-      }));
-    const videos: AssetItem[] = videoAssets
-      .filter((record) => record.status === "success" && Boolean(record.videoUrl))
-      .map((record) => ({
-        id: `gallery-video-${record.id}`,
-        kind: "video",
-        title: record.modeName || "视频素材",
-        subtitle: record.modelName || record.createdAt,
-        url: record.videoUrl,
-        source: "gallery",
-      }));
-    const texts: AssetItem[] = textAssets.map((item) => ({
-      id: item.id,
-      kind: "text",
-      title: item.title,
-      subtitle: "文本素材",
-      text: item.text,
-      source: "local",
-    }));
-    const canvasAssets: AssetItem[] = nodes.flatMap<AssetItem>((node) => {
-      if (node.type === "image" && node.metadata?.imageUrl) {
-        return [{
-          id: `canvas-image-${node.id}`,
-          kind: "image" as const,
-          title: node.title || "画布图片",
-          subtitle: "当前画布",
-          url: node.metadata.imageUrl,
-          source: "canvas" as const,
-        }];
-      }
-      if (node.type === "video" && node.metadata?.videoUrl) {
-        return [{
-          id: `canvas-video-${node.id}`,
-          kind: "video" as const,
-          title: node.title || "画布视频",
-          subtitle: "当前画布",
-          url: node.metadata.videoUrl,
-          source: "canvas" as const,
-        }];
-      }
-      if (node.type === "audio" && node.metadata?.audioUrl) {
-        return [{
-          id: `canvas-audio-${node.id}`,
-          kind: "audio" as const,
-          title: node.title || "画布音频",
-          subtitle: "当前画布",
-          url: node.metadata.audioUrl,
-          source: "canvas" as const,
-        }];
-      }
-      return [];
-    });
-    const q = assetQuery.trim().toLowerCase();
-    return [...images, ...videos, ...texts, ...canvasAssets].filter((item) => {
-      if (!q) return true;
-      return `${item.title} ${item.subtitle} ${item.text ?? ""}`.toLowerCase().includes(q);
-    });
-  }, [assetQuery, imageAssets, nodes, textAssets, videoAssets]);
-
   const minimap = useMemo(() => {
     const rect = containerRef.current?.getBoundingClientRect();
     const width = 196;
@@ -1998,9 +1697,6 @@ export default function CanvasBoardPage() {
         </div>
         <nav className={shellStyles.topnav}>
           <span className={shellStyles.plainDockText}>{saveLabel}</span>
-          <button type="button" className={shellStyles.navLink} onClick={() => openAssetDrawer(null)}>素材库</button>
-          <button type="button" className={shellStyles.navLink} onClick={exportCanvas}>导出</button>
-          <button type="button" className={shellStyles.navLink} onClick={() => importInputRef.current?.click()}>导入</button>
         </nav>
       </header>
 
@@ -2252,7 +1948,6 @@ export default function CanvasBoardPage() {
                         </>
                       ) : (
                         <>
-                          <button type="button" title="加入素材库" onClick={() => void saveNodeToAssets(node.id)}>入库</button>
                           <button type="button" title="下载" onClick={() => downloadNodeMedia(node)}>下载</button>
                           <button type="button" title="放大" onClick={() => openNodeMedia(node)}>放大</button>
                         </>
@@ -2613,7 +2308,6 @@ export default function CanvasBoardPage() {
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); imageInputRef.current?.click(); }}>上传图片</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); videoInputRef.current?.click(); }}>上传视频</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); audioInputRef.current?.click(); }}>上传音频</button>
-              <button type="button" onClick={() => { openAssetDrawer(menu.world); setMenu(null); }}>打开素材库</button>
               <div className={styles.uploadMenuDivider} />
               <button type="button" onClick={() => { appendImageNodeWithSelection(menu.world); setMenu(null); }}>图片节点</button>
               <button type="button" onClick={() => { appendNode(makeEmptyVideoNode(menu.world, currentVideoNodeDefaults())); setMenu(null); }}>视频节点</button>
@@ -2720,48 +2414,6 @@ export default function CanvasBoardPage() {
             </div>
           )}
 
-          {assetDrawer.open && (
-            <aside className={styles.assetDrawer} onPointerDown={(e) => e.stopPropagation()}>
-              <div className={styles.assetDrawerHeader}>
-                <div>
-                  <div className={styles.assetDrawerTitle}>素材库</div>
-                  <div className={styles.assetDrawerMeta}>{assetItems.length} 个可插入素材</div>
-                </div>
-                <button type="button" className={styles.toolbarIconBtn} onClick={closeAssetDrawer} aria-label="关闭素材库">×</button>
-              </div>
-              <input
-                className={styles.assetSearch}
-                value={assetQuery}
-                onChange={(e) => setAssetQuery(e.target.value)}
-                placeholder="搜索标题或模式名"
-              />
-              {assetNotice && <div className={styles.assetNotice}>{assetNotice}</div>}
-              {assetError && <div className={styles.assetNotice}>{assetError}</div>}
-              <div className={styles.assetList}>
-                {assetLoading ? <div className={styles.assetEmpty}>正在加载素材...</div> : assetItems.length ? assetItems.map((asset) => (
-                  <button key={asset.id} type="button" className={styles.assetItem} onClick={() => insertAsset(asset)}>
-                    <span className={styles.assetThumb}>
-                      {asset.kind === "image" && asset.url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={asset.url} alt={asset.title} />
-                      ) : asset.kind === "video" && asset.url ? (
-                        <video src={asset.url} muted playsInline />
-                      ) : asset.kind === "audio" ? (
-                        <span className={styles.assetTextThumb}>音</span>
-                      ) : (
-                        <span className={styles.assetTextThumb}>文</span>
-                      )}
-                    </span>
-                    <span className={styles.assetInfo}>
-                      <span className={styles.assetTitle}>{asset.title}</span>
-                      <span className={styles.assetSubtitle}>{asset.kind === "image" ? "图片" : asset.kind === "video" ? "视频" : asset.kind === "audio" ? "音频" : "文本"} · {asset.subtitle}</span>
-                    </span>
-                  </button>
-                )) : <div className={styles.assetEmpty}>暂无匹配素材</div>}
-              </div>
-            </aside>
-          )}
-
           {shortcutsOpen && (
             <div className={styles.shortcutModalBackdrop} onPointerDown={(e) => { e.stopPropagation(); setShortcutsOpen(false); }}>
               <div className={styles.shortcutModal} onPointerDown={(e) => e.stopPropagation()}>
@@ -2798,7 +2450,6 @@ export default function CanvasBoardPage() {
           <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
           <input ref={audioInputRef} type="file" accept="audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
           <input ref={mediaInputRef} type="file" accept="image/*,video/*,audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
-          <input ref={importInputRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importCanvasFile(e.target.files?.[0])} />
         </div>
       </section>
     </main>
