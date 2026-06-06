@@ -76,12 +76,11 @@ export function normalizeLlmSettings(value: unknown): Settings {
     return DEFAULT_SETTINGS;
   }
 
+  const row = value as Partial<Settings>;
   const maybeLegacy = value as LegacySettings;
-  if ("apiUrl" in maybeLegacy || "apiKey" in maybeLegacy || "model" in maybeLegacy) {
+  if (!("models" in row) && ("apiUrl" in maybeLegacy || "apiKey" in maybeLegacy || "model" in maybeLegacy)) {
     return migrateLegacySettings(maybeLegacy);
   }
-
-  const row = value as Partial<Settings>;
   const sourceModels = row.models && typeof row.models === "object" ? row.models : {};
   const defaults = DEFAULT_SETTINGS.models;
   const models = Object.fromEntries(
