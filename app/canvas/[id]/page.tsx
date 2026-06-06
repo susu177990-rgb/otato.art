@@ -1581,7 +1581,7 @@ export default function CanvasBoardPage() {
     backgroundPosition: `${viewport.x % gridSize}px ${viewport.y % gridSize}px`,
   };
 
-  const saveLabel = uploading ? "上传中" : saveStatus === "saving" ? "保存中" : saveStatus === "saved" ? "已保存" : saveStatus === "error" ? "保存失败" : "未保存";
+
   const hasSelection = selectedNodeIds.size > 0 || !!selectedConnectionId;
   const zoomPct = Math.round(viewport.k * 100);
   const worldStyle = useMemo(
@@ -1696,7 +1696,6 @@ export default function CanvasBoardPage() {
           </div>
         </div>
         <nav className={shellStyles.topnav}>
-          <span className={shellStyles.plainDockText}>{saveLabel}</span>
         </nav>
       </header>
 
