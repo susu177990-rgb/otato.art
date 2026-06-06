@@ -89,6 +89,20 @@ function normalizeNode(value: unknown): CanvasNode | null {
     height: Number.isFinite(height) && height > 0 ? height : fallbackHeight,
     metadata: {
       text: typeof metadata.text === "string" ? metadata.text : undefined,
+      textMode:
+        type === "text"
+          ? metadata.textMode === "chat" || metadata.textMode === "chooser"
+            ? "chat"
+            : "manual"
+          : undefined,
+      chatConversationId: type === "text" && typeof metadata.chatConversationId === "string" ? metadata.chatConversationId : undefined,
+      chatInput: type === "text" && typeof metadata.chatInput === "string" ? metadata.chatInput : undefined,
+      chatStatus: type === "text" ? normalizeTextNodeChatStatus(metadata.chatStatus) : undefined,
+      chatLastError: type === "text" && typeof metadata.chatLastError === "string" ? metadata.chatLastError : undefined,
+      chatPreferredLlmModelId: type === "text" && typeof metadata.chatPreferredLlmModelId === "string" ? metadata.chatPreferredLlmModelId : undefined,
+      chatPreferredImageModelId: type === "text" ? normalizeOptionalImageModelId(metadata.chatPreferredImageModelId) : undefined,
+      chatLastAssistantMessageId: type === "text" && typeof metadata.chatLastAssistantMessageId === "string" ? metadata.chatLastAssistantMessageId : undefined,
+      chatPreviewMarkdown: type === "text" && typeof metadata.chatPreviewMarkdown === "string" ? metadata.chatPreviewMarkdown : undefined,
       prompt: typeof metadata.prompt === "string" ? metadata.prompt : undefined,
       imageUrl: imageUrl && !isUnsafeMediaString(imageUrl) ? imageUrl : undefined,
       videoUrl: videoUrl && !isUnsafeMediaString(videoUrl) ? videoUrl : undefined,
@@ -120,6 +134,10 @@ function normalizeNode(value: unknown): CanvasNode | null {
 
 function normalizeImageModelId(value: unknown): ImageModelId {
   return IMAGE_MODEL_ORDER.includes(value as ImageModelId) ? (value as ImageModelId) : "gpt-image-2";
+}
+
+function normalizeOptionalImageModelId(value: unknown): ImageModelId | undefined {
+  return IMAGE_MODEL_ORDER.includes(value as ImageModelId) ? (value as ImageModelId) : undefined;
 }
 
 function normalizeVideoModelId(value: unknown): VideoModelId {
@@ -200,6 +218,12 @@ function normalizeVideoDurationSeconds(value: unknown): number {
 
 function normalizeImageNodeStatus(value: unknown): "idle" | "running" | "success" | "error" {
   return value === "running" || value === "success" || value === "error" ? value : "idle";
+}
+
+function normalizeTextNodeChatStatus(value: unknown): "idle" | "running" | "success" | "error" | undefined {
+  if (value === "running" || value === "success" || value === "error") return value;
+  if (value === "idle") return "idle";
+  return undefined;
 }
 
 function defaultNodeTitle(type: CanvasNode["type"]): string {

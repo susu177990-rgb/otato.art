@@ -93,10 +93,14 @@ export interface ChatConversation {
   attachments?: ConversationAttachmentEntry[];
   /** 对话 Agent 调用 generate_image 时的默认作图模型 */
   preferredImageModelId?: ImageModelId;
+  /** 当前会话记住的文本对话模型 */
+  preferredLlmModelId?: string | null;
 }
 
 export interface ChatApiConfig {
   presetId: string;
+  modelId?: string;
+  modelLabel?: string;
   modelName: string;
   endpointUrl: string;
   apiKey: string;

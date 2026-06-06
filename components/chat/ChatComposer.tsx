@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { ChatAttachment } from "@/lib/chat/types";
 import type { ChatMode } from "@/lib/chat/types";
 import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } from "@/lib/image-workspace";
+import type { Settings } from "@/lib/types";
 import imageStyles from "@/app/image/image-page.module.css";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-composer.module.css";
@@ -20,8 +21,15 @@ export function ChatComposer({
   imageWorkspace,
   selectedImageModelId,
   onImageModelChange,
+  llmSettings,
+  selectedLlmModelId,
+  onLlmModelChange,
   chatMode,
   onSetChatMode,
+  showAttachments = true,
+  showChatMode = true,
+  extraActions = null,
+  className,
 }: {
   inputText: string;
   onInputTextChange: (value: string) => void;
@@ -34,8 +42,15 @@ export function ChatComposer({
   imageWorkspace: ImageWorkspaceSettings;
   selectedImageModelId: ImageModelId;
   onImageModelChange: (id: ImageModelId) => void;
+  llmSettings: Settings;
+  selectedLlmModelId: string;
+  onLlmModelChange: (id: string) => void;
   chatMode: ChatMode;
   onSetChatMode: (mode: ChatMode) => void | Promise<void>;
+  showAttachments?: boolean;
+  showChatMode?: boolean;
+  extraActions?: React.ReactNode;
+  className?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLElement>(null);
@@ -60,7 +75,7 @@ export function ChatComposer({
   const canSend = Boolean(inputText.trim() || pendingAttachments.length > 0);
 
   return (
-    <section ref={wrapRef} className={imageStyles.composerWrap}>
+    <section ref={wrapRef} className={[imageStyles.composerWrap, className ?? ""].join(" ")}>
       {error ? <div className={imageStyles.error}>{error}</div> : null}
 
       <div
@@ -123,37 +138,56 @@ export function ChatComposer({
         </div>
 
         <div className={[imageStyles.toolbar, styles.toolbar].join(" ")}>
-          <label className={styles.addBtn} aria-label="添加附件">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className={imageStyles.hiddenInput}
-              disabled={isSending}
-              onChange={(e) => {
-                if (e.target.files?.length) void onAddFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <span className={styles.addPlus}>+</span>
-          </label>
-          <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
-            {(["prompt", "skill"] as const).map((mode) => {
-              const active = chatMode === mode;
-              const label = mode === "prompt" ? "常规模式" : "Skill 模式";
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => void onSetChatMode(mode)}
-                  className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].join(" ")}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          {showAttachments ? (
+            <label className={styles.addBtn} aria-label="添加附件">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className={imageStyles.hiddenInput}
+                disabled={isSending}
+                onChange={(e) => {
+                  if (e.target.files?.length) void onAddFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <span className={styles.addPlus}>+</span>
+            </label>
+          ) : null}
+          {showChatMode ? (
+            <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
+              {(["prompt", "skill"] as const).map((mode) => {
+                const active = chatMode === mode;
+                const label = mode === "prompt" ? "常规模式" : "Skill 模式";
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => void onSetChatMode(mode)}
+                    className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].join(" ")}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <div className={styles.modelGroup}>
+            <select
+              value={selectedLlmModelId}
+              disabled={isSending}
+              aria-label="对话模型"
+              className={[imageStyles.composerSelect, styles.modelSelect].join(" ")}
+              onChange={(e) => onLlmModelChange(e.target.value)}
+            >
+              {Object.values(llmSettings.models)
+                .filter((model) => model.enabled)
+                .map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+            </select>
             <select
               value={selectedImageModelId}
               disabled={isSending}
@@ -169,6 +203,7 @@ export function ChatComposer({
             </select>
           </div>
           <div className={styles.toolbarSpacer} />
+          {extraActions}
           <button
             type="button"
             className={imageStyles.generate}

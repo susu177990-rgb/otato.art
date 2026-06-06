@@ -53,6 +53,7 @@ export async function sendChatAgentTurn(
   conversationId: string,
   userMessage: ChatMessage,
   preferredImageModelId?: ImageModelId,
+  preferredLlmModelId?: string,
 ): Promise<ChatConversation> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHAT_AGENT_TIMEOUT_MS);
@@ -61,7 +62,7 @@ export async function sendChatAgentTurn(
     const res = await fetch("/api/chat/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, userMessage, preferredImageModelId }),
+      body: JSON.stringify({ conversationId, userMessage, preferredImageModelId, preferredLlmModelId }),
       signal: controller.signal,
     });
     if (!res.ok) {

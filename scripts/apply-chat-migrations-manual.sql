@@ -23,6 +23,19 @@ create policy chat_conversations_own on public.chat_conversations
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+alter table public.chat_conversations
+  add column if not exists chat_mode text not null default 'prompt'
+    check (chat_mode in ('skill', 'prompt'));
+
+alter table public.chat_conversations
+  add column if not exists selected_skill_pack_id text null;
+
+alter table public.chat_conversations
+  add column if not exists selected_chat_preset_id text null;
+
+alter table public.chat_conversations
+  add column if not exists preferred_llm_model_id text null;
+
 create table if not exists public.chat_skill_packs (
   id text primary key,
   user_id uuid not null references auth.users (id) on delete cascade,

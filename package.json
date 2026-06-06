@@ -18,6 +18,7 @@
     "lint": "eslint",
     "smoke:extract-stage5": "npx tsx lib/artifact-extract.stage5.smoke.ts",
     "smoke:canvas-connections": "npx tsx lib/canvas/connection-rules.smoke.ts",
+    "smoke:canvas-board-store": "npx tsx lib/canvas/board-store.smoke.ts",
     "smoke:video-workspace": "npx tsx lib/video-workspace.smoke.ts",
     "smoke:video-generation": "npx tsx lib/video-generation-service.smoke.ts",
     "smoke:asset-mentions": "npx tsx lib/asset-mentions.smoke.ts",

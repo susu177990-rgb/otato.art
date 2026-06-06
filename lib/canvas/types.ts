@@ -20,6 +20,15 @@ export type CanvasTargetPort = "source" | "prompt" | "imageReference" | "firstFr
 
 export type CanvasNodeMetadata = {
   text?: string;
+  textMode?: "chooser" | "chat" | "manual";
+  chatConversationId?: string;
+  chatInput?: string;
+  chatStatus?: "idle" | "running" | "success" | "error";
+  chatLastError?: string;
+  chatPreferredLlmModelId?: string;
+  chatPreferredImageModelId?: ImageModelId;
+  chatLastAssistantMessageId?: string;
+  chatPreviewMarkdown?: string;
   prompt?: string;
   imageUrl?: string;
   videoUrl?: string;

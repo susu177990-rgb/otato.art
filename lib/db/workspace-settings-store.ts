@@ -7,8 +7,7 @@ import {
   listSitePromptPresets,
   syncPromptLibraryFromWorkspaces,
 } from "@/lib/db/prompt-preset-store";
-import { normalizeModel } from "@/lib/model-presets";
-import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { normalizeLlmSettings } from "@/lib/llm-models";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 
@@ -19,12 +18,7 @@ export type WorkspaceSnapshot = {
 };
 
 function mergeLlmPartial(partial: unknown): Settings {
-  const m = partial && typeof partial === "object" ? (partial as Partial<Settings>) : {};
-  return {
-    apiUrl: pickNonEmptyTrimmed(m.apiUrl, DEFAULT_SETTINGS.apiUrl),
-    apiKey: pickNonEmptyTrimmed(m.apiKey, DEFAULT_SETTINGS.apiKey),
-    model: normalizeModel(pickNonEmptyTrimmed(m.model, DEFAULT_SETTINGS.model)),
-  };
+  return normalizeLlmSettings(partial ?? DEFAULT_SETTINGS);
 }
 
 export async function getWorkspaceSnapshot(supabase: SupabaseClient): Promise<WorkspaceSnapshot> {

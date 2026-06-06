@@ -46,7 +46,16 @@ type AssetMentionEditorProps = {
   placeholder?: string;
   "aria-label"?: string;
   onPointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  readOnly?: boolean;
 };
+
+function EditablePlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
+  return null;
+}
 
 class AssetMentionOption extends MenuOption {
   candidate?: AssetMentionCandidate;
@@ -265,8 +274,9 @@ export function AssetMentionEditor({
   placeholder,
   onPointerDown,
   "aria-label": ariaLabel,
+  readOnly = false,
 }: AssetMentionEditorProps) {
-  const [initialConfig] = useState(() => editorConfig(value));
+  const [initialConfig] = useState(() => ({ ...editorConfig(value), editable: !readOnly }));
   return (
     <div className={styles.editorShell} onPointerDown={onPointerDown}>
       <LexicalComposer initialConfig={initialConfig}>
@@ -279,6 +289,7 @@ export function AssetMentionEditor({
         <ValuePlugin onValueChange={onValueChange} />
         <SyncExternalValuePlugin value={value} />
         <AssetMentionTypeaheadPlugin candidates={candidates} />
+        <EditablePlugin editable={!readOnly} />
       </LexicalComposer>
     </div>
   );

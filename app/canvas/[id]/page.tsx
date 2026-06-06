@@ -2,15 +2,9 @@
 
 import Link from "next/link";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
-import {
-  fetchWorkspaceSnapshot,
-  fetchGalleryRecords,
-  fetchVideoGalleryRecords,
-  prependGalleryRecordApi,
-  prependVideoGalleryRecordApi,
-} from "@/lib/workspace-api";
+import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   DEFAULT_IMAGE_SETTINGS,
@@ -27,7 +21,6 @@ import {
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import {
   DEFAULT_VIDEO_SETTINGS,
-  VIDEO_MODE_LABELS,
   VIDEO_MODEL_ORDER,
   defaultModeForModel,
   getVideoCapabilities,
@@ -39,7 +32,11 @@ import {
   UI_VIDEO_MODES,
 } from "@/lib/video-workspace";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
+import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import type { AssetMentionCandidate, AssetMentionRole } from "@/lib/asset-mentions";
+import type { ChatConversation, ChatMessage } from "@/lib/chat/types";
+import type { Settings } from "@/lib/types";
+import { DEFAULT_SETTINGS } from "@/lib/types";
 import type {
   CanvasBoard,
   CanvasBoardData,
@@ -88,6 +85,11 @@ type CanvasImageGenerateResponse = {
 type CanvasVideoGenerateResponse = {
   sourceNode: CanvasNode;
   galleryRecord: VideoGalleryRecord;
+};
+
+type CanvasChatRunResponse = {
+  sourceNode: CanvasNode;
+  conversation: ChatConversation;
 };
 
 type ConnectionDraft = {
@@ -297,7 +299,30 @@ function newNodeId(type: CanvasNodeType) {
 }
 
 function makeTextNode(pos: CanvasPosition): CanvasNode {
-  return { id: newNodeId("text"), type: "text", title: "文本", position: { x: pos.x - 140, y: pos.y - 85 }, width: 280, height: 170, metadata: { text: "" } };
+  return {
+    id: newNodeId("text"),
+    type: "text",
+    title: "文本",
+    position: { x: pos.x - 140, y: pos.y - 140 },
+    width: 280,
+    height: 280,
+    metadata: {
+      text: "",
+      textMode: "chat",
+      chatInput: "",
+      chatStatus: "idle",
+      chatPreferredLlmModelId: DEFAULT_SETTINGS.defaultModelId,
+      chatPreviewMarkdown: "",
+    },
+  };
+}
+
+function textNodeOutput(node: CanvasNode): string | undefined {
+  if (node.type !== "text") return undefined;
+  if (node.metadata?.textMode === "chat") {
+    return node.metadata.chatPreviewMarkdown || node.metadata.text;
+  }
+  return node.metadata?.text;
 }
 
 function makeEmptyImageNode(
@@ -412,7 +437,6 @@ function nodeTypeColor(type: CanvasNodeType) {
 
 export default function CanvasBoardPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const boardId = params.id ?? "";
 
   // DOM refs
@@ -460,11 +484,13 @@ export default function CanvasBoardPage() {
   const [selectBox, setSelectBox] = useState<SelectBoxScreen>(null);
   const [quickAddBar, setQuickAddBar] = useState<QuickAddBar>(null);
   const [editingNodeTitleId, setEditingNodeTitleId] = useState<string | null>(null);
+  const [editingTextNodeId, setEditingTextNodeId] = useState<string | null>(null);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
+  const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
   /** Whether Space key is held — drives cursor CSS class */
   const [spacePanMode, setSpacePanMode] = useState(false);
   /** Whether pointer is actively panning */
@@ -507,7 +533,7 @@ export default function CanvasBoardPage() {
           description: conn.targetPort,
           thumbnailUrl: n.metadata?.previewImageUrl || n.metadata?.imageUrl,
           url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl,
-          text: n.metadata?.text,
+          text: textNodeOutput(n),
         }];
       });
   }, [nodes, connections, nodeMap]);
@@ -568,6 +594,7 @@ export default function CanvasBoardPage() {
     setMenu(null);
     setQuickAddBar(null);
     setEditingNodeTitleId(null);
+    setEditingTextNodeId(null);
   }, []);
 
   const currentImageNodeDefaults = useCallback(() => ({
@@ -662,12 +689,14 @@ export default function CanvasBoardPage() {
         if (!cancelled) {
           setImageSettings(snapshot.imageWorkspace);
           setVideoSettings(snapshot.videoWorkspace);
+          setLlmSettings(snapshot.llm);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setImageSettings(DEFAULT_IMAGE_SETTINGS);
           setVideoSettings(DEFAULT_VIDEO_SETTINGS);
+          setLlmSettings(DEFAULT_SETTINGS);
         }
       });
     return () => {
@@ -1125,6 +1154,22 @@ export default function CanvasBoardPage() {
     patchNode(nodeId, (node) => ({ ...node, metadata: { ...node.metadata, [key]: value } }));
   };
 
+  const updateTextNodeChatInput = useCallback((nodeId: string, value: string) => {
+    patchNode(nodeId, (node) => ({ ...node, metadata: { ...node.metadata, chatInput: value } }));
+  }, [patchNode]);
+
+  const switchTextNodeToManual = useCallback((nodeId: string) => {
+    patchNode(nodeId, (node) => ({
+      ...node,
+      metadata: {
+        ...node.metadata,
+        textMode: "manual",
+        text: node.metadata?.text ?? node.metadata?.chatPreviewMarkdown ?? "",
+      },
+    }));
+    setEditingTextNodeId(nodeId);
+  }, [patchNode]);
+
   const updateImageGenNodeSettings = useCallback((
     nodeId: string,
     patch: Partial<NonNullable<CanvasNode["metadata"]>>,
@@ -1447,6 +1492,92 @@ export default function CanvasBoardPage() {
       });
     }
   }, [boardId, markDirty, updateVideoGenNodeSettings]);
+
+  const runTextChatNode = useCallback(async (nodeId: string) => {
+    const targetNode = nodesRef.current.find((node) => node.id === nodeId);
+    if (!targetNode || targetNode.type !== "text") return;
+    const input = targetNode.metadata?.chatInput?.trim() ?? "";
+    if (!input) return;
+    const contextBlocks = connectionsRef.current
+      .filter((conn) => conn.toNodeId === nodeId && conn.targetPort === "prompt")
+      .map((conn) => nodesRef.current.find((node) => node.id === conn.fromNodeId))
+      .filter((node): node is CanvasNode => {
+        return Boolean(node) && node?.type === "text";
+      })
+      .map((node, index) => {
+        const text = textNodeOutput(node)?.trim();
+        return text ? `### 文本上下文 ${index + 1}：${node.title || node.id}\n\n${text}` : "";
+      })
+      .filter(Boolean);
+    const messageText = contextBlocks.length
+      ? `${contextBlocks.join("\n\n")}\n\n### 用户要求\n\n${input}`
+      : input;
+
+    patchNode(nodeId, (node) => ({
+      ...node,
+      metadata: {
+        ...node.metadata,
+        textMode: "chat",
+        chatStatus: "running",
+        chatLastError: undefined,
+      },
+    }));
+
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}-u`,
+      role: "user",
+      createdAt: Date.now(),
+      parts: [{ type: "text", text: messageText }],
+    };
+
+    try {
+      const res = await fetch("/api/canvas/chat-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          boardId,
+          nodeId,
+          userMessage,
+          preferredImageModelId: targetNode.metadata?.chatPreferredImageModelId,
+          preferredLlmModelId: targetNode.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId,
+        }),
+      });
+      let rawText = "";
+      try {
+        rawText = await res.text();
+      } catch {
+        rawText = "Failed to read response body";
+      }
+
+      let data: Partial<CanvasChatRunResponse> & { error?: string } = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        // Not JSON
+      }
+
+      if (!res.ok || !data.sourceNode || !data.conversation) {
+        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+      }
+
+      const nextNodes = nodesRef.current.map((n) => (n.id === nodeId ? data.sourceNode! : n));
+      setNodes(nextNodes);
+      nodesRef.current = nextNodes;
+      setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionId(null);
+      markDirty();
+    } catch (error) {
+      patchNode(nodeId, (node) => ({
+        ...node,
+        metadata: {
+          ...node.metadata,
+          textMode: "chat",
+          chatStatus: "error",
+          chatLastError: error instanceof Error ? error.message : "无线画布对话失败",
+        },
+      }));
+    }
+  }, [boardId, llmSettings.defaultModelId, markDirty, patchNode]);
 
   const focusNode = useCallback((node: CanvasNode) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -1950,7 +2081,144 @@ export default function CanvasBoardPage() {
 
                   {/* For image / video gen nodes: two separate visual cards (preview on top, composer below).
                       For all other types: the standard single nodeVisual box. */}
-                  {(node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
+                  {node.type === "text" && node.metadata?.textMode === "chat" ? (
+                    <>
+                      <div
+                        className={styles.textChatBox}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          const target = e.target as HTMLElement;
+                          if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
+                          e.stopPropagation();
+                          const cur = new Set(selectedNodeIds);
+                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                          startNodeDrag(node.id, e, cur);
+                        }}
+                      >
+                        {node.metadata?.chatPreviewMarkdown?.trim() ? (
+                          <div className={styles.textChatMarkdown}>
+                            <ChatMarkdown markdown={node.metadata.chatPreviewMarkdown} />
+                          </div>
+                        ) : (
+                          <div className={styles.textChatEmpty}>
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                              <path d="M8 6h8" />
+                              <path d="M8 10h8" />
+                              <path d="M8 14h5" />
+                              <rect x="5" y="3" width="14" height="18" rx="2" />
+                            </svg>
+                            <div className={styles.textChatTry}>
+                              <span>尝试：</span>
+                              <button type="button" onClick={() => switchTextNodeToManual(node.id)}>
+                                <span aria-hidden>▤</span>
+                                自己写内容
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {node.metadata?.chatStatus === "running" ? (
+                          <div className={styles.textChatRunning}>
+                            <span className={styles.generatorBtnSpinner} aria-hidden />
+                            正在生成回复
+                          </div>
+                        ) : null}
+                        {node.metadata?.chatStatus === "error" && node.metadata?.chatLastError ? (
+                          <div className={styles.textChatError}>{node.metadata.chatLastError}</div>
+                        ) : null}
+                      </div>
+                      <div className={styles.genComposerBox} onPointerDown={(e) => e.stopPropagation()} data-canvas-no-zoom>
+                        <textarea
+                          className={styles.generatorPrompt}
+                          value={node.metadata?.chatInput ?? ""}
+                          disabled={node.metadata?.chatStatus === "running"}
+                          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+                          aria-label="画布对话节点输入"
+                          onChange={(e) => updateTextNodeChatInput(node.id, e.currentTarget.value)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              void runTextChatNode(node.id);
+                            }
+                          }}
+                        />
+                        <div className={styles.generatorToolbar}>
+                          <select
+                            className={styles.generatorPill}
+                            value={node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId}
+                            disabled={node.metadata?.chatStatus === "running"}
+                            aria-label="画布对话模型"
+                            onChange={(e) => {
+                              const nextId = e.target.value;
+                              patchNode(node.id, (item) => ({
+                                ...item,
+                                metadata: { ...item.metadata, chatPreferredLlmModelId: nextId },
+                              }));
+                              const convId = node.metadata?.chatConversationId?.trim();
+                              if (!convId) return;
+                              void fetch(`/api/chat/conversations/${convId}`, { cache: "no-store" })
+                                .then((res) => res.json())
+                                .then((data: { conversation?: ChatConversation }) => {
+                                  const conversation = data.conversation;
+                                  if (!conversation) return;
+                                  return fetch(`/api/chat/conversations/${convId}`, {
+                                    method: "PUT",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      ...conversation,
+                                      preferredLlmModelId: nextId,
+                                      updatedAt: Date.now(),
+                                    }),
+                                  });
+                                })
+                                .catch(() => {});
+                            }}
+                          >
+                            {Object.values(llmSettings.models)
+                              .filter((model) => model.enabled)
+                              .map((model) => (
+                                <option key={model.id} value={model.id}>
+                                  {model.label}
+                                </option>
+                              ))}
+                          </select>
+                          <select
+                            className={styles.generatorPill}
+                            value={node.metadata?.chatPreferredImageModelId ?? "gpt-image-2"}
+                            disabled={node.metadata?.chatStatus === "running"}
+                            aria-label="画布对话生图模型"
+                            onChange={(e) => patchNode(node.id, (item) => ({
+                              ...item,
+                              metadata: { ...item.metadata, chatPreferredImageModelId: e.target.value as ImageModelId },
+                            }))}
+                          >
+                            {IMAGE_MODEL_ORDER.map((id) => (
+                              <option key={id} value={id}>
+                                {imageSettings.models[id]?.label ?? id}
+                              </option>
+                            ))}
+                          </select>
+                          <span className={styles.generatorPillLabel}>常规对话</span>
+                          <button
+                            type="button"
+                            className={styles.generatorRunButton}
+                            disabled={node.metadata?.chatStatus === "running" || !(node.metadata?.chatInput ?? "").trim()}
+                            onClick={() => void runTextChatNode(node.id)}
+                            aria-label="发送对话"
+                          >
+                            {node.metadata?.chatStatus === "running" ? (
+                              <span className={styles.generatorBtnSpinner} aria-hidden />
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                <path d="M4 12l8-8 8 8-1.41 1.41L13 7.83V20h-2V7.83l-5.59 5.58L4 12z" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
                     <>
                       {/* ── Top card: standalone preview box ── */}
                       <div
@@ -2193,23 +2461,39 @@ export default function CanvasBoardPage() {
                       onPointerDown={(e) => {
                         if (e.button !== 0) return;
                         const target = e.target as HTMLElement;
-                        if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
+                        if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
                         e.stopPropagation();
                         const cur = new Set(selectedNodeIds);
                         if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
                         startNodeDrag(node.id, e, cur);
                       }}
+                      onDoubleClick={(e) => {
+                        if (node.type === "text") {
+                          e.stopPropagation();
+                          setEditingTextNodeId(node.id);
+                        }
+                      }}
                     >
                       {node.type === "text" ? (
-                        <AssetMentionEditor
-                          className={styles.textNodeInput}
-                          value={node.metadata?.text ?? ""}
-                          placeholder="输入文本、提示词或分镜备注"
-                          placeholderClassName={styles.textNodePlaceholder}
-                          onValueChange={(newVal) => updateNodeMetadata(node.id, "text", newVal)}
-                          candidates={getCandidatesForNode(node.id)}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        />
+                        editingTextNodeId === node.id ? (
+                          <AssetMentionEditor
+                            className={styles.textNodeInput}
+                            value={node.metadata?.text ?? ""}
+                            placeholder="输入文本、提示词或分镜备注"
+                            placeholderClassName={styles.textNodePlaceholder}
+                            onValueChange={(newVal) => updateNodeMetadata(node.id, "text", newVal)}
+                            candidates={getCandidatesForNode(node.id)}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <div className={[styles.textNodeMarkdownPreview, styles.textNodePreview].join(" ")}>
+                            {node.metadata?.text?.trim() ? (
+                              <ChatMarkdown markdown={node.metadata.text} />
+                            ) : (
+                              <span className={styles.textNodeEmptyHint}>双击输入文本、提示词或分镜备注</span>
+                            )}
+                          </div>
+                        )
                       ) : node.type === "image" ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <div className={styles.imageFrame}>{node.metadata?.imageUrl && <img src={node.metadata.imageUrl} alt={node.title} draggable={false} />}</div>

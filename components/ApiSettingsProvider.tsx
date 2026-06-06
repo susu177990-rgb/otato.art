@@ -57,7 +57,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
 
     try {
       const snapshot = await fetchWorkspaceSnapshot();
-      setSettings(snapshot.llm);
+      setSettings(snapshot.llm ?? DEFAULT_SETTINGS);
       setImageWorkspace(snapshot.imageWorkspace);
       setVideoWorkspace(snapshot.videoWorkspace);
     } catch (e) {

@@ -17,6 +17,9 @@ alter table public.chat_conversations
 alter table public.chat_conversations
   add column if not exists selected_chat_preset_id text null;
 
+alter table public.chat_conversations
+  add column if not exists preferred_llm_model_id text null;
+
 update public.chat_conversations
 set selected_skill_pack_id = coalesce(selected_skill_pack_id, enabled_skill_pack_ids[1])
 where selected_skill_pack_id is null

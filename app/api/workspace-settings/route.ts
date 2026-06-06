@@ -26,7 +26,8 @@ export async function GET() {
     return NextResponse.json(snapshot);
   } catch (e) {
     console.error("[workspace-settings GET]", e);
-    return NextResponse.json({ error: "read_failed" }, { status: 500 });
+    const message = describeError(e);
+    return NextResponse.json({ error: message || "read_failed" }, { status: 500 });
   }
 }
 

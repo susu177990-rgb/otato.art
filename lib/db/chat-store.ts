@@ -32,6 +32,7 @@ function rowToConversation(row: {
   chat_mode?: string | null;
   selected_skill_pack_id?: string | null;
   selected_chat_preset_id?: string | null;
+  preferred_llm_model_id?: string | null;
   enabled_skill_pack_ids: string[] | null;
   updated_at: string;
 }): ChatConversation {
@@ -44,6 +45,7 @@ function rowToConversation(row: {
     chatMode: normalizeChatMode(row.chat_mode),
     selectedSkillPackId: normalizeSelectedSkillPackId(row.selected_skill_pack_id, row.enabled_skill_pack_ids),
     selectedChatPresetId: normalizeSelectedChatPresetId(row.selected_chat_preset_id),
+    preferredLlmModelId: row.preferred_llm_model_id?.trim() || null,
   };
 }
 
@@ -74,7 +76,7 @@ export async function getChatConversation(
   const { data, error } = await supabase
     .from("chat_conversations")
     .select(
-      "id, title, messages, attachments, chat_mode, selected_skill_pack_id, selected_chat_preset_id, enabled_skill_pack_ids, updated_at",
+      "id, title, messages, attachments, chat_mode, selected_skill_pack_id, selected_chat_preset_id, preferred_llm_model_id, enabled_skill_pack_ids, updated_at",
     )
     .eq("user_id", userId)
     .eq("id", id)
@@ -110,6 +112,7 @@ export async function createChatConversation(
     chatMode: "prompt",
     selectedSkillPackId: null,
     selectedChatPresetId: null,
+    preferredLlmModelId: null,
     attachments: [],
   };
 }
@@ -128,6 +131,7 @@ export async function saveChatConversation(
       chat_mode: conv.chatMode === "skill" ? "skill" : "prompt",
       selected_skill_pack_id: conv.selectedSkillPackId?.trim() || null,
       selected_chat_preset_id: conv.selectedChatPresetId?.trim() || null,
+      preferred_llm_model_id: conv.preferredLlmModelId?.trim() || null,
       enabled_skill_pack_ids: conv.selectedSkillPackId?.trim() ? [conv.selectedSkillPackId.trim()] : null,
       updated_at: new Date(conv.updatedAt).toISOString(),
     })

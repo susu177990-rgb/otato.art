@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { ChatComposer } from "@/components/chat/ChatComposer";
+import { useSearchParams } from "next/navigation";
 import { ChatPromptPresetRail } from "@/components/chat/ChatPromptPresetRail";
 import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
@@ -181,7 +182,9 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 export function ChatWorkspace() {
-  const { workspaceReady, imageWorkspace } = useApiSettings();
+  const searchParams = useSearchParams();
+  const requestedConversationId = searchParams.get("conversationId");
+  const { settings: llmSettings, workspaceReady, imageWorkspace } = useApiSettings();
   const [summaries, setSummaries] = useState<ChatConversationSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
@@ -194,6 +197,7 @@ export function ChatWorkspace() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [selectedImageModelId, setSelectedImageModelId] = useState<ImageModelId>("gpt-image-2");
+  const [selectedLlmModelId, setSelectedLlmModelId] = useState<string>(llmSettings.defaultModelId);
   const [isSavingSkill, setIsSavingSkill] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [skillRunResult, setSkillRunResult] = useState<SkillFormRunResult | null>(null);
@@ -222,8 +226,12 @@ export function ChatWorkspace() {
     setSummaries(convs);
     setSkillPacks(packsRes.skillPacks);
     setChatPromptPresets(promptPresets);
-    if (!activeId && convs[0]) setActiveId(convs[0].id);
-  }, [activeId]);
+    if (requestedConversationId && convs.some((conv) => conv.id === requestedConversationId)) {
+      setActiveId(requestedConversationId);
+    } else if (!activeId && convs[0]) {
+      setActiveId(convs[0].id);
+    }
+  }, [activeId, requestedConversationId]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -302,6 +310,14 @@ export function ChatWorkspace() {
     }
   }, [conversation?.preferredImageModelId, activeId]);
 
+  useEffect(() => {
+    if (conversation?.preferredLlmModelId) {
+      setSelectedLlmModelId(conversation.preferredLlmModelId);
+    } else {
+      setSelectedLlmModelId(llmSettings.defaultModelId);
+    }
+  }, [conversation?.preferredLlmModelId, llmSettings.defaultModelId]);
+
   const handleImageModelChange = (id: ImageModelId) => {
     setSelectedImageModelId(id);
     if (!conversation || conversation.id !== activeIdRef.current) return;
@@ -309,6 +325,16 @@ export function ChatWorkspace() {
     setConversation(updated);
     void saveChatConversation(updated).catch((e) =>
       setError(e instanceof Error ? e.message : "保存生图模型选择失败"),
+    );
+  };
+
+  const handleLlmModelChange = (id: string) => {
+    setSelectedLlmModelId(id);
+    if (!conversation || conversation.id !== activeIdRef.current) return;
+    const updated = { ...conversation, preferredLlmModelId: id, updatedAt: Date.now() };
+    setConversation(updated);
+    void saveChatConversation(updated).catch((e) =>
+      setError(e instanceof Error ? e.message : "保存对话模型选择失败"),
     );
   };
 
@@ -595,7 +621,7 @@ export function ChatWorkspace() {
       if (!convId || !conv) {
         const created = await createChatConversation();
         convId = created.id;
-        conv = created;
+        conv = { ...created, preferredLlmModelId: selectedLlmModelId };
         activeIdRef.current = created.id;
         setSummaries((prev) => [{ id: created.id, title: created.title, updatedAt: created.updatedAt }, ...prev]);
       }
@@ -604,6 +630,7 @@ export function ChatWorkspace() {
       const optimistic: ChatConversation = {
         ...conv,
         messages: [...conv.messages, userMessage],
+        preferredLlmModelId: conv.preferredLlmModelId ?? selectedLlmModelId,
         updatedAt: Date.now(),
       };
       setConversation(optimistic);
@@ -611,7 +638,7 @@ export function ChatWorkspace() {
         setActiveId(sendConvId);
       }
 
-      const updated = await sendChatAgentTurn(sendConvId, userMessage, imageModelForTurn);
+      const updated = await sendChatAgentTurn(sendConvId, userMessage, imageModelForTurn, selectedLlmModelId);
 
       if (activeIdRef.current !== sendConvId) {
         setError("回复已生成，但你已切换到其他会话，请切回该会话查看。");
@@ -713,6 +740,9 @@ export function ChatWorkspace() {
           imageWorkspace={imageWorkspace}
           selectedImageModelId={selectedImageModelId}
           onImageModelChange={handleImageModelChange}
+          llmSettings={llmSettings}
+          selectedLlmModelId={selectedLlmModelId}
+          onLlmModelChange={handleLlmModelChange}
           chatMode={chatMode}
           onSetChatMode={(mode) =>
             void setChatModeValue(mode).catch((e) =>

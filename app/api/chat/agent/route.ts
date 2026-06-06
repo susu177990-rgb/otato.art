@@ -43,6 +43,7 @@ type AgentBody = {
   conversationId: string;
   userMessage: ChatMessage;
   preferredImageModelId?: ImageModelId;
+  preferredLlmModelId?: string;
 };
 
 export async function POST(req: Request) {
@@ -62,7 +63,8 @@ export async function POST(req: Request) {
     if (!conv) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
 
     const snapshot = await getWorkspaceSnapshot(supabase);
-    const chatApiConfig = llmToChatApiConfig(snapshot.llm);
+    const preferredLlmModelId = body.preferredLlmModelId?.trim() || conv.preferredLlmModelId || null;
+    const chatApiConfig = llmToChatApiConfig(snapshot.llm, preferredLlmModelId);
     const skillPacks = await listSiteSkillPacks(supabase);
     const chatPromptPresets = await listSitePromptPresetsByKind(supabase, "chat");
     const skillBlocks =
@@ -112,6 +114,7 @@ export async function POST(req: Request) {
       messages: [...messagesForApi, ...newMsgs],
       attachments: mergedAttachments,
       preferredImageModelId,
+      preferredLlmModelId,
       updatedAt: Date.now(),
     };
 
@@ -134,6 +137,6 @@ export async function POST(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "agent_failed";
     console.error("[chat/agent POST]", e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message || "agent_failed" }, { status: 500 });
   }
 }

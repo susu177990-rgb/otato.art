@@ -14,6 +14,7 @@ export const TARGET_PORT_LABELS: Record<CanvasTargetPort, string> = {
 export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
   switch (node.type) {
     case "text":
+      return node.metadata?.textMode === "chat" ? ["prompt"] : [];
     case "audio":
       return [];
     case "image":
@@ -74,6 +75,14 @@ export function inferTargetPort(
 ): { targetPort: CanvasTargetPort | null; reason?: string } {
   if (from.id === to.id) return { targetPort: null, reason: "不能连接到自身" };
   if (from.type === "group" || to.type === "group") return { targetPort: null, reason: "素材组暂不参与连线" };
+
+  if (to.type === "text") {
+    if (to.metadata?.textMode !== "chat") return { targetPort: null, reason: "手写文本节点不接收输入" };
+    if (from.type !== "text") return { targetPort: null, reason: "对话文本节点只接收文本上下文" };
+    return connectionExists(connections, from.id, to.id, "prompt")
+      ? { targetPort: null, reason: "该文本上下文已连接" }
+      : { targetPort: "prompt" };
+  }
 
   if (to.type === "image" && to.metadata?.source !== "upload") {
     const targetPort = from.type === "text" ? "prompt" : from.type === "image" ? "imageReference" : null;

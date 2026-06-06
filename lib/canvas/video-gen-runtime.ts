@@ -46,7 +46,12 @@ function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof re
     .map((conn) => board.nodes.find((item) => item.id === conn.fromNodeId))
     .filter((item): item is CanvasNode => Boolean(item))
     .filter((item) => item.type === "text")
-    .map((item) => item.metadata?.text?.trim() ?? "")
+    .map((item) =>
+      (item.metadata?.textMode === "chat"
+        ? item.metadata.chatPreviewMarkdown || item.metadata.text
+        : item.metadata?.text
+      )?.trim() ?? "",
+    )
     .filter(Boolean);
 
   const parts = [cleanedPrompt, ...connectedPrompts].filter(Boolean);

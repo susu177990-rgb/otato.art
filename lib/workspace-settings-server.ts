@@ -2,8 +2,7 @@ import fs from "fs";
 import path from "path";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
-import { normalizeModel } from "@/lib/model-presets";
-import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { normalizeLlmSettings } from "@/lib/llm-models";
 import { mergeImageSettings, type ImageWorkspaceSettings } from "@/lib/image-workspace";
 
 /** 仓库根目录下的项目级设置（可提交 Git；换浏览器/换机器后仍以仓库为准） */
@@ -20,12 +19,7 @@ export function workspaceSettingsPath(): string {
 }
 
 export function mergeLlmFromWorkspaceFile(partial: Partial<Settings> | undefined): Settings {
-  const m = partial ?? {};
-  return {
-    apiUrl: pickNonEmptyTrimmed(m.apiUrl, DEFAULT_SETTINGS.apiUrl),
-    apiKey: pickNonEmptyTrimmed(m.apiKey, DEFAULT_SETTINGS.apiKey),
-    model: normalizeModel(pickNonEmptyTrimmed(m.model, DEFAULT_SETTINGS.model)),
-  };
+  return normalizeLlmSettings(partial ?? DEFAULT_SETTINGS);
 }
 
 export function parseWorkspaceSettingsFile(raw: string): WorkspaceSettingsFileV1 | null {

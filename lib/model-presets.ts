@@ -19,5 +19,5 @@ export function isQuickModel(v: string): v is ModelQuickValue {
 /** 裁剪空白；空字符串时回落到全局默认模型（保留用户自定义模型 id） */
 export function normalizeModel(v: unknown): string {
   const s = typeof v === "string" ? v.trim() : "";
-  return s || DEFAULT_SETTINGS.model;
+  return s || DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId].modelName;
 }

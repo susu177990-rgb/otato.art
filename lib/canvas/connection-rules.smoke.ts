@@ -15,6 +15,7 @@ function node(id: string, type: CanvasNode["type"], metadata?: CanvasNode["metad
 }
 
 const text = node("text", "text");
+const chatText = node("chatText", "text", { textMode: "chat", chatPreviewMarkdown: "# Prompt" });
 const image = node("image", "image", { source: "upload" });
 const image2 = node("image2", "image");
 const video = node("video", "video", { source: "upload" });
@@ -32,12 +33,14 @@ assert.deepEqual(getTargetPorts(videoPromptOnly), ["prompt"]);
 assert.deepEqual(getTargetPorts(videoRefGen), ["prompt", "imageReference", "videoReference"]);
 assert.deepEqual(getTargetPorts(motionVideoGen), ["prompt", "firstFrame", "videoReference"]);
 assert.deepEqual(getTargetPorts(text), []);
+assert.deepEqual(getTargetPorts(chatText), ["prompt"]);
 assert.deepEqual(getTargetPorts(image), []);
 assert.deepEqual(getTargetPorts(video), []);
 assert.deepEqual(getTargetPorts(audio), []);
 assert.deepEqual(getTargetPorts(group), []);
 
 assert.equal(inferTargetPort(text, imageGen).targetPort, "prompt");
+assert.equal(inferTargetPort(chatText, imageGen).targetPort, "prompt");
 assert.equal(inferTargetPort(image, imageGen).targetPort, "imageReference");
 assert.equal(inferTargetPort(video, imageGen).targetPort, null);
 assert.equal(inferTargetPort(audio, imageGen).targetPort, null);
@@ -57,6 +60,8 @@ const lastFrame = makeCanvasConnection("c2", imageGen.id, videoGen.id, "lastFram
 assert.equal(inferTargetPort(node("image3", "image"), videoGen, [firstFrame, lastFrame]).targetPort, null);
 
 assert.equal(isConnectionAllowed(text, imageGen, "prompt"), true);
+assert.equal(isConnectionAllowed(text, chatText, "prompt"), true);
+assert.equal(isConnectionAllowed(chatText, text, "prompt"), false);
 assert.equal(isConnectionAllowed(text, imageGen, "imageReference"), false);
 assert.equal(isConnectionAllowed(video, motionVideoGen, "videoReference"), true);
 assert.equal(isConnectionAllowed(video, videoRefGen, "videoReference"), true);
