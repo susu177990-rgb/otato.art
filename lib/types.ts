@@ -5,7 +5,19 @@ import { BAKED_LLM_SETTINGS } from "./baked-api-defaults";
  * 用于编剧室对话、策划对齐、英语 Locale 简报等所有文本大模型能力；默认值见 {@link BAKED_LLM_SETTINGS}，
  * localStorage 为空字段时回落到源码内置配置。
  */
+export interface LlmModelConfig {
+  id: string;
+  label: string;
+  modelName: string;
+  enabled: boolean;
+  apiUrl: string;
+  apiKey: string;
+}
+
 export interface Settings {
+  defaultModelId: string;
+  models: Record<string, LlmModelConfig>;
+  /** legacy compatibility */
   apiUrl: string;
   apiKey: string;
   model: string;
@@ -115,8 +127,21 @@ export interface ProjectSummary {
   seriesBibleFilled?: boolean;
 }
 
+export const DEFAULT_LLM_MODEL_ID = "default-gpt-5-4";
+
 /** LLM 默认值：见 {@link BAKED_LLM_SETTINGS} */
 export const DEFAULT_SETTINGS: Settings = {
+  defaultModelId: DEFAULT_LLM_MODEL_ID,
+  models: {
+    [DEFAULT_LLM_MODEL_ID]: {
+      id: DEFAULT_LLM_MODEL_ID,
+      label: BAKED_LLM_SETTINGS.model,
+      modelName: BAKED_LLM_SETTINGS.model,
+      enabled: true,
+      apiUrl: BAKED_LLM_SETTINGS.apiUrl,
+      apiKey: BAKED_LLM_SETTINGS.apiKey,
+    },
+  },
   apiUrl: BAKED_LLM_SETTINGS.apiUrl,
   apiKey: BAKED_LLM_SETTINGS.apiKey,
   model: BAKED_LLM_SETTINGS.model,
