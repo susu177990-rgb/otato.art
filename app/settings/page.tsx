@@ -10,6 +10,7 @@ import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { normalizeModel } from "@/lib/model-presets";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
+import { normalizeLlmSettings } from "@/lib/llm-models";
 import {
   deleteImageModeCover,
   deleteVideoModeCover,
@@ -128,7 +129,7 @@ function SettingsPageInner() {
   }, [workspaceReady]);
 
   async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings, video: VideoWorkspaceSettings) {
-    const normalizedLlm = { ...llm, model: normalizeModel(llm.model) };
+    const normalizedLlm = normalizeLlmSettings(llm);
     await saveWorkspaceSnapshot({ llm: normalizedLlm, imageWorkspace: image, videoWorkspace: video });
     await refreshWorkspace();
   }
@@ -144,8 +145,10 @@ function SettingsPageInner() {
         : videoSettings;
     setImageSettings(mergedImage);
     setVideoSettings(mergedVideo);
+    const normalizedLlm = normalizeLlmSettings(llmSettings);
+    setLlmSettings(normalizedLlm);
     try {
-      await persistWorkspace(llmSettings, mergedImage, mergedVideo);
+      await persistWorkspace(normalizedLlm, mergedImage, mergedVideo);
       setSavedMessage("已保存到云端");
     } catch (error) {
       const message = error instanceof Error ? error.message.trim() : "";
@@ -477,53 +480,174 @@ function LlmApiPanel({
   value: Settings;
   onChange: (next: Settings) => void;
 }) {
+  const modelList = Object.values(value.models);
+
+  const addModel = () => {
+    const id = `llm-${Date.now().toString(36)}`;
+    onChange({
+      ...value,
+      models: {
+        ...value.models,
+        [id]: {
+          id,
+          label: "新模型",
+          modelName: "",
+          enabled: true,
+          apiUrl: "",
+          apiKey: "",
+        },
+      },
+    });
+  };
+
   return (
-    <section className={styles.panel}>
+    <section className={[styles.panel, styles.apiCardGrid].join(" ")}>
       <div className={settingsCardClass}>
         <div className={shellStyles.cardHead}>
           <div>
             <h2 className={shellStyles.cardTitle}>LLM API</h2>
             <p className={shellStyles.cardSubtitle}>
-              所有文本能力共用这一套接口。
+              对话系统使用这里的模型池。
             </p>
           </div>
-        </div>
-
-        <div className={shellStyles.row}>
-          <label className={[shellStyles.field, shellStyles.rowFull].join(" ")}>
-            <span className={shellStyles.fieldLabel}>API URL</span>
-            <input
-              className={shellStyles.input}
-              value={value.apiUrl}
-              onChange={(e) => onChange({ ...value, apiUrl: e.target.value })}
-              placeholder="https://.../v1/chat/completions"
-            />
-          </label>
-
-          <label className={shellStyles.field}>
-            <span className={shellStyles.fieldLabel}>API Key</span>
-            <input
-              type="password"
-              className={[shellStyles.input, shellStyles.mono].join(" ")}
-              value={value.apiKey}
-              onChange={(e) => onChange({ ...value, apiKey: e.target.value })}
-              placeholder="sk-..."
-            />
-          </label>
-
-          <label className={shellStyles.field}>
-            <span className={shellStyles.fieldLabel}>模型</span>
-            <input
-              className={[shellStyles.input, shellStyles.mono].join(" ")}
-              value={value.model}
-              onChange={(e) => onChange({ ...value, model: e.target.value })}
-              placeholder="例如 gpt-5.4-mini、gemini-3.1-pro-preview（任意网关支持的模型 id）"
-              spellCheck={false}
-              autoComplete="off"
-            />
-          </label>
+          <button type="button" className={shellStyles.button} onClick={addModel}>
+            添加新模型
+          </button>
         </div>
       </div>
+
+      {modelList.map((model) => (
+        <div key={model.id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
+          <div className={styles.llmModelCardTopBar}>
+            <div className={styles.llmModelCardTopLeft}>
+              {model.id === value.defaultModelId ? (
+                <span className={styles.defaultBadge}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                  默认模型
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.setDefaultBtn}
+                  onClick={() => onChange({ ...value, defaultModelId: model.id })}
+                >
+                  设为默认
+                </button>
+              )}
+            </div>
+            <div className={styles.llmModelCardTopRight}>
+              <label className={styles.toggleSwitch} title={model.enabled ? "已启用" : "已停用"}>
+                <input
+                  type="checkbox"
+                  className={styles.toggleSwitchInput}
+                  checked={model.enabled}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [model.id]: { ...model, enabled: e.target.checked },
+                      },
+                    })
+                  }
+                />
+                <span className={styles.toggleSwitchSlider} />
+              </label>
+              {model.id !== value.defaultModelId ? (
+                <button
+                  type="button"
+                  className={styles.deleteModelBtn}
+                  onClick={() => {
+                    const nextModels = { ...value.models };
+                    delete nextModels[model.id];
+                    onChange({ ...value, models: nextModels });
+                  }}
+                  title="删除"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className={styles.llmModelCardFieldsCompact}>
+            <div className={styles.llmModelCardRow}>
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>API URL</span>
+                <input
+                  className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                  value={model.apiUrl}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [model.id]: { ...model, apiUrl: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="https://.../v1/chat/completions"
+                />
+              </label>
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>API Key</span>
+                <input
+                  type="password"
+                  className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                  value={model.apiKey}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [model.id]: { ...model, apiKey: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="sk-..."
+                />
+              </label>
+            </div>
+
+            <div className={styles.llmModelCardRow}>
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>显示名</span>
+                <input
+                  className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                  value={model.label}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [model.id]: { ...model, label: e.target.value },
+                      },
+                    })
+                  }
+                />
+              </label>
+              <label className={shellStyles.field}>
+                <span className={shellStyles.fieldLabel}>模型 ID</span>
+                <input
+                  className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                  value={model.modelName}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      models: {
+                        ...value.models,
+                        [model.id]: { ...model, modelName: normalizeModel(e.target.value) },
+                      },
+                    })
+                  }
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
@@ -963,70 +1087,89 @@ function ImageApiPanel({
       {IMAGE_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         return (
-          <div key={id} className={settingsCardClass}>
-            <div className={shellStyles.cardHead}>
-              <div>
-                <h2 className={shellStyles.cardTitle}>{model.label}</h2>
-                <p className={shellStyles.cardSubtitle}>
+          <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
+            <div className={styles.llmModelCardTopBar}>
+              <div className={styles.llmModelCardTopLeft}>
+                <h2 className={shellStyles.cardTitle} style={{ fontSize: '15px' }}>{model.label}</h2>
+                <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--settings-muted)' }}>
                   {model.provider === "gpt-image" ? "GPT Image 请求格式" : "Nano Banana 请求格式"}
-                </p>
+                </span>
               </div>
             </div>
 
-            <div className={shellStyles.row}>
-              <label className={[shellStyles.field, shellStyles.rowFull].join(" ")}>
-                <span className={shellStyles.fieldLabel}>Base URL / Endpoint</span>
-                <input
-                  className={shellStyles.input}
-                  value={model.endpointUrl}
-                  placeholder="https://.../v1/images/generations"
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], endpointUrl: e.target.value },
-                      },
-                    })
-                  }
-                />
-              </label>
+            <div className={styles.llmModelCardFieldsCompact}>
+              <div className={styles.llmModelCardRow}>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>Base URL / Endpoint</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                    value={model.endpointUrl}
+                    placeholder="https://.../v1/images/generations"
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], endpointUrl: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>API Key</span>
+                  <input
+                    type="password"
+                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                    value={model.apiKey}
+                    placeholder="sk-..."
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], apiKey: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </div>
 
-              <label className={shellStyles.field}>
-                <span className={shellStyles.fieldLabel}>API Key</span>
-                <input
-                  type="password"
-                  className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.apiKey}
-                  placeholder="sk-..."
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], apiKey: e.target.value },
-                      },
-                    })
-                  }
-                />
-              </label>
-
-              <label className={shellStyles.field}>
-                <span className={shellStyles.fieldLabel}>模型名</span>
-                <input
-                  className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.modelName}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], modelName: e.target.value },
-                      },
-                    })
-                  }
-                />
-              </label>
+              <div className={styles.llmModelCardRow}>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>显示名</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                    value={model.label}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], label: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>模型名</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                    value={model.modelName}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], modelName: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </div>
             </div>
           </div>
         );
@@ -1048,94 +1191,115 @@ function VideoApiPanel({
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
         return (
-          <div key={id} className={settingsCardClass}>
-            <div className={shellStyles.cardHead}>
-              <div>
-                <h2 className={shellStyles.cardTitle}>{model.label}</h2>
-                <p className={shellStyles.cardSubtitle}>
+          <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
+            <div className={styles.llmModelCardTopBar}>
+              <div className={styles.llmModelCardTopLeft}>
+                <h2 className={shellStyles.cardTitle} style={{ fontSize: '15px' }}>{model.label}</h2>
+                <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--settings-muted)' }}>
                   {definition.provider} · {definition.capabilities.supportedModes.map((modeId) => VIDEO_MODE_LABELS[modeId]).join(" / ")}
-                </p>
+                </span>
+              </div>
+              <div className={styles.llmModelCardTopRight}>
+                <label className={styles.toggleSwitch} title={model.enabled ? "已启用" : "已停用"}>
+                  <input
+                    type="checkbox"
+                    className={styles.toggleSwitchInput}
+                    checked={model.enabled}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], enabled: e.target.checked },
+                        },
+                      })
+                    }
+                  />
+                  <span className={styles.toggleSwitchSlider} />
+                </label>
               </div>
             </div>
 
-            <div className={shellStyles.row}>
-              <label className={shellStyles.field}>
-                <span className={shellStyles.fieldLabel}>是否启用</span>
-                <select
-                  className={shellStyles.input}
-                  value={model.enabled ? "on" : "off"}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], enabled: e.target.value === "on" },
-                      },
-                    })
-                  }
-                >
-                  <option value="on">启用</option>
-                  <option value="off">停用</option>
-                </select>
-              </label>
-
-              <label className={[shellStyles.field, shellStyles.rowFull].join(" ")}>
-                <span className={shellStyles.fieldLabel}>Base URL</span>
-                <input
-                  className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.baseUrl}
-                  placeholder="留空，后续按模型填写"
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], baseUrl: e.target.value },
-                      },
-                    })
-                  }
-                />
-              </label>
-
-              <label className={shellStyles.field}>
-                <span className={shellStyles.fieldLabel}>API Key</span>
-                <input
-                  type="password"
-                  className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.apiKey}
-                  placeholder="留空，后续填写"
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: { ...value.models[id], apiKey: e.target.value },
-                      },
-                    })
-                  }
-                />
-              </label>
-
-              <label className={shellStyles.field}>
-                <span className={shellStyles.fieldLabel}>模型名</span>
-                <input
-                  className={[shellStyles.input, shellStyles.mono].join(" ")}
-                  value={model.apiModelName}
-                  placeholder={definition.defaultApiModelName}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      models: {
-                        ...value.models,
-                        [id]: {
-                          ...value.models[id],
-                          apiModelName: e.target.value,
+            <div className={styles.llmModelCardFieldsCompact}>
+              <div className={styles.llmModelCardRow}>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>Base URL</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                    value={model.baseUrl}
+                    placeholder="留空，后续按模型填写"
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], baseUrl: e.target.value },
                         },
-                      },
-                    })
-                  }
-                />
-              </label>
+                      })
+                    }
+                  />
+                </label>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>API Key</span>
+                  <input
+                    type="password"
+                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                    value={model.apiKey}
+                    placeholder="留空，后续填写"
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: { ...value.models[id], apiKey: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className={styles.llmModelCardRow}>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>显示名</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                    value={model.label}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: {
+                            ...value.models[id],
+                            label: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className={shellStyles.field}>
+                  <span className={shellStyles.fieldLabel}>模型名</span>
+                  <input
+                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+                    value={model.apiModelName}
+                    placeholder={definition.defaultApiModelName}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        models: {
+                          ...value.models,
+                          [id]: {
+                            ...value.models[id],
+                            apiModelName: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </div>
             </div>
           </div>
         );

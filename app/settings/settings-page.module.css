@@ -190,6 +190,143 @@
   color: var(--settings-ink);
 }
 
+.llmModelCard {
+  padding: 14px 14px 12px;
+}
+
+.llmModelCardTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--settings-border);
+}
+
+.llmModelCardTopLeft {
+  display: flex;
+  align-items: center;
+}
+
+.llmModelCardTopRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.defaultBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.setDefaultBtn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--settings-ink);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--settings-border);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.setDefaultBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--settings-border-strong);
+}
+
+.deleteModelBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--settings-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deleteModelBtn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.toggleSwitch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.toggleSwitchInput {
+  display: none;
+}
+
+.toggleSwitchSlider {
+  width: 38px;
+  height: 22px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  position: relative;
+  transition: background-color 0.2s, border-color 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSwitchSlider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: #a1a1aa;
+  border-radius: 50%;
+  transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSwitchInput:checked + .toggleSwitchSlider {
+  background-color: #10b981;
+  border-color: #059669;
+}
+
+.toggleSwitchInput:checked + .toggleSwitchSlider::after {
+  transform: translateX(16px);
+  background-color: #fff;
+}
+
+.llmModelCardFieldsCompact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.llmModelCardRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.llmModelCardRow > * {
+  flex: 1;
+  min-width: 0;
+}
+
 /* 生图提示词 tab：比默认 shell 更宽，便于 4 列卡片与编辑区并排 */
 .promptModeShell {
   grid-template-columns: 188px minmax(0, 1fr);
@@ -233,6 +370,11 @@
 
   .apiCardGrid {
     grid-template-columns: 1fr;
+  }
+
+  .llmModelCardRow {
+    flex-direction: column;
+    gap: 12px;
   }
 
   .promptModeGrid {
