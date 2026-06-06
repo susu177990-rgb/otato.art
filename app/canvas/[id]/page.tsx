@@ -1391,10 +1391,8 @@ export default function CanvasBoardPage() {
       const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
       setNodes(nextNodes);
       nodesRef.current = nextNodes;
-      setImageAssets((items) => [data.galleryRecord!, ...items.filter((item) => item.id !== data.galleryRecord!.id)].slice(0, 24));
       setSelectedNodeIds(new Set([nodeId]));
       setSelectedConnectionId(null);
-      setAssetNotice("生图成功，已同步到图库");
       markDirty();
     } catch (error) {
       updateImageGenNodeSettings(nodeId, {
@@ -1402,7 +1400,6 @@ export default function CanvasBoardPage() {
         lastRunAt: new Date().toISOString(),
         lastError: error instanceof Error ? error.message : "无线画布生图失败",
       });
-      setAssetNotice("");
     }
   }, [boardId, markDirty, updateImageGenNodeSettings]);
 
@@ -1439,10 +1436,8 @@ export default function CanvasBoardPage() {
       const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
       setNodes(nextNodes);
       nodesRef.current = nextNodes;
-      setVideoAssets((items) => [data.galleryRecord!, ...items.filter((item) => item.id !== data.galleryRecord!.id)].slice(0, 24));
       setSelectedNodeIds(new Set([nodeId]));
       setSelectedConnectionId(null);
-      setAssetNotice("生视频成功，已同步到图库");
       markDirty();
     } catch (error) {
       updateVideoGenNodeSettings(nodeId, {
@@ -1450,7 +1445,6 @@ export default function CanvasBoardPage() {
         lastRunAt: new Date().toISOString(),
         lastError: error instanceof Error ? error.message : "无线画布生视频失败",
       });
-      setAssetNotice("");
     }
   }, [boardId, markDirty, updateVideoGenNodeSettings]);
 
