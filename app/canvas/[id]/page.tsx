@@ -6,6 +6,9 @@ import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createPortal } from "react-dom";
+import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
+import type { SitePromptPreset, PromptPresetKind } from "@/lib/db/prompt-preset-store";
 import { detectMediaKind, mediaContentType, mediaFileExtension } from "@/lib/media-file";
 import {
   DEFAULT_IMAGE_SETTINGS,
@@ -282,6 +285,24 @@ function newNodeId(type: CanvasNodeType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function makePresetNode(pos: CanvasPosition, preset: SitePromptPreset): CanvasNode {
+  return {
+    id: newNodeId("preset"),
+    type: "preset",
+    title: preset.title,
+    position: { x: pos.x - 160, y: pos.y - 107 },
+    width: 320,
+    height: 214,
+    metadata: {
+      presetId: preset.id,
+      presetKind: preset.kind,
+      presetDescription: preset.description,
+      prompt: preset.promptTemplate,
+      previewImageUrl: preset.coverImageUrl,
+    },
+  };
+}
+
 function makeTextNode(pos: CanvasPosition): CanvasNode {
   return {
     id: newNodeId("text"),
@@ -404,6 +425,7 @@ function nodeTypeIcon(type: CanvasNodeType) {
   if (type === "image") return "🖼️";
   if (type === "video") return "🎬";
   if (type === "audio") return "♪";
+  if (type === "preset") return "🎨";
 
   return "✏️";
 }
@@ -413,6 +435,7 @@ function nodeTypeColor(type: CanvasNodeType) {
   if (type === "image") return "#60a5fa";
   if (type === "video") return "#f472b6";
   if (type === "audio") return "#facc15";
+  if (type === "preset") return "#c4b5fd";
 
   return "#6ee7b7";
 }
@@ -472,6 +495,14 @@ export default function CanvasBoardPage() {
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Preset Library States
+  const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
+  const [presetLibraryTab, setPresetLibraryTab] = useState<PromptPresetKind>("image");
+  const [presetAddNodePos, setPresetAddNodePos] = useState<CanvasPosition | null>(null);
+  const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
+  const [presetLibraryError, setPresetLibraryError] = useState("");
+  const [favoriteSavingById, setFavoriteSavingById] = useState<Record<string, boolean>>({});
+  const [portalMounted, setPortalMounted] = useState(false);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -493,7 +524,7 @@ export default function CanvasBoardPage() {
       .flatMap((conn): AssetMentionCandidate[] => {
         const n = nodes.find((node) => node.id === conn.fromNodeId);
         if (!n || n.id === currentNodeId) return [];
-        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : n.type === "audio" ? "音频" : "文本";
+        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : n.type === "audio" ? "音频" : n.type === "preset" ? "预设" : "文本";
         typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
         const role: AssetMentionRole =
           conn.targetPort === "prompt"
@@ -514,12 +545,12 @@ export default function CanvasBoardPage() {
           label: `${typeName}${typeCounts[typeName]}`,
           type: "node" as const,
           role,
-          nodeType: n.type === "text" || n.type === "image" || n.type === "video" || n.type === "audio" ? n.type : undefined,
+          nodeType: n.type === "preset" ? "text" : (n.type === "text" || n.type === "image" || n.type === "video" || n.type === "audio" ? n.type : undefined),
           groupLabel: "已连接素材",
           description: conn.targetPort,
           thumbnailUrl: n.metadata?.previewImageUrl || n.metadata?.imageUrl,
           url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl || n.metadata?.audioUrl,
-          text: textNodeOutput(n),
+          text: n.type === "preset" ? n.metadata?.prompt : textNodeOutput(n),
         }];
       });
   }, [nodes, connections, nodeMap]);
@@ -581,6 +612,8 @@ export default function CanvasBoardPage() {
     setQuickAddBar(null);
     setEditingNodeTitleId(null);
     setEditingTextNodeId(null);
+    setPresetLibraryOpen(false);
+    setPresetAddNodePos(null);
   }, []);
 
   const currentImageNodeDefaults = useCallback(() => ({
@@ -688,6 +721,43 @@ export default function CanvasBoardPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!presetLibraryOpen) return;
+    setPresetLibraryError("");
+    fetchSitePromptPresets(presetLibraryTab)
+      .then((presets) => {
+        setPromptPresets(presets);
+      })
+      .catch((e) => {
+        setPresetLibraryError(e instanceof Error ? e.message : "无法加载提示词预设");
+      });
+  }, [presetLibraryOpen, presetLibraryTab]);
+
+  const togglePromptPresetFavorite = useCallback(async (preset: SitePromptPreset) => {
+    const nextFavorite = !preset.isFavorite;
+    setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: true }));
+    try {
+      await setSitePromptPresetFavorite(preset.id, nextFavorite);
+      setPromptPresets((prev) =>
+        prev.map((item) => (item.id === preset.id ? { ...item, isFavorite: nextFavorite } : item))
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "更新收藏失败");
+    } finally {
+      setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: false }));
+    }
+  }, []);
+
+  const openPresetLibraryForAddingNode = useCallback((pos: CanvasPosition) => {
+    setPresetAddNodePos(pos);
+    setPresetLibraryTab("image");
+    setPresetLibraryOpen(true);
   }, []);
 
 
@@ -1492,10 +1562,10 @@ export default function CanvasBoardPage() {
       .filter((conn) => conn.toNodeId === nodeId && conn.targetPort === "prompt")
       .map((conn) => nodesRef.current.find((node) => node.id === conn.fromNodeId))
       .filter((node): node is CanvasNode => {
-        return Boolean(node) && node?.type === "text";
+        return Boolean(node) && (node?.type === "text" || node?.type === "preset");
       })
       .map((node, index) => {
-        const text = textNodeOutput(node)?.trim();
+        const text = (node.type === "preset" ? node.metadata?.prompt : textNodeOutput(node))?.trim();
         return text ? `### 文本上下文 ${index + 1}：${node.title || node.id}\n\n${text}` : "";
       })
       .filter(Boolean);
@@ -1602,7 +1672,7 @@ export default function CanvasBoardPage() {
           URL.revokeObjectURL(a.href);
         })
         .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
-    } else if (node.type === "text" || (!node.metadata?.source && node.metadata?.prompt !== undefined)) {
+    } else if (node.type === "text" || node.type === "preset" || (!node.metadata?.source && node.metadata?.prompt !== undefined)) {
       const text = node.type === "text" ? node.metadata?.text : node.metadata?.prompt;
       if (!text) return;
       const blob = new Blob([text], { type: "text/plain" });
@@ -1887,6 +1957,9 @@ export default function CanvasBoardPage() {
               <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world, currentVideoNodeDefaults()))}>
                 <span className={styles.quickAddBtnIcon}>🎬</span>视频
               </button>
+              <button type="button" className={styles.quickAddBtn} onClick={() => { openPresetLibraryForAddingNode(quickAddBar.world); setQuickAddBar(null); }}>
+                <span className={styles.quickAddBtnIcon}>🎨</span>预设
+              </button>
               <button type="button" className={styles.quickAddBtn} onClick={() => { menuWorldRef.current = quickAddBar.world; setQuickAddBar(null); audioInputRef.current?.click(); }}>
                 <span className={styles.quickAddBtnIcon}>♪</span>音频
               </button>
@@ -2071,7 +2144,42 @@ export default function CanvasBoardPage() {
 
                   {/* For image / video gen nodes: two separate visual cards (preview on top, composer below).
                       For all other types: the standard single nodeVisual box. */}
-                  {node.type === "text" && node.metadata?.textMode === "chat" ? (
+                  {node.type === "preset" ? (
+                    <div
+                      className={styles.canvasPresetCard}
+                      onPointerDown={(e) => {
+                        if (e.button !== 0) return;
+                        const target = e.target as HTMLElement;
+                        if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
+                        e.stopPropagation();
+                        const cur = new Set(selectedNodeIds);
+                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                        startNodeDrag(node.id, e, cur);
+                      }}
+                    >
+                      <span className={styles.presetCardCover}>
+                        <span className={styles.presetCardOverlay}>
+                          <span className={styles.presetCardOverlayTop}>
+                            <span className={styles.presetCardTitle}>{node.title}</span>
+                            {node.metadata?.presetDescription?.trim() ? (
+                              <span className={styles.presetCardDesc}>{node.metadata.presetDescription.trim()}</span>
+                            ) : null}
+                          </span>
+                          <span className={styles.presetModelChips}>
+                            <span className={styles.presetModelChip}>
+                              {node.metadata?.presetKind === "image" ? "生图预设" : node.metadata?.presetKind === "video" ? "生视频预设" : "对话预设"}
+                            </span>
+                          </span>
+                        </span>
+                        {node.metadata?.previewImageUrl?.trim() ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={node.metadata.previewImageUrl.trim()} alt="" draggable={false} />
+                        ) : (
+                          <span>{node.title}</span>
+                        )}
+                      </span>
+                    </div>
+                  ) : node.type === "text" && node.metadata?.textMode === "chat" ? (
                     <>
                       <div
                         className={styles.textChatBox}
@@ -2572,6 +2680,7 @@ export default function CanvasBoardPage() {
               }}>重做 (Ctrl+Y)</button>
               <div className={styles.uploadMenuDivider} />
               <button type="button" onClick={() => { appendNode(makeTextNode(menu.world)); setMenu(null); }}>新建文本节点</button>
+              <button type="button" onClick={() => { openPresetLibraryForAddingNode(menu.world); setMenu(null); }}>新建预设节点</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); imageInputRef.current?.click(); }}>上传图片</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); videoInputRef.current?.click(); }}>上传视频</button>
               <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); audioInputRef.current?.click(); }}>上传音频</button>
@@ -2712,6 +2821,134 @@ export default function CanvasBoardPage() {
                 : "拖拽框选 · 双击添加节点 · 右键菜单 · Ctrl+Z 撤销"}
             </div>
           </div>
+
+          {portalMounted && presetLibraryOpen
+            ? createPortal(
+                <div className={styles.presetLibraryRoot} role="dialog" aria-modal="true" aria-label="选择提示词预设">
+                  <button
+                    type="button"
+                    className={styles.presetLibraryBackdrop}
+                    onClick={() => { setPresetLibraryOpen(false); setPresetAddNodePos(null); }}
+                    aria-label="关闭提示词预设窗口"
+                  />
+                  <section className={styles.presetLibraryPanel}>
+                    <header className={styles.presetLibraryHead}>
+                      <div>
+                        <p className={styles.presetLibraryEyebrow}>无限画布</p>
+                        <h2 className={styles.presetLibraryTitle}>选择提示词预设</h2>
+                      </div>
+                      <div className={styles.presetLibraryTabs}>
+                        <button
+                          type="button"
+                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "image" ? styles.presetLibraryTabActive : ""].join(" ")}
+                          onClick={() => setPresetLibraryTab("image")}
+                        >
+                          生图
+                        </button>
+                        <button
+                          type="button"
+                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "video" ? styles.presetLibraryTabActive : ""].join(" ")}
+                          onClick={() => setPresetLibraryTab("video")}
+                        >
+                          生视频
+                        </button>
+                        <button
+                          type="button"
+                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "chat" ? styles.presetLibraryTabActive : ""].join(" ")}
+                          onClick={() => setPresetLibraryTab("chat")}
+                        >
+                          对话
+                        </button>
+                      </div>
+                      <div className={styles.presetLibraryHeadActions}>
+                        <button
+                          type="button"
+                          className={styles.presetLibraryClose}
+                          onClick={() => { setPresetLibraryOpen(false); setPresetAddNodePos(null); }}
+                          aria-label="关闭"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </header>
+                    {presetLibraryError ? <div className={styles.presetLibraryError}>{presetLibraryError}</div> : null}
+                    <div className={styles.presetLibraryGrid}>
+                      {promptPresets.length === 0 ? (
+                        <div className={styles.presetLibraryEmpty}>暂无提示词预设</div>
+                      ) : (
+                        promptPresets.map((preset) => {
+                          const coverUrl = preset.coverImageUrl?.trim();
+                          const hasDescription = Boolean(preset.description?.trim());
+                          return (
+                            <article
+                              key={preset.id}
+                              className={styles.presetCard}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => {
+                                console.log("[canvas-preset] preset card clicked", preset);
+                                const pos = presetAddNodePos || worldCenter();
+                                console.log("[canvas-preset] target spawn position", pos);
+                                const node = makePresetNode(pos, preset);
+                                console.log("[canvas-preset] generated preset node", node);
+                                appendNode(node);
+                                setPresetLibraryOpen(false);
+                                setPresetAddNodePos(null);
+                              }}
+                            >
+                              {/* 预设卡片内容展示层 */}
+                              <div className={styles.presetCardCover}>
+                                <span className={styles.presetCardOverlay}>
+                                  <span className={styles.presetCardOverlayTop}>
+                                    <span className={styles.presetCardTitle}>{preset.title}</span>
+                                    {hasDescription ? (
+                                      <span className={styles.presetCardDesc}>{preset.description!.trim()}</span>
+                                    ) : null}
+                                  </span>
+                                  <span className={styles.presetModelChips}>
+                                    <span className={styles.presetModelChip}>
+                                      {preset.kind === "image" ? "生图预设" : preset.kind === "video" ? "生视频预设" : "对话预设"}
+                                    </span>
+                                  </span>
+                                </span>
+                                {coverUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={coverUrl} alt="" />
+                                ) : (
+                                  <span>{preset.title}</span>
+                                )}
+                              </div>
+                              <div className={styles.presetMetaActions}>
+                                <button
+                                  type="button"
+                                  className={[
+                                    styles.presetMetaButton,
+                                    styles.presetFavoriteButton,
+                                    preset.isFavorite ? styles.presetFavoriteActive : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void togglePromptPresetFavorite(preset);
+                                  }}
+                                  disabled={Boolean(favoriteSavingById[preset.id])}
+                                  aria-pressed={Boolean(preset.isFavorite)}
+                                  aria-label={preset.isFavorite ? "取消收藏" : "收藏"}
+                                  title={preset.isFavorite ? "取消收藏" : "收藏"}
+                                >
+                                  {preset.isFavorite ? "已收藏" : "收藏"}
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })
+                      )}
+                    </div>
+                  </section>
+                </div>,
+                document.body,
+              )
+            : null}
 
           <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid, "image"); }} />
           <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid, "video"); }} />

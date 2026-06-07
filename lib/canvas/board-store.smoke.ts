@@ -77,4 +77,36 @@ assert.equal(legacyChooser.nodes[0]?.metadata?.chatPreferredLlmModelId, "legacy-
 assert.equal(legacyChooser.nodes[0]?.metadata?.chatPreferredImageModelId, "gpt-image-2");
 assert.equal(legacyChooser.nodes[0]?.metadata?.chatLastAssistantMessageId, "msg-a");
 
+const presetTest = normalizeBoardData({
+  nodes: [
+    {
+      id: "preset-node-1",
+      type: "preset",
+      title: "写实风格",
+      position: { x: 100, y: 150 },
+      width: 320,
+      height: 214,
+      metadata: {
+        presetId: "preset-a",
+        presetKind: "image",
+        presetDescription: "生图预设描述",
+        prompt: "A photorealistic cat",
+        previewImageUrl: "https://example.com/cover.jpg",
+      },
+    },
+  ],
+  connections: [],
+  viewport: { x: 0, y: 0, k: 1 },
+});
+
+assert.equal(presetTest.nodes[0]?.type, "preset");
+assert.equal(presetTest.nodes[0]?.title, "写实风格");
+assert.equal(presetTest.nodes[0]?.width, 320);
+assert.equal(presetTest.nodes[0]?.height, 214);
+assert.equal(presetTest.nodes[0]?.metadata?.presetId, "preset-a");
+assert.equal(presetTest.nodes[0]?.metadata?.presetKind, "image");
+assert.equal(presetTest.nodes[0]?.metadata?.presetDescription, "生图预设描述");
+assert.equal(presetTest.nodes[0]?.metadata?.prompt, "A photorealistic cat");
+assert.equal(presetTest.nodes[0]?.metadata?.previewImageUrl, "https://example.com/cover.jpg");
+
 console.log("canvas board store smoke: ok");

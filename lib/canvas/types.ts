@@ -12,7 +12,7 @@ export type CanvasViewport = {
   k: number;
 };
 
-export type CanvasNodeType = "text" | "image" | "video" | "audio" | "group";
+export type CanvasNodeType = "text" | "image" | "video" | "audio" | "group" | "preset";
 
 export type CanvasSourcePort = "output";
 
@@ -67,6 +67,10 @@ export type CanvasNodeMetadata = {
   previewImageUrl?: string;
   /** video node: inline preview URL */
   previewVideoUrl?: string;
+  /** preset node metadata fields */
+  presetId?: string;
+  presetKind?: "image" | "video" | "chat";
+  presetDescription?: string;
 };
 
 export type CanvasNode = {

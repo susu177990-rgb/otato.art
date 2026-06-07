@@ -26,6 +26,7 @@ const videoPromptOnly = node("videoPromptOnly", "video", { videoModeId: "text_to
 const videoRefGen = node("videoRefGen", "video", { videoModeId: "multi_image_reference" });
 const motionVideoGen = node("motionVideoGen", "video", { videoModeId: "motion_control" });
 const group = node("group", "group");
+const preset = node("preset", "preset", { prompt: "preset template" });
 
 assert.deepEqual(getTargetPorts(imageGen), ["prompt", "imageReference"]);
 assert.deepEqual(getTargetPorts(videoGen), ["prompt", "firstFrame", "lastFrame"]);
@@ -38,8 +39,10 @@ assert.deepEqual(getTargetPorts(image), []);
 assert.deepEqual(getTargetPorts(video), []);
 assert.deepEqual(getTargetPorts(audio), []);
 assert.deepEqual(getTargetPorts(group), []);
+assert.deepEqual(getTargetPorts(preset), []);
 
 assert.equal(inferTargetPort(text, imageGen).targetPort, "prompt");
+assert.equal(inferTargetPort(preset, imageGen).targetPort, "prompt");
 assert.equal(inferTargetPort(chatText, imageGen).targetPort, "prompt");
 assert.equal(inferTargetPort(image, imageGen).targetPort, "imageReference");
 assert.equal(inferTargetPort(video, imageGen).targetPort, null);
@@ -61,7 +64,9 @@ const lastFrame = makeCanvasConnection("c2", imageGen.id, videoGen.id, "lastFram
 assert.equal(inferTargetPort(node("image3", "image"), videoGen, [firstFrame, lastFrame]).targetPort, null);
 
 assert.equal(isConnectionAllowed(text, imageGen, "prompt"), true);
+assert.equal(isConnectionAllowed(preset, imageGen, "prompt"), true);
 assert.equal(isConnectionAllowed(text, chatText, "prompt"), true);
+assert.equal(isConnectionAllowed(preset, chatText, "prompt"), true);
 assert.equal(isConnectionAllowed(chatText, text, "prompt"), false);
 assert.equal(isConnectionAllowed(text, imageGen, "imageReference"), false);
 assert.equal(isConnectionAllowed(video, motionVideoGen, "videoReference"), true);
@@ -73,6 +78,7 @@ assert.equal(isConnectionAllowed(audio, videoRefGen, "audioReference"), true);
 assert.equal(normalizeConnectionPorts({ id: "legacy3", fromNodeId: video.id, toNodeId: imageGen.id }, video, imageGen)?.targetPort, "source");
 assert.equal(normalizeConnectionPorts({ id: "legacy4", fromNodeId: image.id, toNodeId: image2.id }, image, image2)?.targetPort, "imageReference");
 assert.equal(isConnectionAllowed(group, imageGen, "prompt"), false);
+assert.equal(isConnectionAllowed(preset, group, "prompt"), false);
 assert.equal(canStartConnection(audio), true);
 assert.equal(isConnectionAllowed(text, text, "source"), false);
 
@@ -82,6 +88,9 @@ assert.equal(inferTargetPort(text, imageGen, duplicate).targetPort, null);
 
 const legacy = normalizeConnectionPorts({ id: "legacy", fromNodeId: text.id, toNodeId: imageGen.id }, text, imageGen);
 assert.deepEqual(legacy, makeCanvasConnection("legacy", text.id, imageGen.id, "prompt"));
+
+const presetLegacy = normalizeConnectionPorts({ id: "presetLegacy", fromNodeId: preset.id, toNodeId: imageGen.id }, preset, imageGen);
+assert.deepEqual(presetLegacy, makeCanvasConnection("presetLegacy", preset.id, imageGen.id, "prompt"));
 
 const badExplicit = normalizeConnectionPorts(
   { id: "legacy2", fromNodeId: image.id, toNodeId: imageGen.id, sourcePort: "output", targetPort: "prompt" },

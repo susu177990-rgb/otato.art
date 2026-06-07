@@ -18,7 +18,7 @@ export type CanvasMentionNode = {
   id: string;
   type: string;
   title: string;
-  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string; audioUrl?: string };
+  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string; audioUrl?: string; prompt?: string };
 };
 
 export type CanvasMentionReference = {
@@ -42,7 +42,7 @@ export function parseMentions(prompt: string): MentionItem[] {
 
 function candidateForCanvasNode(node: CanvasMentionNode): AssetMentionCandidate {
   const role =
-    node.type === "text"
+    node.type === "text" || node.type === "preset"
       ? "prompt"
       : node.type === "video"
         ? "video_reference"
@@ -54,8 +54,8 @@ function candidateForCanvasNode(node: CanvasMentionNode): AssetMentionCandidate 
     label: node.title || (node.type === "image" ? "图片" : node.type === "video" ? "视频" : node.type === "audio" ? "音频" : "输入"),
     type: "node",
     role,
-    nodeType: node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "text" ? node.type : undefined,
-    text: node.metadata?.text,
+    nodeType: node.type === "preset" ? "text" : (node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "text" ? node.type : undefined),
+    text: node.type === "preset" ? node.metadata?.prompt : node.metadata?.text,
     url: node.metadata?.imageUrl || node.metadata?.previewImageUrl || node.metadata?.videoUrl || node.metadata?.previewVideoUrl || node.metadata?.audioUrl,
   };
 }
@@ -74,9 +74,9 @@ function resolveCanvasNodeMention(
   if (mention.type !== "node") return { replacement: mention.label };
   const node = canvasNodes.find((item) => item.id === mention.id);
   if (!node) return { replacement: mention.label };
-  if (node.type === "text") {
+  if (node.type === "text" || node.type === "preset") {
     return {
-      replacement: node.metadata?.text ?? "",
+      replacement: (node.type === "preset" ? node.metadata?.prompt : node.metadata?.text) ?? "",
       resolvedTextNodeId: node.id,
     };
   }
