@@ -1,8 +1,8 @@
 {
-  "name": "gleam-media-studios",
-  "version": "1.1.0",
+  "name": "otato-art",
+  "version": "1.0.0",
   "private": true,
-  "description": "Gleam Media Studios — content creation and visual production workspace",
+  "description": "otato.art — content creation and visual production workspace",
   "engines": {
     "node": ">=20"
   },

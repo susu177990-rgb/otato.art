@@ -38,3 +38,11 @@ data/projects/*.json
 
 # Python Wattpad service
 **/services/wattpad-api/.venv/
+
+# Agent config dirs (local, not part of project)
+.claude/
+.omx/
+.playwright-cli/
+
+# Utility exports
+all-migrations.sql
