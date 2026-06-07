@@ -36,6 +36,7 @@ import {
   type UiVideoModeId,
   UI_VIDEO_MODES as UI_MODES,
   inferEffectiveVideoMode,
+  VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
 
 const MEDIA_BUCKET = "generated-images";
@@ -177,7 +178,7 @@ function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReferen
 
 function workspaceModeToPromptPreset(
   mode: { id: string; label: string },
-  videoWorkspace: any,
+  videoWorkspace: VideoWorkspaceSettings,
   favoriteOverlay?: SitePromptPreset,
 ): SitePromptPreset {
   return {

@@ -1,0 +1,19 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - paragraph [ref=e6]: Gleam Media Studios 工作台 · 登录
+    - generic [ref=e8]:
+      - generic [ref=e10]:
+        - heading "登录账号" [level=1] [ref=e11]
+        - paragraph [ref=e12]: 使用邮箱与密码；同一账号多端数据自动同步。
+      - generic [ref=e13]:
+        - button "登录" [ref=e14] [cursor=pointer]
+        - button "注册" [ref=e15] [cursor=pointer]
+      - generic [ref=e16]:
+        - generic [ref=e17]: 邮箱
+        - textbox "邮箱" [ref=e18]
+      - generic [ref=e19]:
+        - generic [ref=e20]: 密码
+        - textbox "密码" [ref=e21]
+      - button "登录" [ref=e22] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=e28] [cursor=pointer]:
+    - img [ref=e29]

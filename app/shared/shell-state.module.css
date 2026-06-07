@@ -1,0 +1,532 @@
+/* Shared App Shell — State / Ambience primitives */
+
+/* ---------- Misc ---------- */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  color: #52525b;
+  font-size: 13px;
+}
+
+.savedHint {
+  color: #6ee7b7;
+  font-size: 11px;
+}
+
+.helpText {
+  margin: 0;
+  font-size: 11px;
+  color: #71717a;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.statusDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #71717a;
+}
+
+.statusDotOk {
+  background: #34d399;
+}
+
+.statusDotWarn {
+  background: #f59e0b;
+}
+
+.statusDotErr {
+  background: #f87171;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fafafa;
+  animation: shellSpin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes shellSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Hero block (home / login) ---------- */
+
+.heroWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px 48px;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fafafa;
+  text-align: center;
+}
+
+.heroSubtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #71717a;
+  text-align: center;
+}
+
+/* ---------- Tile (mode-select / list cards) ---------- */
+
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 1120px;
+}
+
+@media (max-width: 1100px) {
+  .tileGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 840px;
+  }
+}
+
+@media (max-width: 820px) {
+  .tileGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 520px) {
+  .tileGrid {
+    grid-template-columns: 1fr;
+    max-width: 340px;
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 160px;
+  padding: 22px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
+  color: #e4e4e7;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.tile:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tile:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.tileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+
+.tileTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.tileMeta {
+  margin: 0;
+  font-size: 11px;
+  color: #a1a1aa;
+}
+
+/* ---------- Bigger spinner ---------- */
+
+.bigSpinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fafafa;
+  animation: shellSpin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ---------- Chat bubble ---------- */
+
+.bubbleRow {
+  display: flex;
+  width: 100%;
+}
+
+.bubbleRowUser {
+  justify-content: flex-end;
+}
+
+.bubbleRowAssistant {
+  justify-content: flex-start;
+}
+
+.bubbleUser {
+  max-width: 92%;
+  border-radius: 16px;
+  background: #fafafa;
+  color: #18181b;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+}
+
+.bubbleAssistant {
+  max-width: min(92%, 48rem);
+  border-radius: 12px;
+  background: rgba(13, 17, 23, 0.72);
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  backdrop-filter: blur(8px);
+}
+
+.bubbleAssistant [data-markdown-variant="default"] {
+  max-width: 100%;
+}
+
+/* ---------- Thin process rail (retired, kept for compatibility) ---------- */
+
+.thinRail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 44px;
+  flex-shrink: 0;
+  height: 100%;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 8, 0.55);
+  backdrop-filter: blur(20px);
+  padding: 8px 4px;
+  overflow: hidden;
+}
+
+.thinRailHeader {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.thinRailHeaderLabel {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.thinRailHeaderValue {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.thinRailBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 6px;
+}
+
+.thinRailItem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #a1a1aa;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.thinRailItem:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+}
+
+.thinRailItemActive {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: #fafafa;
+  color: #09090b;
+}
+
+.thinRailItemActive:hover {
+  background: #ffffff;
+  color: #09090b;
+}
+
+.thinRailItemInferred {
+  color: #fafafa;
+}
+
+.thinRailItemDot {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #52525b;
+}
+
+.thinRailFootHint {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 9px;
+  color: #f59e0b;
+  padding: 4px 2px 0;
+  line-height: 1.3;
+}
+
+/* ---------- Modal ---------- */
+
+.modalScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.modalCard {
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 9, 0.94);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 60px 200px rgba(0, 0, 0, 0.6);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #e4e4e7;
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+/* ---------- Drawer ---------- */
+
+.drawerScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.drawerCard {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 66;
+  width: 100%;
+  max-width: 720px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 8, 9, 0.92);
+  box-shadow: 0 0 120px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.drawerBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- Sticky CTA ---------- */
+
+.stickyCta {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 0 4px;
+  margin-top: 8px;
+  background: linear-gradient(180deg, rgba(7, 7, 8, 0) 0%, rgba(7, 7, 8, 0.7) 60%, rgba(7, 7, 8, 0.94) 100%);
+  z-index: 10;
+}
+
+/* ---------- Onboarding tabs row ---------- */
+
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+
+.finalizeGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 1100px) {
+  .finalizeGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .finalizeGridFull {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Meta pills ---------- */
+
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+}
+
+.metaPillOk {
+  color: #a7f3d0;
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(6, 78, 59, 0.18);
+}
+
+.metaPillMute {
+  color: #71717a;
+}
+
+/* ---------- Toolbar icon button ---------- */
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.iconBtn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+
+.iconBtn:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

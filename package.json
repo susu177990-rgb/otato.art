@@ -16,6 +16,7 @@
     "postbuild": "node scripts/copy-repo-assets-to-standalone.mjs",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
+    "test": "vitest run",
     "smoke:extract-stage5": "npx tsx lib/artifact-extract.stage5.smoke.ts",
     "smoke:canvas-connections": "npx tsx lib/canvas/connection-rules.smoke.ts",
     "smoke:canvas-board-store": "npx tsx lib/canvas/board-store.smoke.ts",
@@ -72,6 +73,7 @@
     "eslint-config-next": "16.2.3",
     "pg": "^8.21.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   }
 }

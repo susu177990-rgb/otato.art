@@ -1,14 +1,48 @@
 /**
  * 打包默认 API：首次访问、清空存储或 localStorage 某字段为空时，回落到此处。
- * 修改 LLM / 生图网关请改本文件后保存并部署；勿依赖单个浏览器里的 localStorage。
- *
  * 生图各槽 apiKey 若留空字符串，则在 `DEFAULT_IMAGE_SETTINGS` 组装时用 LLM API 的同一把 Key 回填。
+ *
+ * ⚠️ 安全须知：
+ * - 此处不允许硬编码真实 API Key。Key 从 `NEXT_PUBLIC_BAKED_API_KEY` 环境变量读取。
+ * - 没有环境变量时回退到空字符串，不影响 Supabase store/设置页存储的值。
+ * - 若需永久覆盖默认 Key，请在 Zeabur / 。env.local 中设置 `NEXT_PUBLIC_BAKED_API_KEY`。
  */
 
+function envKey(): string {
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_BAKED_API_KEY) {
+    return process.env.NEXT_PUBLIC_BAKED_API_KEY;
+  }
+  // 浏览器端通过 __NEXT_DATA__ 读取 public env
+  if (typeof window !== "undefined") {
+    try {
+      const data = (window as unknown as Record<string, unknown>).__NEXT_DATA__;
+      const env = (data as Record<string, unknown>)?.runtimeConfig as Record<string, string> | undefined;
+      if (env?.NEXT_PUBLIC_BAKED_API_KEY) return env.NEXT_PUBLIC_BAKED_API_KEY;
+    } catch {
+      // 安全降级
+    }
+  }
+  return "";
+}
+
+function envUrl(): string {
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_BAKED_API_URL) {
+    return process.env.NEXT_PUBLIC_BAKED_API_URL;
+  }
+  return "https://grsai.dakka.com.cn/v1/chat/completions";
+}
+
+function envModel(): string {
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_BAKED_MODEL) {
+    return process.env.NEXT_PUBLIC_BAKED_MODEL;
+  }
+  return "gpt-5.4";
+}
+
 export const BAKED_LLM_SETTINGS = {
-  apiUrl: "https://grsai.dakka.com.cn/v1/chat/completions",
-  apiKey: "sk-47c1db55f16d4200b0e69228c9881792",
-  model: "gpt-5.4",
+  apiUrl: envUrl(),
+  apiKey: envKey(),
+  model: envModel(),
 } as const;
 
 /** 三槽共用同一 Grsai draw 提交地址（路由按槽位 `provider` 区分 JSON 体形态） */

@@ -1,0 +1,215 @@
+/* Shared App Shell — Form / Button / Banner primitives */
+
+/* ---------- Form fields ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: #a1a1aa;
+  font-size: 11px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px 12px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: #52525b;
+}
+
+.inputCompact {
+  padding: 7px 10px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.55;
+  min-height: 120px;
+}
+
+.textareaComposer {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 5px 10px;
+  color: #f4f4f5;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  outline: none;
+  transition: border-color 140ms ease, background 140ms ease;
+  resize: none;
+}
+
+.textareaComposer:focus {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.textareaComposer::placeholder {
+  color: #52525b;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.rowFull {
+  grid-column: 1 / -1;
+}
+
+.checkboxRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #d4d4d8;
+}
+
+.checkboxRow input[type="checkbox"] {
+  accent-color: #fafafa;
+}
+
+/* ---------- Buttons (form submit / inline action) ---------- */
+
+.button {
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #e4e4e7;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.28);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.button:focus-visible {
+  outline: 1px solid rgba(250, 250, 250, 0.4);
+  outline-offset: 2px;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background: #fafafa;
+  color: #09090b;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 38px rgba(255, 255, 255, 0.14);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: #ffffff;
+  color: #09090b;
+}
+
+.buttonDanger {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.buttonDanger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+.buttonSubtle {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 11px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d4d4d8;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.buttonSubtle:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.045);
+  color: #fafafa;
+}
+
+/* ---------- Banners (info/success/warn/error) ---------- */
+
+.banner {
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: #d4d4d8;
+}
+
+.bannerInfo {
+  border-color: rgba(99, 102, 241, 0.32);
+  background: rgba(49, 46, 129, 0.18);
+  color: #c7d2fe;
+}
+
+.bannerSuccess {
+  border-color: rgba(16, 185, 129, 0.32);
+  background: rgba(6, 78, 59, 0.22);
+  color: #a7f3d0;
+}
+
+.bannerWarn {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(120, 53, 15, 0.22);
+  color: #fde68a;
+}
+
+.bannerError {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}

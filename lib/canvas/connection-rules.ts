@@ -18,8 +18,6 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
       return node.metadata?.textMode === "chat" ? ["prompt"] : [];
     case "audio":
       return [];
-    case "preset":
-      return [];
     case "image":
       return node.metadata?.source === "upload" ? [] : ["prompt", "imageReference"];
     case "video": {
@@ -55,7 +53,9 @@ export function isConnectionAllowed(from: CanvasNode, to: CanvasNode, targetPort
   if (from.id === to.id || from.type === "group" || to.type === "group") return false;
   if (targetPort === "source") return true;
   if (!getTargetPorts(to).includes(targetPort)) return false;
-  if (targetPort === "prompt") return from.type === "text" || from.type === "preset";
+  if (targetPort === "prompt") {
+    return from.type === "text";
+  }
   if (targetPort === "imageReference") return from.type === "image";
   if (targetPort === "firstFrame" || targetPort === "lastFrame") return from.type === "image";
   if (targetPort === "videoReference") return from.type === "video";
@@ -82,14 +82,14 @@ export function inferTargetPort(
 
   if (to.type === "text") {
     if (to.metadata?.textMode !== "chat") return { targetPort: null, reason: "手写文本节点不接收输入" };
-    if (from.type !== "text" && from.type !== "preset") return { targetPort: null, reason: "对话文本节点只接收文本上下文或预设" };
+    if (from.type !== "text") return { targetPort: null, reason: "对话文本节点只接收文本上下文或预设" };
     return connectionExists(connections, from.id, to.id, "prompt")
       ? { targetPort: null, reason: "该文本上下文已连接" }
       : { targetPort: "prompt" };
   }
 
   if (to.type === "image" && to.metadata?.source !== "upload") {
-    const targetPort = (from.type === "text" || from.type === "preset") ? "prompt" : from.type === "image" ? "imageReference" : null;
+    const targetPort = from.type === "text" ? "prompt" : from.type === "image" ? "imageReference" : null;
     if (!targetPort) return { targetPort: null, reason: "图片节点只接受文本提示词、预设或图片参考" };
     return connectionExists(connections, from.id, to.id, targetPort)
       ? { targetPort: null, reason: `${TARGET_PORT_LABELS[targetPort]}已连接` }
@@ -102,7 +102,7 @@ export function inferTargetPort(
       videoModeId === "multi_image_reference" || videoModeId === "motion_control" || videoModeId === "text_to_video"
         ? videoModeId
         : "start_end_frame";
-    if (from.type === "text" || from.type === "preset") {
+    if (from.type === "text") {
       return connectionExists(connections, from.id, to.id, "prompt")
         ? { targetPort: null, reason: "提示词已连接" }
         : { targetPort: "prompt" };

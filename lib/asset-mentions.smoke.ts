@@ -44,4 +44,12 @@ assert.equal(canvasResolved.cleanedPrompt, "镜头：女孩走进霓虹雨夜，
 assert.deepEqual(canvasResolved.resolvedNodeIds, ["text-1"]);
 assert.equal(canvasResolved.mentionedReferences[0].url, "https://example.com/ref.png");
 
+const presetResolved = resolveMentions("风格：@[旧预设](node:preset-1?role=prompt)", {
+  canvasNodes: [
+    { id: "preset-1", type: "preset", title: "旧预设", metadata: { prompt: "电影感低饱和写实光影" } },
+  ],
+});
+assert.equal(presetResolved.cleanedPrompt, "风格：电影感低饱和写实光影");
+assert.deepEqual(presetResolved.resolvedNodeIds, ["preset-1"]);
+
 console.log("asset mention smoke passed");

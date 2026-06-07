@@ -44,11 +44,8 @@ function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof re
     .filter((conn) => !resolvedNodeIds.includes(conn.fromNodeId))
     .map((conn) => board.nodes.find((item) => item.id === conn.fromNodeId))
     .filter((item): item is CanvasNode => Boolean(item))
-    .filter((item) => item.type === "text" || item.type === "preset")
+    .filter((item) => item.type === "text")
     .map((item) => {
-      if (item.type === "preset") {
-        return item.metadata?.prompt?.trim() ?? "";
-      }
       return (
         (item.metadata?.textMode === "chat"
           ? item.metadata.chatPreviewMarkdown || item.metadata.text

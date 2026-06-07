@@ -1,8 +1,10 @@
 /* Shared App Shell — primitives 复用语言
- * 所有路由 (`/`, `/login`, `/projects`, `/project/new`, `/project/[id]/onboarding`,
- * `/studio/[id]`, `/wattpad`, `/image`, `/image/gallery`, `/settings`) 都基于这里定义的
- * page / topbar / navLink / plainDockText / dockTextLink / segmented / card / field / button 体系。
- * 详见 DESIGN.md：Visual language + Components。 */
+ * 所有路由基于 page / topbar / navLink / card / field / button 体系。
+ * 详见 DESIGN.md：Visual language + Components。
+ *
+ * 此文件保有全部 class 定义以保证向后兼容。
+ * 如需独立 import 子集，可使用同目录下的 shell-layout / shell-card / shell-form / shell-state / shell-studio 模块。
+ * 新页面可只 import 需要的模块文件。 */
 
 /* ---------- Page shell ---------- */
 

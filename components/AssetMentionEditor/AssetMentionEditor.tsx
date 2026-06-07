@@ -11,8 +11,9 @@ import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import {
   LexicalTypeaheadMenuPlugin,
   MenuOption,
-  useBasicTypeaheadTriggerMatch,
   type MenuRenderFn,
+  type MenuTextMatch,
+  type TriggerFn,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -88,6 +89,19 @@ function buildOptions(candidates: AssetMentionCandidate[], query: string | null)
   return filtered.map((candidate) => new AssetMentionOption(candidate));
 }
 
+export function getAssetMentionTriggerMatch(text: string): MenuTextMatch | null {
+  const triggerIndex = text.lastIndexOf("@");
+  if (triggerIndex < 0) return null;
+  const replaceableString = text.slice(triggerIndex);
+  const matchingString = replaceableString.slice(1);
+  if (matchingString.length > 48 || /[\s\r\n]/.test(matchingString)) return null;
+  return {
+    leadOffset: triggerIndex,
+    matchingString,
+    replaceableString,
+  };
+}
+
 function textForNode(node: LexicalNode): string {
   if ($isAssetMentionNode(node)) return serializeAssetMention(node.getAssetMention());
   if ($isLineBreakNode(node)) return "\n";
@@ -152,11 +166,7 @@ function SyncExternalValuePlugin({ value }: { value: string }) {
 function AssetMentionTypeaheadPlugin({ candidates }: { candidates: AssetMentionCandidate[] }) {
   const [editor] = useLexicalComposerContext();
   const [query, setQuery] = useState<string | null>(null);
-  const triggerMatch = useBasicTypeaheadTriggerMatch("@", {
-    minLength: 0,
-    maxLength: 48,
-    allowWhitespace: false,
-  });
+  const triggerMatch = useCallback<TriggerFn>((text) => getAssetMentionTriggerMatch(text), []);
   const options = useMemo(() => buildOptions(candidates, query), [candidates, query]);
 
   const onSelectOption = useCallback(

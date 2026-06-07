@@ -26,7 +26,7 @@ const videoPromptOnly = node("videoPromptOnly", "video", { videoModeId: "text_to
 const videoRefGen = node("videoRefGen", "video", { videoModeId: "multi_image_reference" });
 const motionVideoGen = node("motionVideoGen", "video", { videoModeId: "motion_control" });
 const group = node("group", "group");
-const preset = node("preset", "preset", { prompt: "preset template" });
+const preset = node("preset", "text", { text: "preset template", presetId: "preset-a", presetKind: "image" });
 
 assert.deepEqual(getTargetPorts(imageGen), ["prompt", "imageReference"]);
 assert.deepEqual(getTargetPorts(videoGen), ["prompt", "firstFrame", "lastFrame"]);
@@ -54,6 +54,7 @@ assert.equal(inferTargetPort(video, motionVideoGen).targetPort, "videoReference"
 assert.equal(inferTargetPort(image, videoRefGen).targetPort, "imageReference");
 assert.equal(inferTargetPort(video, videoRefGen).targetPort, "videoReference");
 assert.equal(inferTargetPort(image, videoPromptOnly).targetPort, null);
+assert.equal(inferTargetPort(preset, videoGen).targetPort, "prompt");
 assert.equal(inferTargetPort(image, image2).targetPort, "imageReference");
 assert.equal(inferTargetPort(imageGen, image).targetPort, null);
 assert.equal(inferTargetPort(image, group).targetPort, null);

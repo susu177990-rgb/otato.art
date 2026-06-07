@@ -45,18 +45,13 @@ function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof re
     .filter((conn) => !resolvedNodeIds.includes(conn.fromNodeId))
     .map((conn) => board.nodes.find((item) => item.id === conn.fromNodeId))
     .filter((item): item is CanvasNode => Boolean(item))
-    .filter((item) => item.type === "text" || item.type === "preset")
-    .map((item) => {
-      if (item.type === "preset") {
-        return item.metadata?.prompt?.trim() ?? "";
-      }
-      return (
-        (item.metadata?.textMode === "chat"
-          ? item.metadata.chatPreviewMarkdown || item.metadata.text
-          : item.metadata?.text
-        )?.trim() ?? ""
-      );
-    })
+    .filter((item) => item.type === "text")
+    .map((item) =>
+      (item.metadata?.textMode === "chat"
+        ? item.metadata.chatPreviewMarkdown || item.metadata.text
+        : item.metadata?.text
+      )?.trim() ?? ""
+    )
     .filter(Boolean);
 
   const parts = [cleanedPrompt, ...connectedPrompts].filter(Boolean);

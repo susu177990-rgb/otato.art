@@ -53,11 +53,13 @@ function normalizeViewport(value: unknown): CanvasViewport {
 function normalizeNode(value: unknown): CanvasNode | null {
   if (!isObject(value)) return null;
   // Auto-migrate legacy gen node types
-  let rawType = value.type;
+  const originalType = value.type;
+  let rawType = originalType;
   if (rawType === "imageGen") rawType = "image";
   if (rawType === "videoGen") rawType = "video";
+  if (rawType === "preset") rawType = "text";
   const type =
-    rawType === "image" || rawType === "text" || rawType === "video" || rawType === "audio" || rawType === "group" || rawType === "preset"
+    rawType === "image" || rawType === "text" || rawType === "video" || rawType === "audio" || rawType === "group"
       ? rawType
       : null;
   const id = typeof value.id === "string" ? value.id : "";
@@ -69,8 +71,9 @@ function normalizeNode(value: unknown): CanvasNode | null {
   const imageUrl = typeof metadata.imageUrl === "string" ? metadata.imageUrl : undefined;
   const videoUrl = typeof metadata.videoUrl === "string" ? metadata.videoUrl : undefined;
   const audioUrl = typeof metadata.audioUrl === "string" ? metadata.audioUrl : undefined;
-  const fallbackWidth = type === "image" || type === "video" ? 280 : type === "audio" ? 320 : type === "group" ? 400 : type === "preset" ? 320 : 260;
-  const fallbackHeight = type === "image" || type === "video" ? 220 : type === "audio" ? 96 : type === "group" ? 300 : type === "preset" ? 214 : 150;
+  const isPresetText = originalType === "preset" || typeof metadata.presetId === "string";
+  const fallbackWidth = type === "image" || type === "video" ? 280 : type === "audio" ? 320 : type === "group" ? 400 : isPresetText ? 320 : 260;
+  const fallbackHeight = type === "image" || type === "video" ? 220 : type === "audio" ? 96 : type === "group" ? 300 : isPresetText ? 280 : 150;
   const imageModelId = normalizeImageModelId(metadata.imageModelId ?? metadata.modelId);
   const aspectRatio = normalizeImageAspectRatio(metadata.aspectRatio);
   const imageSize = normalizeImageSizeTier(metadata.imageSize);
@@ -88,7 +91,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
     width: Number.isFinite(width) && width > 0 ? width : fallbackWidth,
     height: Number.isFinite(height) && height > 0 ? height : fallbackHeight,
     metadata: {
-      text: typeof metadata.text === "string" ? metadata.text : undefined,
+      text: typeof metadata.text === "string" ? metadata.text : isPresetText && typeof metadata.prompt === "string" ? metadata.prompt : undefined,
       textMode:
         type === "text"
           ? metadata.textMode === "chat" || metadata.textMode === "chooser"
@@ -126,7 +129,7 @@ function normalizeNode(value: unknown): CanvasNode | null {
       status: (type === "image" || type === "video") ? normalizeImageNodeStatus(metadata.status) : undefined,
       lastRunAt: (type === "image" || type === "video") && typeof metadata.lastRunAt === "string" ? metadata.lastRunAt : undefined,
       lastError: (type === "image" || type === "video") && typeof metadata.lastError === "string" ? metadata.lastError : undefined,
-      previewImageUrl: (type === "image" || type === "preset") && typeof metadata.previewImageUrl === "string" ? metadata.previewImageUrl : undefined,
+      previewImageUrl: (type === "image" || isPresetText) && typeof metadata.previewImageUrl === "string" ? metadata.previewImageUrl : undefined,
       previewVideoUrl: type === "video" && typeof metadata.previewVideoUrl === "string" ? metadata.previewVideoUrl : undefined,
       presetId: typeof metadata.presetId === "string" ? metadata.presetId : undefined,
       presetKind:
@@ -134,6 +137,8 @@ function normalizeNode(value: unknown): CanvasNode | null {
           ? metadata.presetKind
           : undefined,
       presetDescription: typeof metadata.presetDescription === "string" ? metadata.presetDescription : undefined,
+      presetCoverNaturalWidth: Number.isFinite(Number(metadata.presetCoverNaturalWidth)) ? Number(metadata.presetCoverNaturalWidth) : undefined,
+      presetCoverNaturalHeight: Number.isFinite(Number(metadata.presetCoverNaturalHeight)) ? Number(metadata.presetCoverNaturalHeight) : undefined,
     },
   };
 }
@@ -237,7 +242,6 @@ function defaultNodeTitle(type: CanvasNode["type"]): string {
   if (type === "video") return "视频";
   if (type === "audio") return "音频";
   if (type === "group") return "素材组";
-  if (type === "preset") return "预设";
   return "文本";
 }
 

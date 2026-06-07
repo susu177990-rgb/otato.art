@@ -183,6 +183,11 @@ function normWheelDelta(e: WheelEvent) {
 }
 
 function bezierPath(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort) {
+  const { start, cp1, cp2, end } = connectionBezierControls(from, to, targetPort);
+  return `M ${start.x} ${start.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${end.x} ${end.y}`;
+}
+
+function connectionBezierControls(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort) {
   const start = getOutputPortPos(from);
   const end = getInputPortPos(to, targetPort);
   const dir = end.x >= start.x ? 1 : -1;
@@ -191,7 +196,12 @@ function bezierPath(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPo
   const x2 = end.x;
   const y2 = end.y;
   const dx = Math.max(80, Math.abs(x2 - x1) * 0.45);
-  return `M ${x1} ${y1} C ${x1 + dx * dir} ${y1}, ${x2 - dx * dir} ${y2}, ${x2} ${y2}`;
+  return {
+    start,
+    cp1: { x: x1 + dx * dir, y: y1 },
+    cp2: { x: x2 - dx * dir, y: y2 },
+    end,
+  };
 }
 
 function draftBezierPath(start: CanvasPosition, to: CanvasPosition) {
@@ -209,6 +219,38 @@ function connectionCenterPos(from: CanvasNode, to: CanvasNode, targetPort: Canva
     x: (start.x + end.x) / 2,
     y: (start.y + end.y) / 2,
   };
+}
+
+function cubicBezierPoint(
+  start: CanvasPosition,
+  cp1: CanvasPosition,
+  cp2: CanvasPosition,
+  end: CanvasPosition,
+  t: number
+): CanvasPosition {
+  const mt = 1 - t;
+  const mt2 = mt * mt;
+  const t2 = t * t;
+  return {
+    x: mt2 * mt * start.x + 3 * mt2 * t * cp1.x + 3 * mt * t2 * cp2.x + t2 * t * end.x,
+    y: mt2 * mt * start.y + 3 * mt2 * t * cp1.y + 3 * mt * t2 * cp2.y + t2 * t * end.y,
+  };
+}
+
+function connectionIntersectsRect(
+  from: CanvasNode,
+  to: CanvasNode,
+  targetPort: CanvasTargetPort,
+  rect: { x0: number; y0: number; x1: number; y1: number }
+) {
+  const { start, cp1, cp2, end } = connectionBezierControls(from, to, targetPort);
+  for (let i = 0; i <= 36; i += 1) {
+    const point = cubicBezierPoint(start, cp1, cp2, end, i / 36);
+    if (point.x >= rect.x0 && point.x <= rect.x1 && point.y >= rect.y0 && point.y <= rect.y1) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getOutputPortPos(node: CanvasNode): CanvasPosition {
@@ -286,14 +328,18 @@ function newNodeId(type: CanvasNodeType) {
 }
 
 function makePresetNode(pos: CanvasPosition, preset: SitePromptPreset): CanvasNode {
+  const width = 320;
+  const height = 214;
   return {
-    id: newNodeId("preset"),
-    type: "preset",
+    id: newNodeId("text"),
+    type: "text",
     title: preset.title,
-    position: { x: pos.x - 160, y: pos.y - 107 },
-    width: 320,
-    height: 214,
+    position: { x: pos.x - width / 2, y: pos.y - height / 2 },
+    width,
+    height,
     metadata: {
+      text: preset.promptTemplate,
+      textMode: "manual",
       presetId: preset.id,
       presetKind: preset.kind,
       presetDescription: preset.description,
@@ -328,6 +374,14 @@ function textNodeOutput(node: CanvasNode): string | undefined {
     return node.metadata.chatPreviewMarkdown || node.metadata.text;
   }
   return node.metadata?.text;
+}
+
+function isPresetTextNode(node: CanvasNode): boolean {
+  return node.type === "text" && Boolean(node.metadata?.presetId);
+}
+
+function presetCoverFitSize(naturalWidth: number, naturalHeight: number): { width: number; height: number } {
+  return fitMediaSize({ width: naturalWidth, height: naturalHeight }, 360, 300);
 }
 
 function makeEmptyImageNode(
@@ -425,7 +479,6 @@ function nodeTypeIcon(type: CanvasNodeType) {
   if (type === "image") return "🖼️";
   if (type === "video") return "🎬";
   if (type === "audio") return "♪";
-  if (type === "preset") return "🎨";
 
   return "✏️";
 }
@@ -435,7 +488,6 @@ function nodeTypeColor(type: CanvasNodeType) {
   if (type === "image") return "#60a5fa";
   if (type === "video") return "#f472b6";
   if (type === "audio") return "#facc15";
-  if (type === "preset") return "#c4b5fd";
 
   return "#6ee7b7";
 }
@@ -482,6 +534,7 @@ export default function CanvasBoardPage() {
   const [connections, setConnections] = useState<CanvasConnection[]>([]);
   const [viewport, setViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(new Set());
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -505,6 +558,7 @@ export default function CanvasBoardPage() {
   const [portalMounted, setPortalMounted] = useState(false);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
+  const [imagePreviewNode, setImagePreviewNode] = useState<CanvasNode | null>(null);
   const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
   /** Whether Space key is held — drives cursor CSS class */
   const [spacePanMode, setSpacePanMode] = useState(false);
@@ -524,7 +578,7 @@ export default function CanvasBoardPage() {
       .flatMap((conn): AssetMentionCandidate[] => {
         const n = nodes.find((node) => node.id === conn.fromNodeId);
         if (!n || n.id === currentNodeId) return [];
-        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : n.type === "audio" ? "音频" : n.type === "preset" ? "预设" : "文本";
+        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : n.type === "audio" ? "音频" : n.metadata?.presetId ? "预设" : "文本";
         typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
         const role: AssetMentionRole =
           conn.targetPort === "prompt"
@@ -545,12 +599,12 @@ export default function CanvasBoardPage() {
           label: `${typeName}${typeCounts[typeName]}`,
           type: "node" as const,
           role,
-          nodeType: n.type === "preset" ? "text" : (n.type === "text" || n.type === "image" || n.type === "video" || n.type === "audio" ? n.type : undefined),
+          nodeType: n.type === "text" || n.type === "image" || n.type === "video" || n.type === "audio" ? n.type : undefined,
           groupLabel: "已连接素材",
           description: conn.targetPort,
           thumbnailUrl: n.metadata?.previewImageUrl || n.metadata?.imageUrl,
           url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl || n.metadata?.audioUrl,
-          text: n.type === "preset" ? n.metadata?.prompt : textNodeOutput(n),
+          text: textNodeOutput(n),
         }];
       });
   }, [nodes, connections, nodeMap]);
@@ -614,6 +668,7 @@ export default function CanvasBoardPage() {
     setEditingTextNodeId(null);
     setPresetLibraryOpen(false);
     setPresetAddNodePos(null);
+    setImagePreviewNode(null);
   }, []);
 
   const currentImageNodeDefaults = useCallback(() => ({
@@ -965,7 +1020,20 @@ export default function CanvasBoardPage() {
           for (const node of nodesRef.current) {
             if (node.position.x < wx1 && node.position.x + node.width > wx0 && node.position.y < wy1 && node.position.y + node.height > wy0) inside.add(node.id);
           }
-          if (inside.size > 0) { setSelectedNodeIds(inside); setSelectedConnectionId(null); }
+          const insideConnections = new Set<string>();
+          const nodeMap = new Map(nodesRef.current.map((node) => [node.id, node]));
+          for (const conn of connectionsRef.current) {
+            const from = nodeMap.get(conn.fromNodeId);
+            const to = nodeMap.get(conn.toNodeId);
+            if (from && to && connectionIntersectsRect(from, to, conn.targetPort, { x0: wx0, y0: wy0, x1: wx1, y1: wy1 })) {
+              insideConnections.add(conn.id);
+            }
+          }
+          if (inside.size > 0 || insideConnections.size > 0) {
+            setSelectedNodeIds(inside);
+            setSelectedConnectionIds(insideConnections);
+            setSelectedConnectionId(insideConnections.values().next().value ?? null);
+          }
         }
         selectBoxStartRef.current = null;
         setSelectBox(null);
@@ -1082,7 +1150,14 @@ export default function CanvasBoardPage() {
         return;
       }
       // Ctrl+A — select all
-      if (meta && e.key === "a") { if (isEditable) return; e.preventDefault(); setSelectedNodeIds(new Set(nodesRef.current.map((n) => n.id))); setSelectedConnectionId(null); return; }
+      if (meta && e.key === "a") {
+        if (isEditable) return;
+        e.preventDefault();
+        setSelectedNodeIds(new Set(nodesRef.current.map((n) => n.id)));
+        setSelectedConnectionIds(new Set(connectionsRef.current.map((conn) => conn.id)));
+        setSelectedConnectionId(null);
+        return;
+      }
       // Ctrl+= / Ctrl+- / Ctrl+0 — zoom
       if (meta && (e.key === "=" || e.key === "+")) { e.preventDefault(); zoomBy(0.15); return; }
       if (meta && e.key === "-") { e.preventDefault(); zoomBy(-0.15); return; }
@@ -1091,7 +1166,7 @@ export default function CanvasBoardPage() {
       if (isEditable) return;
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelected(); return; }
       if (e.key === "Escape") {
-        setSelectedNodeIds(new Set()); setSelectedConnectionId(null); dismissOverlays();
+        setSelectedNodeIds(new Set()); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); dismissOverlays();
         connectionDraftRef.current = null; setConnectionDraft(null);
       }
     };
@@ -1105,11 +1180,21 @@ export default function CanvasBoardPage() {
   const appendNode = useCallback((node: CanvasNode) => {
     pushHistory();
     const nextNode = snapToGridRef.current ? snapNode(node) : node;
-    setNodes((items) => [...items, nextNode]);
-    setSelectedNodeIds(new Set([node.id])); setSelectedConnectionId(null); setConnectionDraft(null);
+    setNodes((items) => {
+      const nextNodes = [...items, nextNode];
+      nodesRef.current = nextNodes;
+      return nextNodes;
+    });
+    setSelectedNodeIds(new Set([nextNode.id])); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); setConnectionDraft(null);
     setQuickAddBar(null);
     markDirty();
   }, [pushHistory, markDirty]);
+
+  const handlePresetSelect = useCallback((preset: SitePromptPreset) => {
+    appendNode(makePresetNode(presetAddNodePos ?? worldCenter(), preset));
+    setPresetLibraryOpen(false);
+    setPresetAddNodePos(null);
+  }, [appendNode, presetAddNodePos, worldCenter]);
 
   const appendImageNodeWithSelection = useCallback((position: CanvasPosition) => {
     const node = makeEmptyImageNode(position, currentImageNodeDefaults());
@@ -1135,6 +1220,7 @@ export default function CanvasBoardPage() {
       setConnections((items) => [...items, ...newConnections]);
     }
     setSelectedNodeIds(new Set([nextNode.id]));
+    setSelectedConnectionIds(new Set());
     setSelectedConnectionId(null);
     setConnectionDraft(null);
     setQuickAddBar(null);
@@ -1279,23 +1365,30 @@ export default function CanvasBoardPage() {
   const deleteConnectionById = useCallback((connectionId: string) => {
     pushHistory();
     setConnections((items) => items.filter((x) => x.id !== connectionId));
+    setSelectedConnectionIds((prev) => {
+      const next = new Set(prev);
+      next.delete(connectionId);
+      return next;
+    });
     setSelectedConnectionId(null);
     setMenu(null);
     markDirty();
   }, [pushHistory, markDirty]);
 
   const deleteSelected = useCallback(() => {
-    if (selectedConnectionId) {
-      deleteConnectionById(selectedConnectionId); return;
-    }
-    if (selectedNodeIds.size > 0) {
+    const connectionIds = new Set(selectedConnectionIds);
+    if (selectedConnectionId) connectionIds.add(selectedConnectionId);
+    if (selectedNodeIds.size > 0 || connectionIds.size > 0) {
       pushHistory();
-      const ids = new Set(selectedNodeIds);
-      setNodes((items) => items.filter((n) => !ids.has(n.id)).map((n) => ids.has(n.metadata?.parentId ?? "") ? { ...n, metadata: { ...n.metadata, parentId: undefined } } : n));
-      setConnections((c) => c.filter((x) => !ids.has(x.fromNodeId) && !ids.has(x.toNodeId)));
-      setSelectedNodeIds(new Set()); markDirty();
+      const nodeIds = new Set(selectedNodeIds);
+      setNodes((items) => items.filter((n) => !nodeIds.has(n.id)).map((n) => nodeIds.has(n.metadata?.parentId ?? "") ? { ...n, metadata: { ...n.metadata, parentId: undefined } } : n));
+      setConnections((c) => c.filter((x) => !connectionIds.has(x.id) && !nodeIds.has(x.fromNodeId) && !nodeIds.has(x.toNodeId)));
+      setSelectedNodeIds(new Set());
+      setSelectedConnectionIds(new Set());
+      setSelectedConnectionId(null);
+      markDirty();
     }
-  }, [deleteConnectionById, selectedConnectionId, selectedNodeIds, pushHistory, markDirty]);
+  }, [selectedConnectionId, selectedConnectionIds, selectedNodeIds, pushHistory, markDirty]);
 
   const deleteNodeById = useCallback((nodeId: string) => {
     pushHistory();
@@ -1497,6 +1590,7 @@ export default function CanvasBoardPage() {
       setNodes(nextNodes);
       nodesRef.current = nextNodes;
       setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionIds(new Set());
       setSelectedConnectionId(null);
       markDirty();
     } catch (error) {
@@ -1542,6 +1636,7 @@ export default function CanvasBoardPage() {
       setNodes(nextNodes);
       nodesRef.current = nextNodes;
       setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionIds(new Set());
       setSelectedConnectionId(null);
       markDirty();
     } catch (error) {
@@ -1562,10 +1657,10 @@ export default function CanvasBoardPage() {
       .filter((conn) => conn.toNodeId === nodeId && conn.targetPort === "prompt")
       .map((conn) => nodesRef.current.find((node) => node.id === conn.fromNodeId))
       .filter((node): node is CanvasNode => {
-        return Boolean(node) && (node?.type === "text" || node?.type === "preset");
+        return Boolean(node) && node?.type === "text";
       })
       .map((node, index) => {
-        const text = (node.type === "preset" ? node.metadata?.prompt : textNodeOutput(node))?.trim();
+        const text = textNodeOutput(node)?.trim();
         return text ? `### 文本上下文 ${index + 1}：${node.title || node.id}\n\n${text}` : "";
       })
       .filter(Boolean);
@@ -1624,6 +1719,7 @@ export default function CanvasBoardPage() {
       setNodes(nextNodes);
       nodesRef.current = nextNodes;
       setSelectedNodeIds(new Set([nodeId]));
+      setSelectedConnectionIds(new Set());
       setSelectedConnectionId(null);
       markDirty();
     } catch (error) {
@@ -1649,6 +1745,7 @@ export default function CanvasBoardPage() {
       k: vp.k,
     }));
     setSelectedNodeIds(new Set([node.id]));
+    setSelectedConnectionIds(new Set());
     setSelectedConnectionId(null);
     markDirty();
   }, [markDirty, setViewportBoth]);
@@ -1657,6 +1754,15 @@ export default function CanvasBoardPage() {
     const url = node.type === "image" ? node.metadata?.imageUrl : node.type === "video" ? node.metadata?.videoUrl : node.type === "audio" ? node.metadata?.audioUrl : undefined;
     if (url) window.open(url, "_blank", "noopener,noreferrer");
     else focusNode(node);
+  }, [focusNode]);
+
+  const openImagePreview = useCallback((node: CanvasNode) => {
+    const url = node.metadata?.imageUrl?.trim() || node.metadata?.previewImageUrl?.trim();
+    if (!url) {
+      focusNode(node);
+      return;
+    }
+    setImagePreviewNode(node);
   }, [focusNode]);
 
   const downloadNodeMedia = useCallback((node: CanvasNode) => {
@@ -1672,8 +1778,8 @@ export default function CanvasBoardPage() {
           URL.revokeObjectURL(a.href);
         })
         .catch(() => window.open(url, "_blank", "noopener,noreferrer"));
-    } else if (node.type === "text" || node.type === "preset" || (!node.metadata?.source && node.metadata?.prompt !== undefined)) {
-      const text = node.type === "text" ? node.metadata?.text : node.metadata?.prompt;
+    } else if (node.type === "text" || (!node.metadata?.source && node.metadata?.prompt !== undefined)) {
+      const text = node.type === "text" ? textNodeOutput(node) : node.metadata?.prompt;
       if (!text) return;
       const blob = new Blob([text], { type: "text/plain" });
       const a = document.createElement("a");
@@ -1716,7 +1822,7 @@ export default function CanvasBoardPage() {
     const draft: ConnectionDraft = { mode: "fromOutput", anchorNodeId: nodeId, fromNodeId: nodeId, current, targetNodeId: null, targetPort: null, message: "拖到合法输入槽" };
     connectionDraftRef.current = draft;
     setConnectionDraft(draft);
-    setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionId(null);
+    setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null);
   };
 
   const startInputConnectionDrag = (nodeId: string, e: React.PointerEvent) => {
@@ -1727,7 +1833,7 @@ export default function CanvasBoardPage() {
     const draft: ConnectionDraft = { mode: "toInput", anchorNodeId: nodeId, fromNodeId: null, current, targetNodeId: nodeId, targetPort: null, message: "拖到素材或生成节点输出点" };
     connectionDraftRef.current = draft;
     setConnectionDraft(draft);
-    setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionId(null);
+    setSelectedNodeIds(new Set([nodeId])); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null);
   };
 
   const startNodeDrag = (nodeId: string, e: React.PointerEvent, currentIds: Set<string>) => {
@@ -1767,7 +1873,7 @@ export default function CanvasBoardPage() {
   };
 
 
-  const hasSelection = selectedNodeIds.size > 0 || !!selectedConnectionId;
+  const hasSelection = selectedNodeIds.size > 0 || selectedConnectionIds.size > 0 || !!selectedConnectionId;
   const zoomPct = Math.round(viewport.k * 100);
   const worldStyle = useMemo(
     () => ({
@@ -1935,6 +2041,7 @@ export default function CanvasBoardPage() {
 
             // Left button on empty canvas: clear selection, enter pending state
             setSelectedNodeIds(new Set());
+            setSelectedConnectionIds(new Set());
             setSelectedConnectionId(null);
             connectionDraftRef.current = null;
             setConnectionDraft(null);
@@ -1974,29 +2081,47 @@ export default function CanvasBoardPage() {
                 const from = nodeMap.get(conn.fromNodeId), to = nodeMap.get(conn.toNodeId);
                 if (!from || !to) return null;
                 const centerPos = connectionCenterPos(from, to, conn.targetPort);
+                const pathData = bezierPath(from, to, conn.targetPort);
+                const selected = selectedConnectionId === conn.id || selectedConnectionIds.has(conn.id);
+                const selectConnection = () => {
+                  setSelectedConnectionIds(new Set([conn.id]));
+                  setSelectedConnectionId(conn.id);
+                  setSelectedNodeIds(new Set());
+                  setConnectionDraft(null);
+                };
                 return (
                   <g key={conn.id} className={styles.connectionItem}>
                     <path
-                      className={[styles.connectionPath, selectedConnectionId === conn.id ? styles.connectionPathActive : ""].join(" ")}
-                      d={bezierPath(from, to, conn.targetPort)}
-                      onPointerDown={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); setSelectedNodeIds(new Set()); setConnectionDraft(null); }}
+                      className={styles.connectionHitPath}
+                      d={pathData}
+                      strokeWidth={22 / viewport.k}
+                      onPointerDown={(e) => { e.stopPropagation(); selectConnection(); }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        setSelectedConnectionId(conn.id);
-                        setSelectedNodeIds(new Set());
-                        setConnectionDraft(null);
+                        selectConnection();
+                        setMenu({ kind: "connection", x: e.clientX, y: e.clientY, connectionId: conn.id });
+                      }}
+                    />
+                    <path
+                      className={[styles.connectionPath, selected ? styles.connectionPathActive : ""].join(" ")}
+                      d={pathData}
+                      onPointerDown={(e) => { e.stopPropagation(); selectConnection(); }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectConnection();
                         setMenu({ kind: "connection", x: e.clientX, y: e.clientY, connectionId: conn.id });
                       }}
                     />
                     <g
-                      className={[styles.connectionBreakButton, selectedConnectionId === conn.id ? styles.connectionBreakButtonActive : ""].join(" ")}
+                      className={[styles.connectionBreakButton, selected ? styles.connectionBreakButtonActive : ""].join(" ")}
                       transform={`translate(${centerPos.x} ${centerPos.y})`}
                       onPointerDown={(e) => { e.stopPropagation(); deleteConnectionById(conn.id); }}
                       aria-label="断开连线"
                     >
-                      <circle r="12" />
-                      <path d="M -5 -5 L 5 5 M 5 -5 L -5 5" />
+                      <circle r="16" />
+                      <path d="M -6 -6 L 6 6 M 6 -6 L -6 6" />
                     </g>
                   </g>
                 );
@@ -2054,8 +2179,22 @@ export default function CanvasBoardPage() {
               const selected = selectedNodeIds.has(node.id);
               const connectTarget = connectionDraft?.targetNodeId === node.id;
               const isGroup = node.type === "group";
+              const isPresetText = isPresetTextNode(node);
               const hasNaturalDim = (node.type === "image" || node.type === "video") &&
                 node.metadata?.naturalWidth && node.metadata?.naturalHeight;
+              const startTextNodeEdgeDrag = (e: React.PointerEvent) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                const cur = new Set(selectedNodeIds);
+                if (!cur.has(node.id)) {
+                  if (!e.shiftKey) cur.clear();
+                  cur.add(node.id);
+                  setSelectedNodeIds(cur);
+                  setSelectedConnectionIds(new Set());
+                  setSelectedConnectionId(null);
+                }
+                startNodeDrag(node.id, e, cur);
+              };
               return (
                 <article
                   key={node.id}
@@ -2063,8 +2202,10 @@ export default function CanvasBoardPage() {
                   style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
+                    setSelectedConnectionIds(new Set());
+                    setSelectedConnectionId(null);
                     if (e.shiftKey) { setSelectedNodeIds((prev) => { const next = new Set(prev); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next; }); }
-                    else { setSelectedNodeIds(new Set([node.id])); setSelectedConnectionId(null); }
+                    else { setSelectedNodeIds(new Set([node.id])); }
                   }}
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMenu({ kind: "node", x: e.clientX, y: e.clientY, nodeId: node.id }); setQuickAddBar(null); }}
                 >
@@ -2073,7 +2214,7 @@ export default function CanvasBoardPage() {
                     className={styles.nodeOverlay}
                     onDoubleClick={(e) => { e.stopPropagation(); setEditingNodeTitleId(node.id); }}
                   >
-                    <span className={styles.nodeOverlayIcon}>{nodeTypeIcon(node.type)}</span>
+                    <span className={styles.nodeOverlayIcon}>{isPresetText ? "🎨" : nodeTypeIcon(node.type)}</span>
                     {editingNodeTitleId === node.id ? (
                       <input
                         className={styles.nodeOverlayTitleEdit}
@@ -2132,6 +2273,18 @@ export default function CanvasBoardPage() {
                             {node.metadata?.status === "success" ? "重新生成" : "生成"}
                           </button>
                           <button type="button" title="导出提示词" onClick={() => downloadNodeMedia(node)}>导出</button>
+                          {node.type === "image" && (node.metadata?.imageUrl?.trim() || node.metadata?.previewImageUrl?.trim()) ? (
+                            <button
+                              type="button"
+                              title="放大"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openImagePreview(node);
+                              }}
+                            >
+                              放大
+                            </button>
+                          ) : null}
                         </>
                       ) : (
                         <>
@@ -2144,7 +2297,7 @@ export default function CanvasBoardPage() {
 
                   {/* For image / video gen nodes: two separate visual cards (preview on top, composer below).
                       For all other types: the standard single nodeVisual box. */}
-                  {node.type === "preset" ? (
+                  {isPresetText ? (
                     <div
                       className={styles.canvasPresetCard}
                       onPointerDown={(e) => {
@@ -2153,7 +2306,7 @@ export default function CanvasBoardPage() {
                         if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
                         e.stopPropagation();
                         const cur = new Set(selectedNodeIds);
-                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); }
                         startNodeDrag(node.id, e, cur);
                       }}
                     >
@@ -2173,7 +2326,34 @@ export default function CanvasBoardPage() {
                         </span>
                         {node.metadata?.previewImageUrl?.trim() ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={node.metadata.previewImageUrl.trim()} alt="" draggable={false} />
+                          <img
+                            src={node.metadata.previewImageUrl.trim()}
+                            alt=""
+                            draggable={false}
+                            onLoad={(e) => {
+                              const img = e.currentTarget;
+                              if (!img.naturalWidth || !img.naturalHeight) return;
+                              const nextSize = presetCoverFitSize(img.naturalWidth, img.naturalHeight);
+                              if (
+                                node.metadata?.presetCoverNaturalWidth === img.naturalWidth &&
+                                node.metadata?.presetCoverNaturalHeight === img.naturalHeight &&
+                                Math.abs(node.width - nextSize.width) < 0.5 &&
+                                Math.abs(node.height - nextSize.height) < 0.5
+                              ) {
+                                return;
+                              }
+                              patchNode(node.id, (item) => ({
+                                ...item,
+                                width: nextSize.width,
+                                height: nextSize.height,
+                                metadata: {
+                                  ...item.metadata,
+                                  presetCoverNaturalWidth: img.naturalWidth,
+                                  presetCoverNaturalHeight: img.naturalHeight,
+                                },
+                              }));
+                            }}
+                          />
                         ) : (
                           <span>{node.title}</span>
                         )}
@@ -2189,10 +2369,16 @@ export default function CanvasBoardPage() {
                           if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
                           e.stopPropagation();
                           const cur = new Set(selectedNodeIds);
-                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); }
                           startNodeDrag(node.id, e, cur);
                         }}
                       >
+                        <div className={styles.textNodeDragEdges} aria-hidden>
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeTop].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeRight].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeBottom].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeLeft].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                        </div>
                         {node.metadata?.chatPreviewMarkdown?.trim() ? (
                           <div className={styles.textChatMarkdown}>
                             <ChatMarkdown markdown={node.metadata.chatPreviewMarkdown} />
@@ -2327,7 +2513,7 @@ export default function CanvasBoardPage() {
                           if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName)) return;
                           e.stopPropagation();
                           const cur = new Set(selectedNodeIds);
-                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                          if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); }
                           startNodeDrag(node.id, e, cur);
                         }}
                       >
@@ -2562,7 +2748,7 @@ export default function CanvasBoardPage() {
                         if (["TEXTAREA", "INPUT", "BUTTON", "A", "SELECT"].includes(target.tagName) || target.isContentEditable) return;
                         e.stopPropagation();
                         const cur = new Set(selectedNodeIds);
-                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionId(null); }
+                        if (!cur.has(node.id)) { if (!e.shiftKey) cur.clear(); cur.add(node.id); setSelectedNodeIds(cur); setSelectedConnectionIds(new Set()); setSelectedConnectionId(null); }
                         startNodeDrag(node.id, e, cur);
                       }}
                       onDoubleClick={(e) => {
@@ -2572,6 +2758,14 @@ export default function CanvasBoardPage() {
                         }
                       }}
                     >
+                      {node.type === "text" ? (
+                        <div className={styles.textNodeDragEdges} aria-hidden>
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeTop].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeRight].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeBottom].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                          <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeLeft].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
+                        </div>
+                      ) : null}
                       {node.type === "text" ? (
                         editingTextNodeId === node.id ? (
                           <AssetMentionEditor
@@ -2657,11 +2851,11 @@ export default function CanvasBoardPage() {
               {/* Group / ungroup based on selection */}
               {canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}>🗂️ 打组选中 (Ctrl+G)</button>}
               {canUngroup && <button type="button" onClick={() => { for (const id of selectedNodeIds) { if (nodeMap.get(id)?.type === "group") { ungroupNode(id); break; } } setMenu(null); }}>✂️ 解散组 (Ctrl+⇧+G)</button>}
-              {hasSelection && <button type="button" onClick={() => { const s = nodesRef.current.filter(n => selectedNodeIds.has(n.id)); if (s.length) { nodeClipboardRef.current = s; setHasClipboard(true); } setMenu(null); }}>📋 复制选中 (Ctrl+C)</button>}
+              {selectedNodeIds.size > 0 && <button type="button" onClick={() => { const s = nodesRef.current.filter(n => selectedNodeIds.has(n.id)); if (s.length) { nodeClipboardRef.current = s; setHasClipboard(true); } setMenu(null); }}>📋 复制选中 (Ctrl+C)</button>}
               {hasSelection && <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteSelected(); setMenu(null); }}>🗑️ 删除选中 (Del)</button>}
               {(canGroup || canUngroup || hasSelection) && <div className={styles.uploadMenuDivider} />}
               <button type="button" disabled={!hasClipboard} onClick={() => { pasteNodes(menu.world); setMenu(null); }}>📋 粘贴节点 (Ctrl+V)</button>
-              <button type="button" onClick={() => { setSelectedNodeIds(new Set(nodesRef.current.map(n => n.id))); setSelectedConnectionId(null); setMenu(null); }}>全选 (Ctrl+A)</button>
+              <button type="button" onClick={() => { setSelectedNodeIds(new Set(nodesRef.current.map(n => n.id))); setSelectedConnectionIds(new Set(connectionsRef.current.map(conn => conn.id))); setSelectedConnectionId(null); setMenu(null); }}>全选 (Ctrl+A)</button>
               <button type="button" onClick={() => {
                 const snapshot = historyRef.current.pop();
                 if (snapshot) {
@@ -2678,15 +2872,6 @@ export default function CanvasBoardPage() {
                 }
                 setMenu(null);
               }}>重做 (Ctrl+Y)</button>
-              <div className={styles.uploadMenuDivider} />
-              <button type="button" onClick={() => { appendNode(makeTextNode(menu.world)); setMenu(null); }}>新建文本节点</button>
-              <button type="button" onClick={() => { openPresetLibraryForAddingNode(menu.world); setMenu(null); }}>新建预设节点</button>
-              <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); imageInputRef.current?.click(); }}>上传图片</button>
-              <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); videoInputRef.current?.click(); }}>上传视频</button>
-              <button type="button" onClick={() => { menuWorldRef.current = menu.world; setMenu(null); audioInputRef.current?.click(); }}>上传音频</button>
-              <div className={styles.uploadMenuDivider} />
-              <button type="button" onClick={() => { appendImageNodeWithSelection(menu.world); setMenu(null); }}>图片节点</button>
-              <button type="button" onClick={() => { appendNode(makeEmptyVideoNode(menu.world, currentVideoNodeDefaults())); setMenu(null); }}>视频节点</button>
             </div>
           )}
 
@@ -2780,7 +2965,7 @@ export default function CanvasBoardPage() {
               <div ref={minimapRef} className={styles.minimapCanvas} style={{ width: minimap.width, height: minimap.height }}>
                 {nodes.map((node) => {
                   const r = minimap.mapRect({ x: node.position.x, y: node.position.y, width: node.width, height: node.height });
-                  return <span key={node.id} className={styles.minimapNode} style={{ left: r.left, top: r.top, width: r.width, height: r.height, backgroundColor: nodeTypeColor(node.type) }} />;
+                  return <span key={node.id} className={styles.minimapNode} style={{ left: r.left, top: r.top, width: r.width, height: r.height, backgroundColor: isPresetTextNode(node) ? "#c4b5fd" : nodeTypeColor(node.type) }} />;
                 })}
                 {(() => {
                   const r = minimap.mapRect(minimap.viewportWorld);
@@ -2815,7 +3000,8 @@ export default function CanvasBoardPage() {
           <div className={styles.statusPanel}>
             <div className={styles.statusText}>
               {connectionDraft ? `${connectionDraft.message ?? "拖到合法输入槽"} · Esc 取消`
-                : selectedConnectionId ? "已选连线 · 点红叉或按 Delete"
+                : selectedConnectionIds.size > 1 ? `已选 ${selectedConnectionIds.size} 条连线 · 点红叉或按 Delete`
+                : selectedConnectionIds.size === 1 || selectedConnectionId ? "已选连线 · 点红叉或按 Delete"
                 : selectedNodeIds.size > 1 ? `已选 ${selectedNodeIds.size} 个 · 右键菜单进行打组/删除等操作 · Ctrl+G 打组`
                 : spacePanMode ? "Space 平移模式 — 拖拽移动画布"
                 : "拖拽框选 · 双击添加节点 · 右键菜单 · Ctrl+Z 撤销"}
@@ -2824,14 +3010,23 @@ export default function CanvasBoardPage() {
 
           {portalMounted && presetLibraryOpen
             ? createPortal(
-                <div className={styles.presetLibraryRoot} role="dialog" aria-modal="true" aria-label="选择提示词预设">
-                  <button
-                    type="button"
-                    className={styles.presetLibraryBackdrop}
-                    onClick={() => { setPresetLibraryOpen(false); setPresetAddNodePos(null); }}
-                    aria-label="关闭提示词预设窗口"
-                  />
-                  <section className={styles.presetLibraryPanel}>
+                <div
+                  className={styles.presetLibraryRoot}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="选择提示词预设"
+                  onPointerDown={(e) => {
+                    if (e.target === e.currentTarget) {
+                      setPresetLibraryOpen(false);
+                      setPresetAddNodePos(null);
+                    }
+                  }}
+                >
+                  <section
+                    className={styles.presetLibraryPanel}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <header className={styles.presetLibraryHead}>
                       <div>
                         <p className={styles.presetLibraryEyebrow}>无限画布</p>
@@ -2884,16 +3079,7 @@ export default function CanvasBoardPage() {
                               key={preset.id}
                               className={styles.presetCard}
                               style={{ cursor: "pointer" }}
-                              onClick={() => {
-                                console.log("[canvas-preset] preset card clicked", preset);
-                                const pos = presetAddNodePos || worldCenter();
-                                console.log("[canvas-preset] target spawn position", pos);
-                                const node = makePresetNode(pos, preset);
-                                console.log("[canvas-preset] generated preset node", node);
-                                appendNode(node);
-                                setPresetLibraryOpen(false);
-                                setPresetAddNodePos(null);
-                              }}
+                              onClick={() => handlePresetSelect(preset)}
                             >
                               {/* 预设卡片内容展示层 */}
                               <div className={styles.presetCardCover}>
@@ -2945,6 +3131,36 @@ export default function CanvasBoardPage() {
                       )}
                     </div>
                   </section>
+                </div>,
+                document.body,
+              )
+            : null}
+
+          {portalMounted && imagePreviewNode
+            ? createPortal(
+                <div className={styles.imagePreviewRoot} role="dialog" aria-modal="true" aria-label="图片预览">
+                  <button
+                    type="button"
+                    className={styles.imagePreviewBackdrop}
+                    onClick={() => setImagePreviewNode(null)}
+                    aria-label="关闭图片预览"
+                  />
+                  <figure className={styles.imagePreviewFrame}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imagePreviewNode.metadata?.imageUrl?.trim() || imagePreviewNode.metadata?.previewImageUrl?.trim() || ""}
+                      alt={imagePreviewNode.title || "生成图片"}
+                      className={styles.imagePreviewImg}
+                    />
+                  </figure>
+                  <button
+                    type="button"
+                    className={styles.imagePreviewClose}
+                    onClick={() => setImagePreviewNode(null)}
+                    aria-label="关闭"
+                  >
+                    ×
+                  </button>
                 </div>,
                 document.body,
               )

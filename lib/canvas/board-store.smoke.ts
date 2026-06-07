@@ -92,6 +92,8 @@ const presetTest = normalizeBoardData({
         presetDescription: "生图预设描述",
         prompt: "A photorealistic cat",
         previewImageUrl: "https://example.com/cover.jpg",
+        presetCoverNaturalWidth: 1200,
+        presetCoverNaturalHeight: 800,
       },
     },
   ],
@@ -99,14 +101,18 @@ const presetTest = normalizeBoardData({
   viewport: { x: 0, y: 0, k: 1 },
 });
 
-assert.equal(presetTest.nodes[0]?.type, "preset");
+assert.equal(presetTest.nodes[0]?.type, "text");
 assert.equal(presetTest.nodes[0]?.title, "写实风格");
 assert.equal(presetTest.nodes[0]?.width, 320);
 assert.equal(presetTest.nodes[0]?.height, 214);
+assert.equal(presetTest.nodes[0]?.metadata?.textMode, "manual");
+assert.equal(presetTest.nodes[0]?.metadata?.text, "A photorealistic cat");
 assert.equal(presetTest.nodes[0]?.metadata?.presetId, "preset-a");
 assert.equal(presetTest.nodes[0]?.metadata?.presetKind, "image");
 assert.equal(presetTest.nodes[0]?.metadata?.presetDescription, "生图预设描述");
 assert.equal(presetTest.nodes[0]?.metadata?.prompt, "A photorealistic cat");
 assert.equal(presetTest.nodes[0]?.metadata?.previewImageUrl, "https://example.com/cover.jpg");
+assert.equal(presetTest.nodes[0]?.metadata?.presetCoverNaturalWidth, 1200);
+assert.equal(presetTest.nodes[0]?.metadata?.presetCoverNaturalHeight, 800);
 
 console.log("canvas board store smoke: ok");
