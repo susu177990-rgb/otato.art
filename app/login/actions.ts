@@ -1,40 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-function normalizeOrigin(value: string | undefined): string | null {
-  const candidate = value?.split(",")[0]?.trim().replace(/\/+$/, "");
-  if (!candidate) return null;
-
-  try {
-    const url = new URL(candidate.startsWith("http") ? candidate : `https://${candidate}`);
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-async function requestOrigin(): Promise<string> {
-  const configuredOrigin =
-    normalizeOrigin(process.env.APP_ORIGIN) ??
-    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL) ??
-    normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL) ??
-    normalizeOrigin(process.env.ZEABUR_WEB_URL) ??
-    normalizeOrigin(process.env.ZEABUR_URL) ??
-    normalizeOrigin(process.env.VERCEL_URL);
-  if (configuredOrigin) return configuredOrigin;
-
-  const hdrs = await headers();
-  const host = hdrs.get("x-forwarded-host")?.split(",")[0]?.trim() ?? hdrs.get("host");
-  if (!host) return "http://localhost:4000";
-  const proto =
-    hdrs.get("x-forwarded-proto")?.split(",")[0]?.trim() ??
-    (host.includes("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
+import { resolveAppOrigin } from "@/lib/me";
 
 export type AuthFormState = { error?: string; info?: string } | null;
 
@@ -99,7 +68,7 @@ export async function signUpWithPassword(
     return { error: error instanceof Error ? error.message : "Supabase 初始化失败" };
   }
 
-  const baseOrigin = await requestOrigin();
+  const baseOrigin = await resolveAppOrigin();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -117,4 +86,33 @@ export async function signUpWithPassword(
   }
 
   return { info: "注册成功。若启用了邮箱验证，请查收邮件后点击链接登录。" };
+}
+
+export async function sendPasswordResetEmail(
+  _prev: AuthFormState,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!email) {
+    return { error: "请填写邮箱" };
+  }
+
+  let supabase: SupabaseClient;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Supabase 初始化失败" };
+  }
+
+  const baseOrigin = await resolveAppOrigin();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${baseOrigin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+  });
+
+  if (error) {
+    return { error: localizeAuthError(error.message) };
+  }
+
+  return { info: "重设密码邮件已发送。请打开邮件里的链接设置新密码。" };
 }

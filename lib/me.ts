@@ -42,6 +42,21 @@ async function countOwnedRows(supabase: SupabaseClient, table: string, userId: s
   return count ?? 0;
 }
 
+function authProvidersForUser(user: User): string[] {
+  const providers = new Set<string>();
+  const primaryProvider = user.app_metadata?.provider;
+  if (typeof primaryProvider === "string" && primaryProvider.trim()) {
+    providers.add(primaryProvider.trim());
+  }
+
+  for (const identity of user.identities ?? []) {
+    const provider = identity.provider?.trim();
+    if (provider) providers.add(provider);
+  }
+
+  return [...providers];
+}
+
 export async function getMeSnapshot(supabase: SupabaseClient, user: User): Promise<MeSnapshot> {
   const [
     projectsCount,
@@ -56,12 +71,15 @@ export async function getMeSnapshot(supabase: SupabaseClient, user: User): Promi
     countOwnedRows(supabase, "video_gallery_records", user.id),
     countOwnedRows(supabase, "canvas_boards", user.id),
   ]);
+  const authProviders = authProvidersForUser(user);
 
   return {
     user: {
       id: user.id,
       email: user.email?.trim() || "暂无",
       emailConfirmed: Boolean(user.email_confirmed_at),
+      primaryProvider: authProviders[0] ?? "email",
+      authProviders,
       createdAt: user.created_at ?? null,
       lastSignInAt: user.last_sign_in_at ?? null,
     },
@@ -75,10 +93,11 @@ export async function getMeSnapshot(supabase: SupabaseClient, user: User): Promi
   };
 }
 
-export function validatePasswordInput(input: UpdatePasswordInput): string | null {
-  if (!input.currentPassword || !input.newPassword) return "请填写当前密码和新密码";
+export function validatePasswordInput(input: UpdatePasswordInput, requireCurrentPassword = true): string | null {
+  if (requireCurrentPassword && !input.currentPassword) return "请填写当前密码";
+  if (!input.newPassword) return "请填写新密码";
   if (input.newPassword.length < 6) return "新密码至少需要 6 位";
-  if (input.currentPassword === input.newPassword) return "新密码不能和当前密码相同";
+  if (requireCurrentPassword && input.currentPassword === input.newPassword) return "新密码不能和当前密码相同";
   return null;
 }
 
@@ -107,17 +126,21 @@ export async function changePassword(
   user: User,
   input: UpdatePasswordInput,
 ): Promise<{ ok: true; message: string }> {
-  const validationError = validatePasswordInput(input);
+  const authProviders = authProvidersForUser(user);
+  const hasPasswordProvider = authProviders.length === 0 || authProviders.includes("email");
+  const validationError = validatePasswordInput(input, hasPasswordProvider);
   if (validationError) throw new Error(validationError);
   const email = user.email?.trim();
   if (!email) throw new Error("当前账号缺少邮箱，无法修改密码");
 
-  const verify = await supabase.auth.signInWithPassword({
-    email,
-    password: input.currentPassword,
-  });
-  if (verify.error) {
-    throw new Error(localizeAuthError(verify.error.message));
+  if (hasPasswordProvider) {
+    const verify = await supabase.auth.signInWithPassword({
+      email,
+      password: input.currentPassword,
+    });
+    if (verify.error) {
+      throw new Error(localizeAuthError(verify.error.message));
+    }
   }
 
   const update = await supabase.auth.updateUser({ password: input.newPassword });
@@ -125,7 +148,12 @@ export async function changePassword(
     throw new Error(localizeAuthError(update.error.message));
   }
 
-  return { ok: true, message: "密码已更新，请使用新密码重新登录或继续当前会话。" };
+  return {
+    ok: true,
+    message: hasPasswordProvider
+      ? "密码已更新，请使用新密码重新登录或继续当前会话。"
+      : "密码已设置。以后可以继续用 Google 登录，也可以用邮箱密码登录。",
+  };
 }
 
 export async function changeEmail(

@@ -132,6 +132,8 @@ export interface MeSnapshot {
     id: string;
     email: string;
     emailConfirmed: boolean;
+    primaryProvider: string;
+    authProviders: string[];
     createdAt: string | null;
     lastSignInAt: string | null;
   };

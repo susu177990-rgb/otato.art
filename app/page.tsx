@@ -1,21 +1,50 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/branding";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "./shared/shell.module.css";
 
 function ModeHomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectParam = searchParams.get("project");
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!projectParam) return;
     router.replace(`/studio/${projectParam}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectParam]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+
+      void supabase.auth.getUser().then(({ data }) => {
+        if (mounted) setIsLoggedIn(Boolean(data.user));
+      });
+
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+        setIsLoggedIn(Boolean(session?.user));
+      });
+
+      return () => {
+        mounted = false;
+        listener.subscription.unsubscribe();
+      };
+    } catch {
+      setIsLoggedIn(false);
+      return () => {
+        mounted = false;
+      };
+    }
+  }, []);
 
   if (projectParam) {
     return <div className={shellStyles.empty}>正在跳转…</div>;
@@ -26,15 +55,23 @@ function ModeHomeInner() {
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>{BRAND_NAME}</p>
+            <Image
+              src="/oTATo.svg"
+              alt={BRAND_NAME}
+              width={36}
+              height={36}
+              className={shellStyles.brandLogo}
+              priority
+            />
+            <span className={shellStyles.brandWordmark}>oTATo Art</span>
           </div>
         </div>
         <nav className={shellStyles.topnav}>
           <Link href="/settings" className={shellStyles.navLink}>
             设置
           </Link>
-          <Link href="/me" className={shellStyles.navLink}>
-            我的
+          <Link href={isLoggedIn ? "/me" : "/login?next=/"} className={shellStyles.navLink}>
+            {isLoggedIn ? "我的" : "登录 / 注册"}
           </Link>
         </nav>
       </header>

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { validateEmailInput, validatePasswordInput } from "@/lib/me";
 
-assert.equal(validatePasswordInput({ currentPassword: "", newPassword: "" }), "请填写当前密码和新密码");
+assert.equal(validatePasswordInput({ currentPassword: "", newPassword: "" }), "请填写当前密码");
+assert.equal(validatePasswordInput({ currentPassword: "", newPassword: "" }, false), "请填写新密码");
+assert.equal(validatePasswordInput({ currentPassword: "", newPassword: "newpass" }, false), null);
 assert.equal(
   validatePasswordInput({ currentPassword: "123456", newPassword: "123456" }),
   "新密码不能和当前密码相同",

@@ -43,6 +43,8 @@ data/projects/*.json
 .claude/
 .omx/
 .playwright-cli/
+supabase/.temp/
 
 # Utility exports
 all-migrations.sql
+supabase/recovery-*.sql

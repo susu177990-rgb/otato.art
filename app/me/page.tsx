@@ -37,6 +37,16 @@ function statusText(confirmed: boolean): string {
   return confirmed ? "已验证" : "未验证";
 }
 
+function providerLabel(provider: string): string {
+  if (provider === "google") return "Google";
+  if (provider === "email") return "邮箱密码";
+  return provider || "邮箱密码";
+}
+
+function usesPasswordProvider(snapshot: MeSnapshot): boolean {
+  return snapshot.user.authProviders.length === 0 || snapshot.user.authProviders.includes("email");
+}
+
 function totalAssets(snapshot: MeSnapshot): number {
   return snapshot.stats.imageRecords + snapshot.stats.videoRecords + snapshot.stats.canvasBoards;
 }
@@ -180,6 +190,9 @@ export default function MePage() {
                     邮箱 {statusText(loadState.snapshot.user.emailConfirmed)}
                   </span>
                   <span className={[shellStyles.metaPill, styles.heroMetaPill].join(" ")}>
+                    登录方式 {loadState.snapshot.user.authProviders.map(providerLabel).join(" / ") || "邮箱密码"}
+                  </span>
+                  <span className={[shellStyles.metaPill, styles.heroMetaPill].join(" ")}>
                     项目 {loadState.snapshot.stats.projects}
                   </span>
                   <span className={[shellStyles.metaPill, styles.heroMetaPill].join(" ")}>
@@ -209,6 +222,12 @@ export default function MePage() {
                       <div className={styles.kvCard}>
                         <span className={styles.kvLabel}>邮箱状态</span>
                         <span className={styles.kvValue}>{statusText(loadState.snapshot.user.emailConfirmed)}</span>
+                      </div>
+                      <div className={styles.kvCard}>
+                        <span className={styles.kvLabel}>登录方式</span>
+                        <span className={styles.kvValue}>
+                          {loadState.snapshot.user.authProviders.map(providerLabel).join(" / ") || "邮箱密码"}
+                        </span>
                       </div>
                       <div className={styles.kvCard}>
                         <span className={styles.kvLabel}>注册时间</span>
@@ -265,23 +284,31 @@ export default function MePage() {
                   <section className={[shellStyles.card, styles.accountFormCard].join(" ")}>
                     <form onSubmit={submitPassword} className={styles.accountForm}>
                       <div className={styles.accountFormHeader}>
-                        <h2 className={shellStyles.cardTitle}>修改密码</h2>
-                        <p className={shellStyles.cardSubtitle}>需要先验证当前密码，再允许切换到新密码。</p>
+                        <h2 className={shellStyles.cardTitle}>
+                          {usesPasswordProvider(loadState.snapshot) ? "修改密码" : "设置邮箱密码"}
+                        </h2>
+                        <p className={shellStyles.cardSubtitle}>
+                          {usesPasswordProvider(loadState.snapshot)
+                            ? "需要先验证当前密码，再允许切换到新密码。"
+                            : "当前账号由 Google 登录；设置密码后，也可以用邮箱密码登录。"}
+                        </p>
                       </div>
                       <div className={styles.passwordFields}>
-                        <label className={shellStyles.field}>
-                          <span className={shellStyles.fieldLabel}>当前密码</span>
-                          <input
-                            className={shellStyles.input}
-                            type="password"
-                            value={passwordForm.currentPassword}
-                            autoComplete="current-password"
-                            onChange={(event) =>
-                              setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
-                            }
-                            required
-                          />
-                        </label>
+                        {usesPasswordProvider(loadState.snapshot) ? (
+                          <label className={shellStyles.field}>
+                            <span className={shellStyles.fieldLabel}>当前密码</span>
+                            <input
+                              className={shellStyles.input}
+                              type="password"
+                              value={passwordForm.currentPassword}
+                              autoComplete="current-password"
+                              onChange={(event) =>
+                                setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+                              }
+                              required
+                            />
+                          </label>
+                        ) : null}
                         <label className={shellStyles.field}>
                           <span className={shellStyles.fieldLabel}>新密码</span>
                           <input

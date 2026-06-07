@@ -130,7 +130,7 @@ const GROUP_PAD = 28;
 const DRAG_THRESHOLD = 5;
 const PORT_SNAP_RADIUS = 80;
 const GRID_SIZE = 32;
-const TEXT_ASSET_STORAGE_KEY = "gleam-canvas-text-assets";
+const TEXT_ASSET_STORAGE_KEY = "otato-canvas-text-assets";
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
 

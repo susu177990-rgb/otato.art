@@ -1,6 +1,6 @@
 # 创作方向包：女频 BL 短剧
 
-本项目选择的创作方向为 **女频 BL 短剧**。这是当前 Gleam Media Studios Script Agent 已完整开发并验证的默认方向包。
+本项目选择的创作方向为 **女频 BL 短剧**。这是当前 oTATo Art Script Agent 已完整开发并验证的默认方向包。
 
 ## 方向定位
 

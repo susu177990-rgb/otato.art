@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gleam-media-studios.local/schemas/ai-live-action/asset-bundle.schema.json",
+  "$id": "https://otato.art/schemas/ai-live-action/asset-bundle.schema.json",
   "title": "AI+实拍素材包",
   "type": "object",
   "additionalProperties": false,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gleam-media-studios.local/schemas/ai-live-action/reconstruction-output.schema.json",
+  "$id": "https://otato.art/schemas/ai-live-action/reconstruction-output.schema.json",
   "title": "镜头重构师输出",
   "type": "object",
   "additionalProperties": false,

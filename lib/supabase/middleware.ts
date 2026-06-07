@@ -4,7 +4,9 @@ import { getSupabasePublicEnv } from "./env";
 
 function isPublicPath(pathname: string): boolean {
   return (
+    pathname === "/" ||
     pathname === "/login" ||
+    pathname === "/reset-password" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/favicon.ico" ||

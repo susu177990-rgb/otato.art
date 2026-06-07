@@ -44,7 +44,11 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const [videoWorkspace, setVideoWorkspace] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const isPublicAuthPath =
-    pathname === "/login" || pathname.startsWith("/auth/") || pathname.startsWith("/api/auth/");
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/auth/");
 
   const refreshWorkspace = useCallback(async () => {
     if (isPublicAuthPath) {

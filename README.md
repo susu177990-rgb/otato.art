@@ -1,6 +1,6 @@
-# Gleam Media Studios 工作台
+# oTATo Art 工作台
 
-**由 [Gleam Media Studios, Inc.](https://github.com/gleam-studios) 出品**
+**oTATo Art 独立版本项目**
 
 面向 **系列化影视与流媒体内容** 的一体化创作工作台：从网文素材检索、项目立项与改编策划，到七阶段编剧室写作，再到角色/分镜/道具向 AI 生图与画廊归档——整条链路收敛在同一套深色玻璃质感 Web 应用中。团队可在浏览器里完成「找参考 → 立项目 → 写剧本 → 出视觉资产」的闭环，而无需在多个零散工具之间来回切换。
 
@@ -15,7 +15,7 @@
 
 ## 我们解决什么问题？
 
-系列化内容制作往往把 **素材调研、立项文档、分集写作、角色定妆** 拆在不同表格、聊天窗口和生图工具里，上下文容易断裂，版本也难以对齐。**Gleam Media Studios 工作台** 把这些环节 **产品化** 为可重复的工作流：
+系列化内容制作往往把 **素材调研、立项文档、分集写作、角色定妆** 拆在不同表格、聊天窗口和生图工具里，上下文容易断裂，版本也难以对齐。**oTATo Art 工作台** 把这些环节 **产品化** 为可重复的工作流：
 
 1. **扒网文** — 在 Wattpad 等来源检索、预览、导出素材，为改编立项提供输入。
 2. **创剧本** — 用结构化立项向导产出思路书、系列圣经、英语简报，再进入编剧室按阶段推进。
@@ -278,11 +278,11 @@ uvicorn main:app --host 0.0.0.0 --port 8765
 
 ---
 
-## 关于 Gleam Media Studios, Inc.
+## 关于 oTATo Art
 
-**Gleam Media Studios, Inc.** 专注于流媒体与系列化影视向的内容工业化工具。本平台将团队在立项、编剧、视觉前期中沉淀的 **阶段 Gate、提示词模版与视觉资产规范** 固化进可部署的产品，供内部团队与合作伙伴在统一界面中协作。
+**oTATo Art** 是当前这套内容创作工作台的独立版本，用于系列化影视、短剧与视觉前期工作流的统一协作。平台将立项、编剧、视觉资产与素材调研整合到同一产品中，方便在单一界面里推进完整创作链路。
 
-- **上游仓库**：[github.com/gleam-studios/Gleam-Media-Studios](https://github.com/gleam-studios/Gleam-Media-Studios)  
+- **当前仓库**：[github.com/susu177990-rgb/otato.art](https://github.com/susu177990-rgb/otato.art)  
 - **问题与贡献**：请通过 GitHub Issues / Pull Request 与维护者沟通。  
 - **许可证**：二次开发或企业部署请自行补充许可证策略；第三方依赖以各自 `package.json` 许可证为准。
 
@@ -290,4 +290,4 @@ uvicorn main:app --host 0.0.0.0 --port 8765
 
 ## English summary
 
-**Gleam Media Studios 工作台** is a production web workspace by **Gleam Media Studios, Inc.** for serialized film and streaming content: optional Wattpad discovery, Supabase-backed projects, a four-tab onboarding flow, a seven-stage writer’s room with chat and structured artifacts, and a mode-driven AI image studio with gallery. Built with **Next.js 16** and **React 19**, shipped as a **standalone** Node bundle for Docker / PaaS hosting. Configure LLM and image APIs through in-app settings using any OpenAI-compatible gateway.
+**oTATo Art Workspace** is a production web workspace for serialized film and streaming content: optional Wattpad discovery, Supabase-backed projects, a four-tab onboarding flow, a seven-stage writer’s room with chat and structured artifacts, and a mode-driven AI image studio with gallery. Built with **Next.js 16** and **React 19**, shipped as a **standalone** Node bundle for Docker / PaaS hosting. Configure LLM and image APIs through in-app settings using any OpenAI-compatible gateway.

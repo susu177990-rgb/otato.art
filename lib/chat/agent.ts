@@ -71,7 +71,7 @@ function buildAgentSystemText(
     : `${imageDefaultLine}
 - 本轮**未**调用作图 API。禁止声称「已生成」「图片如下」或编造 media_url；只输出文字/分镜/文案。`;
 
-  return `你是 Gleam Media Studios 工作台内的自主对话 Agent。用户挂载的 Skill 文档优先。
+  return `你是 oTATo Art 工作台内的自主对话 Agent。用户挂载的 Skill 文档优先。
 
 ## 作图（事实约束）
 ${imageRules}
@@ -125,7 +125,7 @@ function buildAgentDecisionSystemText(params: {
     .map((m) => `- ${m.preset_id}: ${m.display_name} / ${m.model_name} / ${m.provider}`)
     .join("\n");
 
-  return `你是 Gleam Media Studios 的自主 Agent 行动决策器。你必须先判断本轮应该直接文字回复，还是调用真实生图工具。
+  return `你是 oTATo Art 的自主 Agent 行动决策器。你必须先判断本轮应该直接文字回复，还是调用真实生图工具。
 
 只输出一个 JSON 对象，不要 Markdown、不要解释、不要代码块。
 
