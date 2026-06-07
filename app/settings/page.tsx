@@ -682,6 +682,9 @@ function ImagePromptsPanel({
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
+  const [draftPromptProviders, setDraftPromptProviders] = useState<
+    Partial<Record<string, ImageWorkspaceSettings["models"][keyof ImageWorkspaceSettings["models"]]["provider"][]>>
+  >({});
   const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
   const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
 
@@ -745,6 +748,10 @@ function ImagePromptsPanel({
       let merged: ImageWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [id]: text },
+        promptModelProvidersByMode: {
+          ...value.promptModelProvidersByMode,
+          [id]: draftPromptProviders[id] ?? value.promptModelProvidersByMode?.[id] ?? ["gpt-image", "nano-banana"],
+        },
       };
       if (id.startsWith("custom_")) {
         const labelRaw =
@@ -766,6 +773,7 @@ function ImagePromptsPanel({
     editingPromptModeId,
     draftPrompts,
     draftLabels,
+    draftPromptProviders,
   ]);
 
   function handleSavePrompt(modeId: string) {
@@ -773,6 +781,10 @@ function ImagePromptsPanel({
     let next: ImageWorkspaceSettings = {
       ...value,
       prompts: { ...value.prompts, [modeId]: text },
+      promptModelProvidersByMode: {
+        ...value.promptModelProvidersByMode,
+        [modeId]: draftPromptProviders[modeId] ?? value.promptModelProvidersByMode?.[modeId] ?? ["gpt-image", "nano-banana"],
+      },
     };
     if (modeId.startsWith("custom_")) {
       const labelRaw =
@@ -796,6 +808,11 @@ function ImagePromptsPanel({
       delete copy[modeId];
       return copy;
     });
+    setDraftPromptProviders((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
   }
 
   function handleEditPrompt(modeId: string) {
@@ -813,6 +830,10 @@ function ImagePromptsPanel({
         [modeId]: value.customModes?.find((m) => m.id === modeId)?.label ?? "",
       }));
     }
+    setDraftPromptProviders((prev) => ({
+      ...prev,
+      [modeId]: value.promptModelProvidersByMode?.[modeId] ?? ["gpt-image", "nano-banana"],
+    }));
     setEditingPromptModeId(modeId);
   }
 
@@ -822,6 +843,7 @@ function ImagePromptsPanel({
       ...value,
       customModes: [...(value.customModes ?? []), { id, label: `生图预设 ${(value.customModes?.length ?? 0) + 1}` }],
       prompts: { ...value.prompts, [id]: "" },
+      promptModelProvidersByMode: { ...value.promptModelProvidersByMode, [id]: ["gpt-image", "nano-banana"] },
     };
     onChange(next);
     void onPersistImage(next);
@@ -840,10 +862,13 @@ function ImagePromptsPanel({
       }
       const restPrompts = { ...value.prompts };
       delete restPrompts[modeId];
+      const restPromptProviders = { ...value.promptModelProvidersByMode };
+      delete restPromptProviders[modeId];
       const next: ImageWorkspaceSettings = {
         ...value,
         customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
         prompts: restPrompts,
+        promptModelProvidersByMode: restPromptProviders,
         coverImageUrlByMode,
       };
       onChange(next);
@@ -855,6 +880,11 @@ function ImagePromptsPanel({
         return copy;
       });
       setDraftLabels((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftPromptProviders((prev) => {
         const copy = { ...prev };
         delete copy[modeId];
         return copy;
@@ -886,12 +916,18 @@ function ImagePromptsPanel({
       const next: ImageWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [mode.id]: defaultPrompt },
+        promptModelProvidersByMode: { ...value.promptModelProvidersByMode, [mode.id]: ["gpt-image", "nano-banana"] },
         coverImageUrlByMode,
       };
       onChange(next);
       void onPersistImage(next);
       setEditingPromptModeId((cur) => (cur === mode.id ? null : cur));
       setDraftPrompts((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+      setDraftPromptProviders((prev) => {
         const copy = { ...prev };
         delete copy[mode.id];
         return copy;
@@ -924,6 +960,9 @@ function ImagePromptsPanel({
           const textareaValue = isEditing ? (draftPrompts[mode.id] ?? savedText) : savedText;
           const occCount = extractPromptPlaceholderOccurrences(savedText).length;
           const coverUrl = value.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
+          const providerValues = isEditing
+            ? (draftPromptProviders[mode.id] ?? value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"])
+            : (value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"]);
           const coverBusy = coverBusyModeId === mode.id;
           const coverError = coverErrorByMode[mode.id];
 
@@ -967,30 +1006,85 @@ function ImagePromptsPanel({
                 <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，作图页会显示 {occCount} 个输入框。</p>
               ) : null}
               <div className={styles.promptModeEditBody}>
-                <textarea
-                  className={[
-                    shellStyles.textarea,
-                    shellStyles.mono,
-                    styles.promptModeTextarea,
-                    !isEditing ? styles.promptModeTextareaReadOnly : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  value={textareaValue}
-                  readOnly={!isEditing}
-                  spellCheck={false}
-                  aria-readonly={!isEditing}
-                  onClick={() => {
-                    if (!isEditing) handleEditPrompt(mode.id);
-                  }}
-                  onFocus={() => {
-                    if (!isEditing) handleEditPrompt(mode.id);
-                  }}
-                  onChange={(e) => {
-                    if (!isEditing) return;
-                    setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
-                  }}
-                />
+                <div className={styles.promptModeMainColumn}>
+                  <label className={styles.promptModeProviderField}>
+                    <span className={shellStyles.fieldLabel}>适配模型</span>
+                    <div className={styles.promptModeProviderButtons} role="group" aria-label={`${mode.label} 适配模型`}>
+                      <button
+                        type="button"
+                        className={[
+                          styles.promptModeProviderButton,
+                          providerValues.includes("gpt-image") ? styles.promptModeProviderButtonActive : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        disabled={!isEditing}
+                        aria-pressed={providerValues.includes("gpt-image")}
+                        onClick={() => {
+                          if (!isEditing) return;
+                          setDraftPromptProviders((prev) => {
+                            const current: Array<"gpt-image" | "nano-banana"> =
+                              prev[mode.id] ?? value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"];
+                            const next: Array<"gpt-image" | "nano-banana"> = current.includes("gpt-image")
+                              ? current.filter((item): item is "nano-banana" => item !== "gpt-image")
+                              : [...current, "gpt-image"];
+                            return { ...prev, [mode.id]: next };
+                          });
+                        }}
+                      >
+                        GPT Image
+                      </button>
+                      <button
+                        type="button"
+                        className={[
+                          styles.promptModeProviderButton,
+                          providerValues.includes("nano-banana") ? styles.promptModeProviderButtonActive : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        disabled={!isEditing}
+                        aria-pressed={providerValues.includes("nano-banana")}
+                        onClick={() => {
+                          if (!isEditing) return;
+                          setDraftPromptProviders((prev) => {
+                            const current: Array<"gpt-image" | "nano-banana"> =
+                              prev[mode.id] ?? value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"];
+                            const next: Array<"gpt-image" | "nano-banana"> = current.includes("nano-banana")
+                              ? current.filter((item): item is "gpt-image" => item !== "nano-banana")
+                              : [...current, "nano-banana"];
+                            return { ...prev, [mode.id]: next };
+                          });
+                        }}
+                      >
+                        Nano Banana
+                      </button>
+                    </div>
+                  </label>
+                  <textarea
+                    className={[
+                      shellStyles.textarea,
+                      shellStyles.mono,
+                      styles.promptModeTextarea,
+                      !isEditing ? styles.promptModeTextareaReadOnly : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    value={textareaValue}
+                    readOnly={!isEditing}
+                    spellCheck={false}
+                    aria-readonly={!isEditing}
+                    onClick={() => {
+                      if (!isEditing) handleEditPrompt(mode.id);
+                    }}
+                    onFocus={() => {
+                      if (!isEditing) handleEditPrompt(mode.id);
+                    }}
+                    onChange={(e) => {
+                      if (!isEditing) return;
+                      setDraftPrompts((prev) => ({ ...prev, [mode.id]: e.target.value }));
+                    }}
+                  />
+                </div>
                 <div className={styles.promptModeCoverSlot} aria-label={`${mode.label} 预设封面`}>
                   <div
                     className={[

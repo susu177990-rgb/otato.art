@@ -9,6 +9,7 @@ export const TARGET_PORT_LABELS: Record<CanvasTargetPort, string> = {
   firstFrame: "首帧",
   lastFrame: "尾帧",
   videoReference: "视频参考",
+  audioReference: "音频参考",
 };
 
 export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
@@ -32,7 +33,7 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
         case "start_end_frame":
           return ["prompt", "firstFrame", "lastFrame"];
         case "multi_image_reference":
-          return ["prompt", "imageReference", "videoReference"];
+          return ["prompt", "imageReference", "videoReference", "audioReference"];
         case "motion_control":
           return ["prompt", "firstFrame", "videoReference"];
         default:
@@ -45,7 +46,7 @@ export function getTargetPorts(node: CanvasNode): CanvasTargetPort[] {
 }
 
 export function canStartConnection(node: CanvasNode): boolean {
-  return node.type !== "group" && node.type !== "audio";
+  return node.type !== "group";
 }
 
 export function isConnectionAllowed(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort): boolean {
@@ -56,6 +57,7 @@ export function isConnectionAllowed(from: CanvasNode, to: CanvasNode, targetPort
   if (targetPort === "imageReference") return from.type === "image";
   if (targetPort === "firstFrame" || targetPort === "lastFrame") return from.type === "image";
   if (targetPort === "videoReference") return from.type === "video";
+  if (targetPort === "audioReference") return from.type === "audio";
   return false;
 }
 
@@ -129,7 +131,15 @@ export function inferTargetPort(
         ? { targetPort: null, reason: "视频参考已连接" }
         : { targetPort: "videoReference" };
     }
-    return { targetPort: null, reason: "视频节点只接受文本、图片或视频输入" };
+    if (from.type === "audio") {
+      if (normalizedMode !== "multi_image_reference") {
+        return { targetPort: null, reason: "当前视频模式不接收音频参考" };
+      }
+      return connectionExists(connections, from.id, to.id, "audioReference")
+        ? { targetPort: null, reason: "音频参考已连接" }
+        : { targetPort: "audioReference" };
+    }
+    return { targetPort: null, reason: "视频节点只接受文本、图片、视频或音频输入" };
   }
 
   return { targetPort: null, reason: "目标节点不能接收输入" };

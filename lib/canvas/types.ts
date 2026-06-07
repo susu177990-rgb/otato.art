@@ -16,7 +16,14 @@ export type CanvasNodeType = "text" | "image" | "video" | "audio" | "group";
 
 export type CanvasSourcePort = "output";
 
-export type CanvasTargetPort = "source" | "prompt" | "imageReference" | "firstFrame" | "lastFrame" | "videoReference";
+export type CanvasTargetPort =
+  | "source"
+  | "prompt"
+  | "imageReference"
+  | "firstFrame"
+  | "lastFrame"
+  | "videoReference"
+  | "audioReference";
 
 export type CanvasNodeMetadata = {
   text?: string;

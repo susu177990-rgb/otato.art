@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { detectMediaKind, mediaContentType, mediaFileExtension } from "@/lib/media-file";
 import {
   DEFAULT_IMAGE_SETTINGS,
   GPT_IMAGE_QUALITY_LABELS,
@@ -129,23 +130,6 @@ const GRID_SIZE = 32;
 const TEXT_ASSET_STORAGE_KEY = "gleam-canvas-text-assets";
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
-
-function fileExt(file: File) {
-  const t = file.type.toLowerCase();
-  if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
-  if (t.includes("wav")) return "wav";
-  if (t.includes("aac")) return "aac";
-  if (t.includes("ogg")) return "ogg";
-  if (t.includes("flac")) return "flac";
-  if (t.includes("m4a") || t.includes("mp4")) return file.type.startsWith("audio/") ? "m4a" : "mp4";
-  if (t.includes("quicktime")) return "mov";
-  if (t.includes("webm")) return "webm";
-  if (t.includes("mp4")) return "mp4";
-  if (t.includes("jpeg") || t.includes("jpg")) return "jpg";
-  if (t.includes("webp")) return "webp";
-  if (t.includes("gif")) return "gif";
-  return "png";
-}
 
 function readImageSize(url: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -509,7 +493,7 @@ export default function CanvasBoardPage() {
       .flatMap((conn): AssetMentionCandidate[] => {
         const n = nodes.find((node) => node.id === conn.fromNodeId);
         if (!n || n.id === currentNodeId) return [];
-        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : "文本";
+        const typeName = n.type === "image" ? "图" : n.type === "video" ? "视频" : n.type === "audio" ? "音频" : "文本";
         typeCounts[typeName] = (typeCounts[typeName] ?? 0) + 1;
         const role: AssetMentionRole =
           conn.targetPort === "prompt"
@@ -522,17 +506,19 @@ export default function CanvasBoardPage() {
                   ? nodeMap.get(currentNodeId)?.metadata?.videoModeId === "motion_control"
                     ? "motion_source_video"
                     : "video_reference"
+                  : conn.targetPort === "audioReference"
+                    ? "audio_reference"
                   : "image_reference";
         return [{
           id: n.id,
           label: `${typeName}${typeCounts[typeName]}`,
           type: "node" as const,
           role,
-          nodeType: n.type === "text" || n.type === "image" || n.type === "video" ? n.type : undefined,
+          nodeType: n.type === "text" || n.type === "image" || n.type === "video" || n.type === "audio" ? n.type : undefined,
           groupLabel: "已连接素材",
           description: conn.targetPort,
           thumbnailUrl: n.metadata?.previewImageUrl || n.metadata?.imageUrl,
-          url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl,
+          url: n.metadata?.imageUrl || n.metadata?.previewImageUrl || n.metadata?.videoUrl || n.metadata?.previewVideoUrl || n.metadata?.audioUrl,
           text: textNodeOutput(n),
         }];
       });
@@ -937,7 +923,7 @@ export default function CanvasBoardPage() {
   // ── Paste (image/video/audio from OS clipboard) ─────────────────────────────
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/"));
+      const file = Array.from(e.clipboardData?.files ?? []).find((f) => detectMediaKind(f));
       if (!file) return;
       e.preventDefault();
       void uploadMedia(file, worldCenter());
@@ -1085,17 +1071,21 @@ export default function CanvasBoardPage() {
     markDirty();
   }, [currentImageNodeDefaults, markDirty, pushHistory, selectedNodeIds]);
 
-  const uploadMedia = async (file?: File, position = menuWorldRef.current ?? worldCenter(), targetNodeId?: string | null) => {
-    if (!file || (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !file.type.startsWith("audio/"))) return;
-    const kind: UploadKind = file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "image";
+  const uploadMedia = async (file?: File, position = menuWorldRef.current ?? worldCenter(), targetNodeId?: string | null, preferredKind?: UploadKind) => {
+    if (!file) return;
+    const kind = detectMediaKind(file, preferredKind) as UploadKind | null;
+    if (!kind) {
+      setSaveStatus("error");
+      return;
+    }
     setUploading(true); setSaveStatus("saving");
     try {
       const supabase = createSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("请先登录");
-      const path = `${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${fileExt(file)}`;
-      const fallbackMime = kind === "video" ? "video/mp4" : kind === "audio" ? "audio/mpeg" : "image/png";
-      const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, { contentType: file.type || fallbackMime, upsert: false });
+      const contentType = mediaContentType(file, kind);
+      const path = `${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
+      const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, { contentType, upsert: false });
       if (error) throw error;
       const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
       if (!data.publicUrl) throw new Error("无法生成媒体地址");
@@ -1123,13 +1113,13 @@ export default function CanvasBoardPage() {
             naturalWidth: kind === "audio" ? undefined : size.width,
             naturalHeight: kind === "audio" ? undefined : size.height,
             audioDurationSeconds,
-            mimeType: file.type || fallbackMime,
+            mimeType: contentType,
             status: "success",
           }
         } : n));
         markDirty();
       } else {
-        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: file.type || fallbackMime, filename: file.name, audioDurationSeconds }));
+        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: contentType, filename: file.name, audioDurationSeconds }));
       }
     } catch { setSaveStatus("error"); }
     finally {
@@ -1856,7 +1846,7 @@ export default function CanvasBoardPage() {
           onDrop={(e) => {
             e.preventDefault();
             const world = screenToWorld(e.clientX, e.clientY);
-            const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/"));
+            const file = Array.from(e.dataTransfer.files).find((f) => detectMediaKind(f));
             void uploadMedia(file, world);
           }}
           onWheel={handleCanvasWheel}
@@ -2723,10 +2713,10 @@ export default function CanvasBoardPage() {
             </div>
           </div>
 
-          <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
-          <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
-          <input ref={audioInputRef} type="file" accept="audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
-          <input ref={mediaInputRef} type="file" accept="image/*,video/*,audio/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
+          <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid, "image"); }} />
+          <input ref={videoInputRef} type="file" accept="video/*" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid, "video"); }} />
+          <input ref={audioInputRef} type="file" accept="audio/*,.aac,.aif,.aiff,.flac,.m4a,.mp3,.oga,.ogg,.opus,.wav" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid, "audio"); }} />
+          <input ref={mediaInputRef} type="file" accept="image/*,video/*,audio/*,.aac,.aif,.aiff,.flac,.m4a,.mp3,.oga,.ogg,.opus,.wav" hidden onChange={(e) => { const tid = uploadTargetNodeRef.current; uploadTargetNodeRef.current = null; void uploadMedia(e.target.files?.[0], undefined, tid); }} />
         </div>
       </section>
     </main>

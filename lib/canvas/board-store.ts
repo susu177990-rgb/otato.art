@@ -264,7 +264,8 @@ function normalizeConnection(value: unknown, nodeMap: Map<string, CanvasNode>, e
         value.targetPort === "imageReference" ||
         value.targetPort === "firstFrame" ||
         value.targetPort === "lastFrame" ||
-        value.targetPort === "videoReference"
+        value.targetPort === "videoReference" ||
+        value.targetPort === "audioReference"
           ? value.targetPort
           : undefined,
     },

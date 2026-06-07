@@ -34,6 +34,8 @@ import {
   prependGalleryRecordApi,
   saveWorkspaceSnapshot,
 } from "@/lib/workspace-api";
+import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
+import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
@@ -44,6 +46,9 @@ const IMAGE_GENERATION_RUNTIME_EVENT = "script-agent-image-generation-runtime-ch
 const IMAGE_REFERENCE_CACHE_STORAGE_KEY = "script-agent-image-reference-cache-v1";
 
 type RefSlot = { previewUrl: string; file: File } | null;
+type ImagePromptPresetCard = SitePromptPreset & {
+  promptModelProviders: Array<"gpt-image" | "nano-banana">;
+};
 type ImageGenerationRuntimeState = {
   taskId: string;
   status: "running" | "success" | "error";
@@ -227,6 +232,25 @@ function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): 
   return Array.from({ length: len }, (_, i) => slots?.[i] ?? "");
 }
 
+function workspaceModeToPromptPreset(
+  mode: { id: string; label: string },
+  settings: typeof DEFAULT_IMAGE_SETTINGS,
+  favoriteOverlay?: SitePromptPreset,
+): ImagePromptPresetCard {
+  const promptModelProviders = settings.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"];
+  return {
+    id: mode.id,
+    kind: "image",
+    title: favoriteOverlay?.title || mode.label,
+    promptTemplate: settings.prompts[mode.id] ?? favoriteOverlay?.promptTemplate ?? "",
+    coverImageUrl: settings.coverImageUrlByMode?.[mode.id]?.trim() || favoriteOverlay?.coverImageUrl || "",
+    refSlotHints: settings.refSlotHintsByMode?.[mode.id] ?? favoriteOverlay?.refSlotHints ?? [],
+    description: favoriteOverlay?.description,
+    isFavorite: Boolean(favoriteOverlay?.isFavorite),
+    promptModelProviders,
+  };
+}
+
 /** 作曲器每一栏的 placeholder：优先用模版里对应 `{{提示文案}}` 括号内文字 */
 function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): string {
   const tok = occ[slotIndex];
@@ -275,6 +299,7 @@ export default function ImagePage() {
   const { settings: llmSettings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
+  const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
   const [selectedModeId, setSelectedModeId] = useState<string>("free");
   const [selectedModelId, setSelectedModelId] = useState<ImageModelId>("gpt-image-2");
   const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("4:3");
@@ -284,6 +309,10 @@ export default function ImagePage() {
   const [resultUrl, setResultUrl] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
+  const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
+  const [presetLibraryError, setPresetLibraryError] = useState("");
+  const [favoriteSavingById, setFavoriteSavingById] = useState<Record<string, boolean>>({});
+  const [copiedPresetId, setCopiedPresetId] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
@@ -327,27 +356,32 @@ export default function ImagePage() {
   }, []);
 
   useEffect(() => {
-    if (!previewOpen && !promptPreviewOpen) return;
+    if (!previewOpen && !promptPreviewOpen && !presetLibraryOpen) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setPreviewOpen(false);
       if (e.key === "Escape") setPromptPreviewOpen(false);
+      if (e.key === "Escape") setPresetLibraryOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [previewOpen, promptPreviewOpen]);
+  }, [previewOpen, promptPreviewOpen, presetLibraryOpen]);
 
   useEffect(() => {
     if (!promptPreviewOpen) setPromptCopied(false);
   }, [promptPreviewOpen]);
 
   useEffect(() => {
-    if (!previewOpen) return;
+    if (!presetLibraryOpen) setCopiedPresetId(null);
+  }, [presetLibraryOpen]);
+
+  useEffect(() => {
+    if (!previewOpen && !presetLibraryOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [previewOpen]);
+  }, [previewOpen, presetLibraryOpen]);
 
   const ratioSelectRef = useRef<HTMLSelectElement>(null);
   const sizeSelectRef = useRef<HTMLSelectElement>(null);
@@ -393,9 +427,38 @@ export default function ImagePage() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [workspaceReady, refreshWorkspace]);
 
-  const modes = useMemo(
+  useEffect(() => {
+    if (!workspaceReady) return;
+    void fetchSitePromptPresets("image")
+      .then((presets) => {
+        setPromptPresets(presets);
+        setPresetLibraryError("");
+      })
+      .catch((e) => {
+        const message = e instanceof Error ? e.message : "无法加载提示词预设";
+        setPresetLibraryError(message);
+      });
+  }, [workspaceReady]);
+
+  const allModes = useMemo(
     () => [...IMAGE_MODES, ...(settings.customModes ?? [])].reverse(),
     [settings.customModes],
+  );
+  const promptPresetById = useMemo(() => new Map(promptPresets.map((preset) => [preset.id, preset])), [promptPresets]);
+  const displayedPromptPresets = useMemo(
+    () =>
+      allModes
+        .filter((mode) => !IMAGE_MODES.some((base) => base.id === mode.id))
+        .map((mode) => workspaceModeToPromptPreset(mode, settings, promptPresetById.get(mode.id))),
+    [allModes, promptPresetById, settings],
+  );
+  const favoritePresetIds = useMemo(
+    () => new Set(displayedPromptPresets.filter((preset) => preset.isFavorite).map((preset) => preset.id)),
+    [displayedPromptPresets],
+  );
+  const modes = useMemo(
+    () => allModes.filter((mode) => IMAGE_MODES.some((base) => base.id === mode.id) || favoritePresetIds.has(mode.id)),
+    [allModes, favoritePresetIds],
   );
 
   const selectedModel = settings.models[selectedModelId];
@@ -411,11 +474,11 @@ export default function ImagePage() {
   }, [selectedModeId, promptTemplate, composerSlotCount]);
 
   useEffect(() => {
-    if (modes.some((m) => m.id === selectedModeId)) return;
+    if (allModes.some((m) => m.id === selectedModeId)) return;
     const fallback =
-      modes.find((m) => m.id === "free")?.id ?? modes[0]?.id ?? "free";
+      allModes.find((m) => m.id === "free")?.id ?? allModes[0]?.id ?? "free";
     setSelectedModeId(fallback);
-  }, [modes, selectedModeId]);
+  }, [allModes, selectedModeId]);
 
   const finalPrompt = useMemo(
     () => buildImagePromptFromSlots(promptTemplate, slotInputs),
@@ -455,6 +518,65 @@ export default function ImagePage() {
     }
     setPromptCopied(true);
     window.setTimeout(() => setPromptCopied(false), 1500);
+  }
+
+  function selectPromptPreset(presetId: string) {
+    const mode = allModes.find((item) => item.id === presetId);
+    if (!mode) {
+      setPresetLibraryError("这个预设还没有同步到作图工作台，请刷新后再试。");
+      return;
+    }
+    setError("");
+    setSelectedModeId(mode.id);
+  }
+
+  async function copyPresetPrompt(preset: SitePromptPreset) {
+    const text = preset.promptTemplate || "";
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setCopiedPresetId(preset.id);
+    window.setTimeout(() => {
+      setCopiedPresetId((current) => (current === preset.id ? null : current));
+    }, 1400);
+  }
+
+  async function togglePromptPresetFavorite(preset: SitePromptPreset) {
+    const nextFavorite = !preset.isFavorite;
+    setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: true }));
+    setPromptPresets((prev) => {
+      if (prev.some((item) => item.id === preset.id)) {
+        return prev.map((item) => (item.id === preset.id ? { ...item, isFavorite: nextFavorite } : item));
+      }
+      return [{ ...preset, isFavorite: nextFavorite }, ...prev];
+    });
+    try {
+      await setSitePromptPresetFavorite(preset.id, nextFavorite);
+    } catch (e) {
+      setPromptPresets((prev) =>
+        prev
+          .map((item) => (item.id === preset.id ? { ...item, isFavorite: preset.isFavorite } : item))
+          .filter((item) => item.id !== preset.id || promptPresetById.has(item.id)),
+      );
+      setPresetLibraryError(e instanceof Error ? e.message : "收藏更新失败");
+    } finally {
+      setFavoriteSavingById((prev) => {
+        const next = { ...prev };
+        delete next[preset.id];
+        return next;
+      });
+    }
   }
 
   useEffect(() => {
@@ -630,7 +752,7 @@ export default function ImagePage() {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       modeId: selectedModeId,
-      modeName: modes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
+      modeName: allModes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
       modelId: selectedModelId,
       modelName: selectedModel.modelName,
       finalPrompt: resolvedPrompt,
@@ -789,9 +911,13 @@ export default function ImagePage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <Link href="/image/gallery" className={shellStyles.navLink}>
-            画廊
-          </Link>
+          <button
+            type="button"
+            className={shellStyles.navLink}
+            onClick={() => setPresetLibraryOpen(true)}
+          >
+            提示词预设
+          </button>
           <div className={shellStyles.topbarTagline}>
             <p className={shellStyles.plainDockText}>模式化生图工作台</p>
           </div>
@@ -1154,7 +1280,7 @@ export default function ImagePage() {
                   <div>
                     <p className={styles.promptPreviewEyebrow}>当前模式提示词</p>
                     <h2 className={styles.promptPreviewTitle}>
-                      {modes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId}
+                      {allModes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId}
                     </h2>
                   </div>
                   <button
@@ -1176,6 +1302,122 @@ export default function ImagePage() {
                     {promptCopied ? "已复制" : "复制全部"}
                   </button>
                 </footer>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
+      {portalMounted && presetLibraryOpen
+        ? createPortal(
+            <div className={styles.presetLibraryRoot} role="dialog" aria-modal="true" aria-label="提示词预设">
+              <button
+                type="button"
+                className={styles.presetLibraryBackdrop}
+                onClick={() => setPresetLibraryOpen(false)}
+                aria-label="关闭提示词预设窗口"
+              />
+              <section className={styles.presetLibraryPanel}>
+                <header className={styles.presetLibraryHead}>
+                  <div>
+                    <p className={styles.presetLibraryEyebrow}>生图</p>
+                    <h2 className={styles.presetLibraryTitle}>提示词预设</h2>
+                  </div>
+                  <div className={styles.presetLibraryHeadActions}>
+                    <Link href="/image/gallery" className={styles.presetLibraryGalleryLink}>
+                      画廊
+                    </Link>
+                    <button
+                      type="button"
+                      className={styles.presetLibraryClose}
+                      onClick={() => setPresetLibraryOpen(false)}
+                      aria-label="关闭"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </header>
+                {presetLibraryError ? <div className={styles.presetLibraryError}>{presetLibraryError}</div> : null}
+                <div className={styles.presetLibraryGrid}>
+                  {displayedPromptPresets.length === 0 ? (
+                    <div className={styles.presetLibraryEmpty}>暂无提示词预设</div>
+                  ) : (
+                    displayedPromptPresets.map((preset) => {
+                      const active = selectedModeId === preset.id;
+                      const coverUrl = preset.coverImageUrl.trim();
+                      const hasDescription = Boolean(preset.description?.trim());
+                      return (
+                        <article
+                          key={preset.id}
+                          className={[styles.presetCard, active ? styles.presetCardActive : ""].filter(Boolean).join(" ")}
+                        >
+                          <button
+                            type="button"
+                            className={styles.presetCardSelect}
+                            onClick={() => selectPromptPreset(preset.id)}
+                            aria-label={`选择 ${preset.title}`}
+                          >
+                            <span className={styles.presetCardCover}>
+                              <span className={styles.presetCardOverlay}>
+                                <span className={styles.presetCardOverlayTop}>
+                                  <span className={styles.presetCardTitle}>{preset.title}</span>
+                                  {hasDescription ? (
+                                    <span className={styles.presetCardDesc}>{preset.description!.trim()}</span>
+                                  ) : null}
+                                </span>
+                                <span className={styles.presetModelChips} aria-label="适合的提示组件">
+                                  {preset.promptModelProviders.includes("gpt-image") ? (
+                                    <span className={styles.presetModelChip}>GPT Image</span>
+                                  ) : null}
+                                  {preset.promptModelProviders.includes("nano-banana") ? (
+                                    <span className={styles.presetModelChip}>Nano Banana</span>
+                                  ) : null}
+                                </span>
+                              </span>
+                              {coverUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={coverUrl} alt="" />
+                              ) : (
+                                <span>{preset.title}</span>
+                              )}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={[
+                              styles.presetCopyIconButton,
+                              copiedPresetId === preset.id ? styles.presetCopyIconButtonActive : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            onClick={() => void copyPresetPrompt(preset)}
+                            aria-label={copiedPresetId === preset.id ? "已复制提示词" : "复制提示词"}
+                            title={copiedPresetId === preset.id ? "已复制提示词" : "复制提示词"}
+                          >
+                            <span className={styles.presetCopyGlyph} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className={[
+                              styles.presetFavorite,
+                              preset.isFavorite ? styles.presetFavoriteActive : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            onClick={() => void togglePromptPresetFavorite(preset)}
+                            disabled={Boolean(favoriteSavingById[preset.id])}
+                            aria-pressed={Boolean(preset.isFavorite)}
+                            aria-label={preset.isFavorite ? "取消收藏" : "收藏"}
+                            title={preset.isFavorite ? "取消收藏" : "收藏"}
+                          >
+                            <span className={styles.presetFavoriteGlyph} aria-hidden="true">
+                              ☆
+                            </span>
+                          </button>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
               </section>
             </div>,
             document.body,

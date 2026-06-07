@@ -7,6 +7,7 @@ import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
+import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
   fetchVideoGalleryRecords,
   fetchWorkspaceSnapshot,
@@ -69,30 +70,14 @@ function compactReferenceList(slots: Array<ReferenceSlot | null | undefined>): N
   return slots.filter((slot): slot is NonNullable<ReferenceSlot> => Boolean(slot));
 }
 
-function fileExt(file: File) {
-  const t = file.type.toLowerCase();
-  if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
-  if (t.includes("wav")) return "wav";
-  if (t.includes("aac")) return "aac";
-  if (t.includes("ogg")) return "ogg";
-  if (t.includes("m4a")) return "m4a";
-  if (t.includes("quicktime")) return "mov";
-  if (t.includes("webm")) return "webm";
-  if (t.includes("mp4")) return "mp4";
-  if (t.includes("jpeg") || t.includes("jpg")) return "jpg";
-  if (t.includes("webp")) return "webp";
-  if (t.includes("gif")) return "gif";
-  return "png";
-}
-
 function kindAccept(kind: ReferenceKind): string {
   if (kind === "image") return "image/*";
   if (kind === "video") return "video/*";
-  return "audio/*";
+  return "audio/*,.aac,.aif,.aiff,.flac,.m4a,.mp3,.oga,.ogg,.opus,.wav";
 }
 
 function fileMatchesKind(file: File, kind: ReferenceKind): boolean {
-  return file.type.startsWith(`${kind}/`);
+  return mediaFileMatchesKind(file, kind);
 }
 
 function kindSlotLabel(kind: ReferenceKind, index: number): string {
@@ -331,7 +316,10 @@ export default function VideoPage() {
   async function uploadReferenceFiles(kind: ReferenceKind, index: number, files: FileList | File[] | null | undefined) {
     if (!files) return;
     const accepted = Array.from(files).filter((file) => fileMatchesKind(file, kind));
-    if (accepted.length === 0) return;
+    if (accepted.length === 0) {
+      setError(`请选择${kindGroupLabel(kind)}素材。`);
+      return;
+    }
     setIsUploading(true);
     try {
       const supabase = createSupabaseBrowserClient();
@@ -342,15 +330,16 @@ export default function VideoPage() {
 
       const uploaded = await Promise.all(
         accepted.map(async (file) => {
-          const path = `${user.id}/video-inputs/${safeModelId}/${kind}/${crypto.randomUUID()}.${fileExt(file)}`;
+          const contentType = mediaContentType(file, kind);
+          const path = `${user.id}/video-inputs/${safeModelId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
           const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
-            contentType: file.type || `${kind}/*`,
+            contentType,
             upsert: false,
           });
           if (uploadError) throw uploadError;
           const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
           if (!data.publicUrl) throw new Error("无法生成素材地址");
-          return { kind, url: data.publicUrl, previewUrl: data.publicUrl, label: file.name, mimeType: file.type || `${kind}/*` } satisfies NonNullable<ReferenceSlot>;
+          return { kind, url: data.publicUrl, previewUrl: data.publicUrl, label: file.name, mimeType: contentType } satisfies NonNullable<ReferenceSlot>;
         }),
       );
 

@@ -410,6 +410,384 @@
   outline-offset: 2px;
 }
 
+.presetLibraryRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 10045;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px))
+    max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+}
+
+.presetLibraryBackdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgba(4, 4, 6, 0.76);
+  backdrop-filter: blur(14px);
+  cursor: default;
+}
+
+.presetLibraryPanel {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, calc(100vw - 36px));
+  max-height: min(86vh, 860px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(10, 10, 12, 0.96);
+  box-shadow: 0 34px 110px rgba(0, 0, 0, 0.68);
+  overflow: hidden;
+}
+
+.presetLibraryHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.presetLibraryEyebrow {
+  margin: 0 0 5px;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.presetLibraryTitle {
+  margin: 0;
+  color: #fafafa;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.presetLibraryHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.presetLibraryGalleryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f4f5;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.presetLibraryGalleryLink:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.presetLibraryClose {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fafafa;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.presetLibraryClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.presetLibraryError {
+  margin: 14px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.presetLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+  padding: 22px;
+  overflow-y: auto;
+}
+
+.presetLibraryEmpty {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  border: 1px dashed rgba(255, 255, 255, 0.13);
+  border-radius: 14px;
+  color: #71717a;
+  font-size: 13px;
+}
+
+.presetCard {
+  position: relative;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow:
+    0 16px 60px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.presetCardActive {
+  border-color: #c4b5fd;
+  box-shadow:
+    0 0 0 1px rgba(196, 181, 253, 0.34),
+    0 16px 60px rgba(0, 0, 0, 0.32);
+}
+
+.presetCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.presetCardTitle {
+  margin: 0;
+  display: block;
+  width: 100%;
+  color: #fcfcfd;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.presetCardSelect {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: block;
+  text-align: left;
+  cursor: pointer;
+}
+
+.presetCardSelect:focus-visible,
+.presetFavorite:focus-visible,
+.presetCopyButton:focus-visible,
+.presetLibraryClose:focus-visible,
+.presetLibraryGalleryLink:focus-visible {
+  outline: 2px solid rgba(250, 250, 250, 0.45);
+  outline-offset: 2px;
+}
+
+.presetCardCover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  background: #08080a;
+  color: #f4f4f5;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+}
+
+.presetCardCover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.01);
+}
+
+.presetCardCover > span:not(.presetCardOverlay) {
+  padding: 12px 40px 12px 12px;
+  word-break: break-word;
+  opacity: 0.88;
+}
+
+.presetCardCover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.66), rgba(0, 0, 0, 0.22) 38%, rgba(0, 0, 0, 0.04) 62%, rgba(0, 0, 0, 0.28)),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.presetCardOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px 88px 14px 15px;
+  pointer-events: none;
+}
+
+.presetCardOverlayTop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.presetCardDesc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(244, 244, 245, 0.78);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.presetModelChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presetModelChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(9, 9, 11, 0.42);
+  color: #f4f4f5;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+}
+
+.presetCopyIconButton,
+.presetFavorite {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.42));
+}
+
+.presetCopyIconButton {
+  top: 18px;
+  right: 52px;
+}
+
+.presetCopyIconButton:hover,
+.presetCopyIconButtonActive {
+  color: #fafafa;
+}
+
+.presetFavorite {
+  top: 18px;
+  right: 18px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.presetFavorite:hover:not(:disabled),
+.presetFavoriteActive {
+  color: #fcd34d;
+}
+
+.presetFavorite:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.presetCopyGlyph {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.presetCopyGlyph::before,
+.presetCopyGlyph::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.presetCopyGlyph::before {
+  top: 4px;
+  left: 4px;
+}
+
+.presetCopyGlyph::after {
+  top: 1px;
+  left: 1px;
+  background: transparent;
+}
+
+.presetFavoriteGlyph {
+  display: block;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
 .loadingOverlay {
   position: absolute;
   inset: 0;

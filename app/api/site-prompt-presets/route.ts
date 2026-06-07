@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { canManageSiteSettings } from "@/lib/auth/site-admin";
 import { formatDbError } from "@/lib/db/format-db-error";
 import {
-  listSitePromptPresetsByKind,
+  listSitePromptPresetsByKindForUser,
   replaceSitePromptPresetsByKind,
   type PromptPresetKind,
   type SitePromptPreset,
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     const kind = normalizeKind(new URL(req.url).searchParams.get("kind"));
     if (!kind) return NextResponse.json({ error: "kind 必须是 image / video / chat" }, { status: 400 });
 
-    const presets = await listSitePromptPresetsByKind(supabase, kind);
+    const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
     return NextResponse.json({ presets });
   } catch (e) {
     console.error("[site-prompt-presets GET]", e);
@@ -54,7 +54,7 @@ export async function PUT(req: Request) {
     }
 
     await replaceSitePromptPresetsByKind(supabase, kind, Array.isArray(body.presets) ? body.presets : []);
-    const presets = await listSitePromptPresetsByKind(supabase, kind);
+    const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
     return NextResponse.json({ presets });
   } catch (e) {
     console.error("[site-prompt-presets PUT]", e);

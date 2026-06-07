@@ -80,6 +80,12 @@ function getVideoUrl(node: CanvasNode): string {
   return url;
 }
 
+function getAudioUrl(node: CanvasNode): string {
+  const url = node.metadata?.audioUrl?.trim() || "";
+  if (!url) throw new Error(`节点「${node.title || "音频"}」还没有音频。`);
+  return url;
+}
+
 function collectReferences(board: CanvasBoard, node: CanvasNode): UnifiedVideoReference[] {
   const refs: UnifiedVideoReference[] = [];
   for (const conn of board.connections) {
@@ -107,6 +113,10 @@ function collectReferences(board: CanvasBoard, node: CanvasNode): UnifiedVideoRe
           label: sourceNode.title,
         });
         break;
+      case "audioReference":
+        if (sourceNode.type !== "audio") throw new Error("音频参考输入只能连接音频节点。");
+        refs.push({ role: "audio_reference", url: getAudioUrl(sourceNode), label: sourceNode.title });
+        break;
       default:
         break;
     }
@@ -118,7 +128,7 @@ function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>):
   const missingMediaMention = promptInfo.resolution.mentions.find(
     (mention) =>
       mention.candidate?.type === "node" &&
-      (mention.candidate.nodeType === "image" || mention.candidate.nodeType === "video") &&
+      (mention.candidate.nodeType === "image" || mention.candidate.nodeType === "video" || mention.candidate.nodeType === "audio") &&
       !mention.candidate.url,
   );
   if (missingMediaMention) {
@@ -133,6 +143,7 @@ function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>):
         label: item.label,
       };
     }
+    if (item.type === "audio") return { role: "audio_reference", url: item.url, label: item.label };
     if (item.role === "start_frame") return { role: "start_frame", url: item.url, label: item.label };
     if (item.role === "end_frame") return { role: "end_frame", url: item.url, label: item.label };
     return { role: "image_reference", url: item.url, label: item.label };

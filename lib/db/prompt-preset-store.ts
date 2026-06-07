@@ -12,6 +12,7 @@ export type SitePromptPreset = {
   coverImageUrl: string;
   refSlotHints: string[];
   description?: string;
+  isFavorite?: boolean;
 };
 
 type SitePromptPresetRow = {
@@ -47,7 +48,34 @@ function rowToPreset(row: SitePromptPresetRow): SitePromptPreset {
     coverImageUrl: row.cover_image_url?.trim() ?? "",
     refSlotHints,
     description: row.description ?? undefined,
+    isFavorite: false,
   };
+}
+
+export async function listFavoritePromptPresetIds(supabase: SupabaseClient, userId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("site_prompt_preset_favorites")
+    .select("preset_id")
+    .eq("user_id", userId);
+
+  if (error) {
+    if (/site_prompt_preset_favorites|Could not find the table|schema cache/i.test(error.message)) return new Set();
+    throw error;
+  }
+
+  return new Set((data ?? []).map((row) => String((row as { preset_id?: unknown }).preset_id ?? "")).filter(Boolean));
+}
+
+export async function listSitePromptPresetsByKindForUser(
+  supabase: SupabaseClient,
+  kind: PromptPresetKind,
+  userId: string,
+): Promise<SitePromptPreset[]> {
+  const [presets, favoriteIds] = await Promise.all([
+    listSitePromptPresetsByKind(supabase, kind),
+    listFavoritePromptPresetIds(supabase, userId),
+  ]);
+  return presets.map((preset) => ({ ...preset, isFavorite: favoriteIds.has(preset.id) }));
 }
 
 export async function listSitePromptPresetsByKind(

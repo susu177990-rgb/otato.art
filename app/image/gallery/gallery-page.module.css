@@ -19,41 +19,43 @@
   font-size: 13px;
 }
 
-/* CSS 列瀑布流：默认四列；按视口收敛到 3 / 2 / 1。 */
+/* 改为横向优先网格：最新记录从左到右，再换到下一行。 */
 .masonry {
-  column-count: 4;
-  column-gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 @media (max-width: 1400px) {
   .masonry {
-    column-count: 4;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1100px) {
   .masonry {
-    column-count: 3;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .masonry {
-    column-count: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 480px) {
   .masonry {
-    column-count: 1;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* 瓦片包裹（即按钮本体）：重置浏览器默认 button 样式，仅作为列项 */
+/* 瓦片包裹（即按钮本体）：重置浏览器默认 button 样式，仅作为网格项 */
 .masonryItem {
   display: block;
   width: 100%;
-  margin: 0 0 12px;
+  margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -61,9 +63,6 @@
   text-align: left;
   font: inherit;
   color: inherit;
-  break-inside: avoid;
-  page-break-inside: avoid;
-  -webkit-column-break-inside: avoid;
 }
 
 .masonryItem:focus-visible {

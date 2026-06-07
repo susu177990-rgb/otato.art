@@ -25,3 +25,17 @@ export async function replaceSitePromptPresets(
   const data = (await res.json()) as { presets: SitePromptPreset[] };
   return data.presets;
 }
+
+export async function setSitePromptPresetFavorite(
+  presetId: string,
+  isFavorite: boolean,
+): Promise<{ presetId: string; isFavorite: boolean }> {
+  const res = await fetch("/api/site-prompt-presets/favorites", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ presetId, isFavorite }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, "无法更新收藏"));
+  const data = (await res.json()) as { presetId: string; isFavorite: boolean };
+  return data;
+}

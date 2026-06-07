@@ -73,6 +73,8 @@ export interface ImageWorkspaceSettings {
   refSlotHintsByMode: Record<string, string[]>;
   /** 设置页为各作图模式配置的封面图（Supabase Storage 公开 URL） */
   coverImageUrlByMode: Record<string, string>;
+  /** 设置页为各作图提示词预设标记适配哪些生图模型，可同时多选 */
+  promptModelProvidersByMode: Record<string, ImageModelSettings["provider"][]>;
 }
 
 export interface ImageGalleryRecord {
@@ -129,6 +131,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   customModes: [],
   refSlotHintsByMode: {},
   coverImageUrlByMode: {},
+  promptModelProvidersByMode: {},
   prompts: {
     /** 自由模式：不使用固定模版，最终提示词 = 用户输入（需在界面填写，见作图页校验） */
     free: "",
@@ -203,6 +206,17 @@ function coerceCoverImageUrlByMode(raw: unknown): Record<string, string> {
   return out;
 }
 
+function coercePromptModelProvidersByMode(raw: unknown): Record<string, ImageModelSettings["provider"][]> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, ImageModelSettings["provider"][]> = {};
+  for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
+    const list = Array.isArray(val) ? val : [val];
+    const providers = list.filter((item): item is ImageModelSettings["provider"] => item === "gpt-image" || item === "nano-banana");
+    if (providers.length > 0) out[modeId] = Array.from(new Set(providers));
+  }
+  return out;
+}
+
 /** 设置页多行文案 → 存入 settings 的数组（去掉末尾空行） */
 export function parseRefSlotHintsTextarea(text: string): string[] {
   const rawLines = text.split(/\r?\n/);
@@ -260,6 +274,9 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
     customModes,
     refSlotHintsByMode: coerceRefSlotHintsByMode(source.refSlotHintsByMode),
     coverImageUrlByMode: coerceCoverImageUrlByMode(source.coverImageUrlByMode),
+    promptModelProvidersByMode: coercePromptModelProvidersByMode(
+      source.promptModelProvidersByMode ?? (source as { promptModelProviderByMode?: unknown }).promptModelProviderByMode,
+    ),
     prompts: {
       ...DEFAULT_IMAGE_SETTINGS.prompts,
       ...sourcePrompts,
