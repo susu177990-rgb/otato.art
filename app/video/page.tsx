@@ -17,7 +17,6 @@ import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import {
   VIDEO_MODEL_ORDER,
-  VIDEO_MODES,
   VIDEO_MODE_LABELS,
   buildVideoPromptFromSlots,
   composerSlotCountForTemplate,
@@ -51,6 +50,7 @@ type PresetRailItem = {
   coverUrl: string;
 };
 
+const FREE_PRESET: PresetRailItem = { id: "free", label: "自由模式", promptTemplate: "", coverUrl: "" };
 const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => id !== "kling-2.6-motion");
 
 const REFERENCE_KINDS: ReferenceKind[] = ["image", "video", "audio"];
@@ -199,15 +199,11 @@ export default function VideoPage() {
   );
   const presetRailItems = useMemo<PresetRailItem[]>(
     () => {
-      const builtinRows = VIDEO_MODES.map((mode) => ({
-        id: mode.id,
-        label: mode.label,
-      }));
       const customRows = (videoWorkspace.customModes ?? []).map((mode) => ({
         id: mode.id,
         label: mode.label,
       }));
-      return [...builtinRows, ...customRows].reverse().map((item) => ({
+      return customRows.reverse().map((item) => ({
         id: item.id,
         label: item.label,
         promptTemplate: videoWorkspace.prompts[item.id] ?? "",
@@ -216,8 +212,8 @@ export default function VideoPage() {
     },
     [videoWorkspace.coverImageUrlByMode, videoWorkspace.customModes, videoWorkspace.prompts],
   );
-  const selectedPreset =
-    presetRailItems.find((item) => item.id === selectedPresetId) ?? presetRailItems[0] ?? { id: "free", label: "自由模式", promptTemplate: "", coverUrl: "" };
+  const selectedPreset = selectedPresetId === "free" ? FREE_PRESET : presetRailItems.find((item) => item.id === selectedPresetId) ?? FREE_PRESET;
+  const isFreeMode = selectedPreset.id === "free";
   const placeholderOccurrences = useMemo(
     () => extractPromptPlaceholderOccurrences(selectedPreset.promptTemplate),
     [selectedPreset.promptTemplate],
@@ -297,8 +293,9 @@ export default function VideoPage() {
   }, [capabilities, safeModelId, selectedUiModeId]);
 
   useEffect(() => {
+    if (selectedPresetId === "free") return;
     if (presetRailItems.some((item) => item.id === selectedPresetId)) return;
-    setSelectedPresetId(presetRailItems[0]?.id ?? "free");
+    setSelectedPresetId("free");
   }, [presetRailItems, selectedPresetId]);
 
   useEffect(() => {
@@ -608,25 +605,29 @@ export default function VideoPage() {
               <div className={styles.scrollWrap}>
                 <div className={styles.scroll}>
                   <div className={styles.list}>
-                    {presetRailItems.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => setSelectedPresetId(preset.id)}
-                        className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
-                        aria-label={preset.label}
-                      >
-                        {preset.coverUrl ? (
-                          <>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
-                            <span className={styles.modeMeta}>{preset.label}</span>
-                          </>
-                        ) : (
-                          <span className={styles.modeCoverFallback}>{preset.label}</span>
-                        )}
-                      </button>
-                    ))}
+                    {presetRailItems.length === 0 ? (
+                      <div className={styles.emptyRail}>暂无预设</div>
+                    ) : (
+                      presetRailItems.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => setSelectedPresetId(preset.id)}
+                          className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
+                          aria-label={preset.label}
+                        >
+                          {preset.coverUrl ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
+                              <span className={styles.modeMeta}>{preset.label}</span>
+                            </>
+                          ) : (
+                            <span className={styles.modeCoverFallback}>{preset.label}</span>
+                          )}
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -873,6 +874,20 @@ export default function VideoPage() {
 
               <div className={styles.toolbarActions}>
                 {!modelReady ? <span className={styles.warning}>当前模型未配置</span> : null}
+                <button
+                  type="button"
+                  className={[styles.freeModeToggle, isFreeMode ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}
+                  aria-pressed={isFreeMode}
+                  title="不使用提示词预设"
+                  onClick={() => {
+                    setSelectedPresetId(isFreeMode ? presetRailItems[0]?.id ?? "free" : "free");
+                  }}
+                >
+                  <span className={styles.freeSwitchTrack} aria-hidden>
+                    <span className={styles.freeSwitchThumb} />
+                  </span>
+                  <span>自由</span>
+                </button>
                 <button type="button" onClick={handleGenerate} disabled={isGenerating || isUploading} className={styles.generate}>
                   {isGenerating ? "生成中" : "生成"}
                 </button>

@@ -21,5 +21,9 @@ export function formatDbError(e: unknown): string {
     return `数据库缺少表 public.${table}。请在项目根目录执行 supabase db push，或在 Supabase Dashboard → SQL Editor 运行 migrations 目录中的 SQL。`;
   }
 
+  if (code === "23503" && /site_prompt_preset_favorites.*preset_id|site_prompt_presets/i.test(message)) {
+    return "预设库里缺少这条预设记录，收藏前同步失败。请刷新后重试；如果仍失败，需要先让该预设重新同步到 site_prompt_presets。";
+  }
+
   return message || "数据库操作失败";
 }

@@ -40,11 +40,35 @@ export async function getWorkspaceSnapshot(supabase: SupabaseClient): Promise<Wo
   }
 
   const row = data as { llm?: unknown; image_workspace?: unknown; video_workspace?: unknown };
-  const presets = await listSitePromptPresets(supabase);
+  const imageWorkspace = mergeImageSettings(row.image_workspace ?? {});
+  const videoWorkspace = mergeVideoSettings(row.video_workspace ?? {});
+  let presets = await listSitePromptPresets(supabase);
+
+  // Auto-heal: detect if there is a drift between workspace custom modes and the site_prompt_presets table
+  const imagePresets = presets.filter((preset) => preset.kind === "image");
+  const videoPresets = presets.filter((preset) => preset.kind === "video");
+  const imageCustomModeIds = (imageWorkspace.customModes ?? []).map((m) => m.id);
+  const videoCustomModeIds = (videoWorkspace.customModes ?? []).map((m) => m.id);
+
+  const hasDrift =
+    imagePresets.length !== imageCustomModeIds.length ||
+    videoPresets.length !== videoCustomModeIds.length ||
+    imageCustomModeIds.some((id) => !imagePresets.some((p) => p.id === id)) ||
+    videoCustomModeIds.some((id) => !videoPresets.some((p) => p.id === id));
+
+  if (hasDrift) {
+    try {
+      await syncPromptLibraryFromWorkspaces(supabase, imageWorkspace, videoWorkspace);
+      presets = await listSitePromptPresets(supabase);
+    } catch (syncErr) {
+      console.error("[getWorkspaceSnapshot] Failed to auto-heal prompt presets drift:", syncErr);
+    }
+  }
+
   return {
     llm: mergeLlmPartial(row.llm),
-    imageWorkspace: applyPromptLibraryToImageWorkspace(mergeImageSettings(row.image_workspace ?? {}), presets),
-    videoWorkspace: applyPromptLibraryToVideoWorkspace(mergeVideoSettings(row.video_workspace ?? {}), presets),
+    imageWorkspace: applyPromptLibraryToImageWorkspace(imageWorkspace, presets),
+    videoWorkspace: applyPromptLibraryToVideoWorkspace(videoWorkspace, presets),
   };
 }
 

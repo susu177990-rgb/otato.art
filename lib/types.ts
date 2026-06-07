@@ -127,6 +127,32 @@ export interface ProjectSummary {
   seriesBibleFilled?: boolean;
 }
 
+export interface MeSnapshot {
+  user: {
+    id: string;
+    email: string;
+    emailConfirmed: boolean;
+    createdAt: string | null;
+    lastSignInAt: string | null;
+  };
+  stats: {
+    projects: number;
+    chatConversations: number;
+    imageRecords: number;
+    videoRecords: number;
+    canvasBoards: number;
+  };
+}
+
+export interface UpdatePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateEmailInput {
+  newEmail: string;
+}
+
 export const DEFAULT_LLM_MODEL_ID = "default-gpt-5-4";
 
 /** LLM 默认值：见 {@link BAKED_LLM_SETTINGS} */

@@ -26,7 +26,11 @@ export async function GET(req: Request) {
     if (!kind) return NextResponse.json({ error: "kind 必须是 image / video / chat" }, { status: 400 });
 
     const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
-    return NextResponse.json({ presets });
+    return NextResponse.json({
+      presets,
+      debugUserId: process.env.NODE_ENV !== "production" ? user.id : undefined,
+      debugUserEmail: process.env.NODE_ENV !== "production" ? user.email ?? null : undefined,
+    });
   } catch (e) {
     console.error("[site-prompt-presets GET]", e);
     return NextResponse.json({ error: formatDbError(e) }, { status: 500 });

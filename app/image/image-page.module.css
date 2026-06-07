@@ -280,7 +280,7 @@
 .promptPreviewRoot {
   position: fixed;
   inset: 0;
-  z-index: 10040;
+  z-index: 10060;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -477,27 +477,6 @@
   gap: 10px;
 }
 
-.presetLibraryGalleryLink {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #f4f4f5;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none;
-}
-
-.presetLibraryGalleryLink:hover {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .presetLibraryClose {
   box-sizing: border-box;
   width: 34px;
@@ -529,9 +508,10 @@
 
 .presetLibraryGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 18px;
-  padding: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-auto-rows: 214px;
+  gap: 20px;
+  padding: 24px;
   overflow-y: auto;
 }
 
@@ -549,12 +529,13 @@
 
 .presetCard {
   position: relative;
+  height: 214px;
   min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.035);
   box-shadow:
-    0 16px 60px rgba(0, 0, 0, 0.32),
+    0 20px 64px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
   transition:
@@ -567,8 +548,8 @@
 .presetCardActive {
   border-color: #c4b5fd;
   box-shadow:
-    0 0 0 1px rgba(196, 181, 253, 0.34),
-    0 16px 60px rgba(0, 0, 0, 0.32);
+    0 0 0 1px rgba(196, 181, 253, 0.42),
+    0 20px 64px rgba(0, 0, 0, 0.34);
 }
 
 .presetCard:hover {
@@ -581,23 +562,25 @@
   display: block;
   width: 100%;
   color: #fcfcfd;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.25;
   letter-spacing: 0;
   text-align: left;
   overflow-wrap: anywhere;
 }
 
 .presetCardSelect {
+  display: block;
   width: 100%;
+  height: 100%;
+  position: relative;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: none;
   background: transparent;
   color: inherit;
-  display: block;
   text-align: left;
   cursor: pointer;
 }
@@ -605,21 +588,17 @@
 .presetCardSelect:focus-visible,
 .presetFavorite:focus-visible,
 .presetCopyButton:focus-visible,
-.presetLibraryClose:focus-visible,
-.presetLibraryGalleryLink:focus-visible {
+.presetLibraryClose:focus-visible {
   outline: 2px solid rgba(250, 250, 250, 0.45);
   outline-offset: 2px;
 }
 
 .presetCardCover {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  min-width: 0;
-  position: relative;
   background: #08080a;
   color: #f4f4f5;
   font-size: 13px;
@@ -630,6 +609,8 @@
 }
 
 .presetCardCover img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -647,9 +628,9 @@
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 1;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.66), rgba(0, 0, 0, 0.22) 38%, rgba(0, 0, 0, 0.04) 62%, rgba(0, 0, 0, 0.28)),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
+    linear-gradient(180deg, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.3) 28%, rgba(0, 0, 0, 0.06) 54%, rgba(0, 0, 0, 0.46) 100%);
   pointer-events: none;
 }
 
@@ -663,7 +644,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 14px 88px 14px 15px;
+  padding: 16px 84px 14px 16px;
   pointer-events: none;
 }
 
@@ -677,115 +658,102 @@
 .presetCardDesc {
   display: -webkit-box;
   overflow: hidden;
-  color: rgba(244, 244, 245, 0.78);
-  font-size: 11px;
-  line-height: 1.45;
-  -webkit-line-clamp: 2;
+  color: rgba(244, 244, 245, 0.74);
+  font-size: 10px;
+  line-height: 1.4;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .presetModelChips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: flex-end;
 }
 
 .presetModelChip {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 9px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: rgba(9, 9, 11, 0.42);
-  color: #f4f4f5;
+  background: rgba(9, 9, 11, 0.32);
+  color: rgba(244, 244, 245, 0.88);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(8px);
 }
 
-.presetCopyIconButton,
-.presetFavorite {
+.presetMetaActions {
   position: absolute;
+  top: 16px;
+  right: 16px;
   z-index: 3;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
+}
+
+.presetMetaButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  min-height: 20px;
   margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.86);
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(9, 9, 11, 0.32);
+  color: rgba(244, 244, 245, 0.88);
   font: inherit;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.42));
+  backdrop-filter: blur(8px);
 }
 
-.presetCopyIconButton {
-  top: 18px;
-  right: 52px;
-}
-
-.presetCopyIconButton:hover,
-.presetCopyIconButtonActive {
+.presetMetaButton:hover:not(:disabled),
+.presetMetaButton:focus-visible {
+  background: rgba(18, 18, 22, 0.5);
   color: #fafafa;
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
-.presetFavorite {
-  top: 18px;
-  right: 18px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.presetFavorite:hover:not(:disabled),
-.presetFavoriteActive {
-  color: #fcd34d;
-}
-
-.presetFavorite:disabled {
+.presetMetaButton:disabled {
   cursor: wait;
   opacity: 0.58;
 }
 
-.presetCopyGlyph {
-  position: relative;
-  display: block;
-  width: 16px;
-  height: 16px;
+.presetViewButton {
+  flex: 0 0 auto;
 }
 
-.presetCopyGlyph::before,
-.presetCopyGlyph::after {
-  content: "";
-  position: absolute;
-  box-sizing: border-box;
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
+.presetFavoriteButton {
+  flex: 0 0 auto;
 }
 
-.presetCopyGlyph::before {
-  top: 4px;
-  left: 4px;
+.presetFavoriteActive {
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.24);
 }
 
-.presetCopyGlyph::after {
-  top: 1px;
-  left: 1px;
-  background: transparent;
-}
+@media (max-width: 1200px) {
+  .presetLibraryGrid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-auto-rows: 192px;
+  }
 
-.presetFavoriteGlyph {
-  display: block;
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 1;
+  .presetCard {
+    height: 192px;
+  }
 }
 
 .loadingOverlay {
@@ -1670,6 +1638,71 @@
   cursor: not-allowed;
   background: #3f3f46;
   color: #71717a;
+}
+
+.freeModeToggle {
+  margin-left: auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 11px 0 8px;
+  color: #a1a1aa;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.freeModeToggle:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
+  color: #f4f4f5;
+}
+
+.freeModeToggleActive {
+  border-color: rgba(196, 181, 253, 0.72);
+  background: rgba(139, 92, 246, 0.17);
+  color: #f3e8ff;
+}
+
+.freeSwitchTrack {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: background-color 140ms ease;
+}
+
+.freeModeToggleActive .freeSwitchTrack {
+  background: #8b5cf6;
+}
+
+.freeSwitchThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #e4e4e7;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.freeModeToggleActive .freeSwitchThumb {
+  transform: translateX(12px);
+  background: #fafafa;
 }
 
 @media (max-width: 1100px) {

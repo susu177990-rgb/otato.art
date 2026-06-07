@@ -33,6 +33,9 @@ function ModeHomeInner() {
           <Link href="/settings" className={shellStyles.navLink}>
             设置
           </Link>
+          <Link href="/me" className={shellStyles.navLink}>
+            我的
+          </Link>
         </nav>
       </header>
 

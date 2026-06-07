@@ -29,7 +29,17 @@ function isMissingPresetTable(e: unknown): boolean {
   const row = e && typeof e === "object" ? (e as { code?: unknown; message?: unknown }) : null;
   const code = typeof row?.code === "string" ? row.code : "";
   const message = typeof row?.message === "string" ? row.message : e instanceof Error ? e.message : String(e);
-  return code === "PGRST205" || /site_prompt_presets|Could not find the table|schema cache/i.test(message);
+
+  // PGRST205: PostgREST missing table in schema cache
+  // 42P01: PostgreSQL relation does not exist
+  if (code === "PGRST205" || code === "42P01") return true;
+
+  // PGRST204 / 42703: Column does not exist
+  if (code === "PGRST204" || code === "42703") return false;
+
+  // Fallback: check messages related to table/relation missing, avoiding matching column-missing
+  return /Could not find the table|schema cache/i.test(message) ||
+         (/relation.*does not exist/i.test(message) && message.includes("site_prompt_presets"));
 }
 
 function quoteForSupabaseIn(value: string): string {
@@ -224,11 +234,11 @@ export async function syncPromptLibraryFromWorkspaces(
     }
   }
 
-  const deleteQuery = supabase.from("site_prompt_presets").delete();
+  const deleteQuery = supabase.from("site_prompt_presets").delete().in("preset_type", ["image", "video"]);
   const { error: deleteError } =
     wantedIds.length === 0
-      ? await deleteQuery.neq("id", "")
-      : await deleteQuery.not("id", "in", `(${wantedIds.join(",")})`);
+      ? await deleteQuery
+      : await deleteQuery.not("id", "in", `(${wantedIds.map((id) => quoteForSupabaseIn(id)).join(",")})`);
 
   if (deleteError && !isMissingPresetTable(deleteError)) throw deleteError;
 }
