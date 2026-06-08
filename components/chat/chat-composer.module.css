@@ -115,3 +115,48 @@
   user-select: none;
   transition: color 0.15s ease;
 }
+
+/* Production outline UI override */
+
+.composer,
+.textarea,
+.attachment,
+.modelSelect,
+.addBtn {
+  border: 3px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.textarea {
+  border: 0;
+}
+
+.attachment,
+.modelSelect,
+.addBtn {
+  border-width: 2px;
+  border-radius: 999px;
+}
+
+.addPlus {
+  color: #050505;
+}
+
+.modelSelect:hover,
+.addBtn:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.addBtn:hover .addPlus {
+  color: #ffffff;
+}
+
+.attachFileName {
+  color: #050505;
+}

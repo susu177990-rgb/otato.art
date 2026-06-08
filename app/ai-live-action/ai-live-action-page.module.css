@@ -308,3 +308,101 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Production outline UI override */
+
+.workspace,
+.section,
+.uploadBox,
+.uploadFrame,
+.assetCard,
+.outputCard,
+.controlCard {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.uploadBox,
+.uploadFrame {
+  border-style: dashed;
+}
+
+.uploadBoxFilled,
+.uploadFrameFilled {
+  border-style: solid;
+}
+
+.uploadFooter,
+.assetMeta,
+.hint,
+.muted {
+  color: #5f5f5a;
+}
+
+.controlGrid input,
+.controlGrid select,
+.controlGrid textarea,
+.assetCard input,
+.assetCard textarea {
+  border: 2px solid #050505;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.runButton,
+.addButton,
+.removeButton {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.runButton {
+  background: #050505;
+  color: #ffffff;
+}
+
+.runButton:hover:not(:disabled),
+.addButton:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.uploadBox:hover,
+.uploadFrame:hover {
+  border-style: solid;
+  background: #f3f3ef;
+}
+
+.controlSelect:hover,
+.controlGrid input:hover,
+.controlGrid textarea:hover,
+.assetCard input:hover,
+.assetCard textarea:hover {
+  border-color: #050505;
+  background: #f3f3ef;
+}
+
+.removeButton,
+.error {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.statusLine,
+.outputBlock,
+.uploadFooter,
+.assetMeta,
+.hint,
+.muted {
+  color: #5f5f5a;
+}

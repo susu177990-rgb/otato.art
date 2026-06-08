@@ -142,3 +142,65 @@
     padding-right: calc(var(--chat-session-rail) + var(--chat-rail-gutter) + 6px);
   }
 }
+
+/* Production outline UI override */
+
+.stage {
+  background: #ffffff;
+  color: #050505;
+}
+
+.messages,
+.messagesForm,
+.emptyGuide,
+.toolBubble,
+.toolJson,
+.toolCall,
+.toolArgs {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.messages {
+  border: 4px solid #050505;
+  border-radius: 32px;
+  margin: 18px 214px 18px;
+  padding: 22px;
+}
+
+.sending,
+.attachMeta,
+.toolLabel {
+  color: #5f5f5a;
+}
+
+.toolError {
+  border: 2px solid #b42318;
+  border-radius: 18px;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.toolMedia {
+  border: 2px solid #050505;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.toolLabel,
+.toolCall,
+.toolArgs,
+.toolJson,
+.attachMeta,
+.sending {
+  color: #5f5f5a;
+}
+
+.toolCall:hover,
+.toolArgs:hover,
+.toolJson:hover {
+  background: #f3f3ef;
+}

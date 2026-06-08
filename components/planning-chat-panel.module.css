@@ -74,3 +74,35 @@
   line-height: 1.35;
   border-radius: 12px;
 }
+
+/* Production outline UI override */
+
+.shell,
+.head,
+.body,
+.foot,
+.inputArea {
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.shell {
+  border: 3px solid #050505;
+  border-radius: 30px;
+}
+
+.head {
+  border-bottom: 2px solid #050505;
+  color: #5f5f5a;
+}
+
+.foot {
+  border-top: 2px solid #050505;
+}
+
+.inputArea {
+  border: 2px solid #050505;
+  border-radius: 18px;
+}

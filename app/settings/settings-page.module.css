@@ -758,3 +758,304 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Production outline UI override */
+
+.settingsPage {
+  --settings-bg: #ffffff;
+  --settings-panel: #ffffff;
+  --settings-panel-strong: #f7f7f4;
+  --settings-border: #050505;
+  --settings-border-strong: #050505;
+  --settings-ink: #050505;
+  --settings-muted: #5f5f5a;
+  --settings-accent: #050505;
+  --settings-success: #146c43;
+  --settings-danger: #b42318;
+  background: #ffffff;
+  color: #050505;
+}
+
+.settingsBody {
+  padding: 28px;
+}
+
+.settingsWorkspace {
+  display: grid;
+  grid-template-columns: minmax(168px, 196px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.subnav {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  min-height: min(640px, calc(100vh - 140px));
+  padding: 22px 18px;
+  border: 4px solid #050505;
+  border-radius: 32px;
+  background: #ffffff;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.subnavPill,
+.saveButton,
+.setDefaultBtn,
+.deleteModelBtn,
+.promptModeProviderButton,
+.promptModeCoverDelete,
+.promptPreviewClose,
+.promptCopyButton {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.subnavPillActive,
+.promptModeProviderButtonActive,
+.defaultBadge {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.settingsContent,
+.panel,
+.floatCard,
+.llmModelCard,
+.promptModeCard,
+.promptModeCoverFrame,
+.promptPreviewPanel,
+.promptPreviewBlock {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.settingsContent {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.panel {
+  padding: 0;
+}
+
+.floatCard,
+.llmModelCard,
+.promptModeCard {
+  padding: 20px;
+}
+
+.promptModeTextarea,
+.promptModeLabelInput,
+.llmModelCardFieldsCompact input,
+.llmModelCardFieldsCompact select,
+.llmModelCardFieldsCompact textarea {
+  border: 2px solid #050505;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.promptModeTextareaReadOnly {
+  background: #f7f7f4;
+}
+
+.promptModeCoverUploadLabel,
+.promptModeCoverFrame {
+  background: #ffffff;
+}
+
+.toggleSwitchSlider {
+  border: 2px solid #050505;
+  background: #ffffff;
+}
+
+.toggleSwitchInput:checked + .toggleSwitchSlider {
+  background: #050505;
+}
+
+.promptPreviewBackdrop {
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: none;
+}
+
+.savedHint,
+.promptModeCoverBusy {
+  color: #146c43;
+}
+
+.promptModeCoverError,
+.presetLibraryError,
+.promptOccWarn {
+  color: #b42318;
+}
+
+@media (max-width: 920px) {
+  .settingsBody {
+    padding: 18px;
+  }
+
+  .settingsWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .subnav {
+    position: static;
+    min-height: 0;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+}
+
+/* Second-pass cleanup: layout containers should not create double borders. */
+
+.settingsContent,
+.panel,
+.apiCardGrid,
+.promptModeGrid,
+.promptModeEditBody,
+.llmModelCardFieldsCompact,
+.llmModelCardRow {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.panel {
+  padding: 0;
+}
+
+.floatCard,
+.llmModelCard,
+.promptModeCard {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+}
+
+.llmModelCardTopBar {
+  border-bottom: 2px solid #050505;
+  padding-bottom: 12px;
+}
+
+.promptModeCardHead {
+  border-bottom: 2px solid #050505;
+  padding-bottom: 12px;
+}
+
+.promptModeCoverFrame,
+.promptPreviewBlock {
+  border-width: 2px;
+}
+
+.subnavPill:hover,
+.saveButton:hover:not(:disabled),
+.setDefaultBtn:hover,
+.deleteModelBtn:hover,
+.promptModeProviderButton:hover:not(:disabled),
+.promptPreviewClose:hover,
+.promptCopyButton:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.subnavPillActive:hover,
+.promptModeProviderButtonActive:hover:not(:disabled),
+.settingsContent .promptModeProviderButtonActive:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.fieldHint,
+.sectionHint,
+.promptModeHint,
+.promptModeCoverHint,
+.promptPreviewMeta,
+.presetLibraryHint {
+  color: #5f5f5a;
+}
+
+/* Third-pass cleanup: reduce nested-card noise in preset cards and make top
+   status readable as a real state pill. */
+
+.savedHint {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(560px, 50vw);
+  min-height: 34px;
+  padding: 0 14px;
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.savedHint:has(:not(*)) {
+  color: #050505;
+}
+
+.promptModeCard {
+  padding: 16px;
+}
+
+.promptModeEditBody {
+  align-items: stretch;
+  gap: 14px;
+}
+
+.promptModeTextareaReadOnly {
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  padding: 6px 0;
+  color: #050505;
+  opacity: 1;
+}
+
+.promptModeCoverFrameReadOnly {
+  border-width: 0;
+  border-radius: 18px;
+  background: transparent;
+  opacity: 1;
+}
+
+.promptModeCoverFrame:not(.promptModeCoverFrameReadOnly):hover,
+.promptModeTextarea:not(.promptModeTextareaReadOnly):hover {
+  border-color: #050505;
+  background: #f3f3ef;
+}
+
+.promptModeCoverFrameFilled {
+  border-width: 2px;
+}
+
+.promptModeCoverBusy {
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  inset: 50%;
+  width: max-content;
+  height: 30px;
+  padding: 0 12px;
+  transform: translate(-50%, -50%);
+}

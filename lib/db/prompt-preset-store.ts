@@ -15,6 +15,35 @@ export type SitePromptPreset = {
   isFavorite?: boolean;
 };
 
+function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset): Record<string, unknown> {
+  const title = preset.title.trim() || preset.id;
+  const promptTemplate = preset.promptTemplate ?? "";
+  const description = preset.description?.trim() || null;
+  return {
+    id: preset.id,
+    key: preset.id,
+    category: kind,
+    title,
+    description,
+    summary: description,
+    body: promptTemplate,
+    tags: [],
+    sort_order: 0,
+    preset_type: kind,
+    prompt_template: promptTemplate,
+    cover_image_url: preset.coverImageUrl?.trim() || null,
+    ref_slot_hints: kind === "chat" ? [] : preset.refSlotHints ?? [],
+    display_label: title,
+    chat_usage_hint: null,
+    input_schema: null,
+    output_schema: null,
+    optimized_system_prompt: null,
+    skills: [],
+    imported_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 type SitePromptPresetRow = {
   id: string;
   preset_type: PromptPresetKind;
@@ -164,16 +193,7 @@ export async function replaceSitePromptPresetsByKind(
   kind: PromptPresetKind,
   presets: SitePromptPreset[],
 ): Promise<void> {
-  const rows = presets.map((preset) => ({
-    id: preset.id,
-    preset_type: kind,
-    title: preset.title.trim() || preset.id,
-    prompt_template: preset.promptTemplate ?? "",
-    cover_image_url: preset.coverImageUrl?.trim() || null,
-    ref_slot_hints: kind === "chat" ? [] : preset.refSlotHints ?? [],
-    description: preset.description?.trim() || null,
-    updated_at: new Date().toISOString(),
-  }));
+  const rows = presets.map((preset) => toPresetRow(kind, preset));
 
   if (rows.length > 0) {
     const { error } = await supabase.from("site_prompt_presets").upsert(rows, { onConflict: "id" });
@@ -193,29 +213,29 @@ export async function replaceSitePromptPresetsByKind(
 }
 
 function imageWorkspaceRows(workspace: ImageWorkspaceSettings): Array<Record<string, unknown>> {
-  return workspace.customModes.map((mode) => ({
-    id: mode.id,
-    preset_type: "image",
-    title: mode.label.trim() || mode.id,
-    prompt_template: workspace.prompts[mode.id] ?? "",
-    cover_image_url: workspace.coverImageUrlByMode[mode.id] || null,
-    ref_slot_hints: workspace.refSlotHintsByMode[mode.id] ?? [],
-    description: null,
-    updated_at: new Date().toISOString(),
-  }));
+  return workspace.customModes.map((mode) =>
+    toPresetRow("image", {
+      id: mode.id,
+      kind: "image",
+      title: mode.label.trim() || mode.id,
+      promptTemplate: workspace.prompts[mode.id] ?? "",
+      coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
+      refSlotHints: workspace.refSlotHintsByMode[mode.id] ?? [],
+    }),
+  );
 }
 
 function videoWorkspaceRows(workspace: VideoWorkspaceSettings): Array<Record<string, unknown>> {
-  return workspace.customModes.map((mode) => ({
-    id: mode.id,
-    preset_type: "video",
-    title: mode.label.trim() || mode.id,
-    prompt_template: workspace.prompts[mode.id] ?? "",
-    cover_image_url: workspace.coverImageUrlByMode[mode.id] || null,
-    ref_slot_hints: [],
-    description: null,
-    updated_at: new Date().toISOString(),
-  }));
+  return workspace.customModes.map((mode) =>
+    toPresetRow("video", {
+      id: mode.id,
+      kind: "video",
+      title: mode.label.trim() || mode.id,
+      promptTemplate: workspace.prompts[mode.id] ?? "",
+      coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
+      refSlotHints: [],
+    }),
+  );
 }
 
 export async function syncPromptLibraryFromWorkspaces(

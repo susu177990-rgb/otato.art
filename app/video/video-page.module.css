@@ -372,7 +372,7 @@
   width: 100%;
   max-width: 840px;
   margin: 0 auto;
-  padding-top: 8px;
+  padding-top: 18px;
 }
 
 .error {
@@ -388,7 +388,7 @@
 }
 
 .composer {
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 30px;
   background: rgba(8, 8, 9, 0.94);
@@ -402,7 +402,8 @@
   align-items: center;
   gap: 9px;
   overflow-x: auto;
-  padding: 0 4px 12px;
+  padding: 0 4px 14px;
+  margin-bottom: 12px;
 }
 
 .refGroup {
@@ -473,13 +474,13 @@
   gap: 1px;
   padding: 3px 2px;
   text-align: center;
-  color: #64748b;
+  color: #050505;
 }
 
 .refSlotIndex {
   font-size: 10px;
-  font-weight: 600;
-  color: #94a3b8;
+  font-weight: 800;
+  color: #5f5f5a;
   line-height: 1.05;
 }
 
@@ -1225,4 +1226,238 @@
   .presetCard {
     height: 192px;
   }
+}
+
+/* Production outline UI override */
+
+.stage {
+  background: #ffffff;
+  color: #050505;
+}
+
+.canvas {
+  padding-top: 28px;
+}
+
+.resultClip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: min(460px, calc(100vh - 360px));
+  max-width: min(900px, 100%);
+}
+
+.resultVideo {
+  border-radius: 28px;
+  border: 4px solid #050505;
+  box-shadow: none;
+}
+
+.modePanel,
+.historyPanel,
+.composer,
+.composerSelect,
+.generate,
+.freeModeToggle,
+.promptPreviewPanel,
+.presetLibraryPanel {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.referenceStrip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.modePanel,
+.historyPanel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  min-height: min(320px, calc(100vh - 260px));
+  justify-content: flex-start;
+  padding: 0;
+}
+
+.railFrame::before,
+.railFrame::after {
+  display: none;
+}
+
+.modeColumn,
+.historyColumn,
+.railFrame,
+.scrollWrap,
+.scroll,
+.list {
+  height: 100%;
+}
+
+.scroll {
+  justify-content: center;
+}
+
+.railFrame,
+.scrollWrap,
+.modeItem,
+.historyItem,
+.refSlot,
+.refGroup,
+.promptSlotPane,
+.promptInput,
+.presetCard,
+.promptPreviewText,
+.presetMetaButton,
+.promptCopyButton {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.modeItem,
+.historyItem,
+.presetMetaButton,
+.promptCopyButton {
+  border: 3px solid #050505;
+  border-radius: 24px;
+}
+
+.modeItem,
+.historyItem {
+  overflow: hidden;
+}
+
+.modeItemActive,
+.freeModeToggleActive,
+.presetCardActive,
+.generate {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.refSlot {
+  border: 3px dashed #050505;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.refSlotFilled {
+  border-style: solid;
+  border-radius: 24px;
+}
+
+.refSlot:hover,
+.refSlot:focus-within {
+  border-style: solid;
+  background: #f3f3ef;
+}
+
+.refEmptyContent,
+.refSlotIndex {
+  color: #050505;
+}
+
+.composerSelect:hover,
+.freeModeToggle:hover,
+.viewPrompt:hover,
+.presetMetaButton:hover:not(:disabled),
+.promptCopyButton:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.promptInput {
+  border: 0;
+  background: #ffffff;
+  background-clip: padding-box;
+  color: #050505;
+  overflow-y: auto;
+}
+
+.error,
+.warning,
+.presetLibraryError {
+  border: 2px solid #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.loadingOverlay,
+.promptPreviewBackdrop,
+.presetLibraryBackdrop {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: none;
+}
+
+.loadingOverlay {
+  color: #050505;
+}
+
+.statusLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 14px;
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  font-weight: 900;
+}
+
+.loadingSpinner,
+.spinner {
+  border-color: rgba(5, 5, 5, 0.18);
+  border-top-color: #050505;
+}
+
+.bigSpinner,
+.loadingSpinner,
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #050505;
+  border-top-color: transparent;
+  border-radius: 999px;
+  box-shadow: none;
+  filter: none;
+}
+
+.emptyRail,
+.presetLibraryEmpty,
+.refEmptyContent {
+  color: #050505;
+  font-weight: 700;
+}
+
+.promptPreviewEyebrow,
+.presetLibraryEyebrow,
+.promptPreviewTitle,
+.presetLibraryTitle {
+  color: #050505;
+  opacity: 1;
+}
+
+.promptPreviewClose,
+.presetLibraryClose {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.promptPreviewClose:hover,
+.presetLibraryClose:hover {
+  background: #050505;
+  color: #ffffff;
 }

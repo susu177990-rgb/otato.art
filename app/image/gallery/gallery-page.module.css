@@ -341,3 +341,115 @@
   flex: 1;
   justify-content: center;
 }
+
+/* Production outline UI override */
+
+.galleryBody,
+.tile,
+.modalCard,
+.modalMeta,
+.modalPrompt,
+.modalAction {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.tile:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+  transform: none;
+}
+
+.tile:hover .tileOverlay,
+.tile:hover .tileMeta,
+.tile:hover .tileTitle {
+  color: #ffffff;
+}
+
+.tileImg,
+.modalImage {
+  border-radius: 24px;
+  background: #ffffff;
+}
+
+.tileOverlay {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+  color: #050505;
+}
+
+.modalBackdrop {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: none;
+}
+
+.modalPrompt {
+  border-width: 2px;
+  background: #f7f7f4;
+}
+
+.modal {
+  border: 4px solid #050505;
+  border-radius: 32px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.modalSide {
+  border-left: 3px solid #050505;
+}
+
+.modalClose {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.modalClose:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+.modalImageWrap {
+  background: #ffffff;
+}
+
+.modalTitle {
+  color: #050505;
+  font-weight: 800;
+}
+
+.modalSubtitle,
+.tileMetaInfo {
+  color: #5f5f5a;
+}
+
+.metaCell {
+  border: 2px solid #050505;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.section h3,
+.sectionHint,
+.metaCell dt {
+  color: #5f5f5a;
+}
+
+.proseBlock,
+.metaCell dd {
+  color: #050505;
+  background: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .modalSide {
+    border-left: 0;
+    border-top: 3px solid #050505;
+  }
+}

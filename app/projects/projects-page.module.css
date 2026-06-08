@@ -138,3 +138,84 @@
   background: rgba(127, 29, 29, 0.32);
   color: #fca5a5;
 }
+
+/* Production outline UI override */
+
+.toolbar,
+.projectCard,
+.searchInput,
+.sortSelect,
+.removeBtn {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.projectCard {
+  border-radius: 30px;
+}
+
+.toolbar {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.projectCard:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+  transform: none;
+}
+
+.projectCard:hover .projectTitle,
+.projectCard:hover .projectStage,
+.projectCard:hover .projectFoot,
+.projectCard:hover .projectMeta,
+.projectCard:hover .metaPillPending {
+  color: #ffffff;
+}
+
+.searchInput:hover,
+.sortSelect:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.searchInput,
+.sortSelect,
+.removeBtn {
+  border-radius: 999px;
+}
+
+.removeBtn {
+  opacity: 1;
+  border-width: 2px;
+}
+
+.removeBtn:hover {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.sortField,
+.projectStage,
+.projectFoot {
+  color: #5f5f5a;
+}
+
+.projectTitle {
+  color: #050505;
+  font-weight: 800;
+}
+
+.metaPillPending {
+  border: 2px solid #8a5a00;
+  background: #fff8df;
+  color: #8a5a00;
+}

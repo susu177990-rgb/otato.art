@@ -91,3 +91,51 @@
   line-height: 1.6;
   color: #52525b;
 }
+
+/* Production outline UI override */
+
+.shell,
+.contentShell,
+.editor,
+.preview,
+.emptyText {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.shell,
+.contentShell {
+  border: 2px solid #050505;
+  border-radius: 20px;
+}
+
+.body {
+  border-top: 2px solid #050505;
+}
+
+.label {
+  color: #050505;
+  font-weight: 800;
+}
+
+.optionalTag {
+  color: #5f5f5a;
+}
+
+.removeButton {
+  border: 2px solid #b42318;
+  border-radius: 999px;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.removeButton:hover {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.emptyText {
+  color: #5f5f5a;
+}

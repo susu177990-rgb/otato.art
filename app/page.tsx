@@ -51,7 +51,7 @@ function ModeHomeInner() {
   }
 
   return (
-    <main className={shellStyles.page}>
+    <main className={[shellStyles.page, shellStyles.homePage].join(" ")}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>

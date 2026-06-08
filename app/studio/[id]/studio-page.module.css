@@ -179,3 +179,68 @@
   padding-right: 10px;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* Production outline UI override */
+
+.topbarLeftCompact,
+.topnavCompact,
+.autoCluster,
+.banner,
+.stageStripCluster,
+.prePipelineNav {
+  color: #050505;
+}
+
+.titleSub,
+.autoLabel {
+  color: #050505;
+}
+
+.autoCluster,
+.bannerInner {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.autoSwitch {
+  border: 2px solid #050505;
+  background: #ffffff;
+}
+
+.autoSwitchActive {
+  background: #050505;
+}
+
+.autoSwitchError {
+  background: #b42318;
+}
+
+.prePipelineNav {
+  border-right: 3px solid #050505;
+}
+
+.banner {
+  background: transparent;
+}
+
+.autoCluster:hover,
+.bannerInner a:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+.autoLabelActive {
+  color: #146c43;
+}
+
+.autoLabelError {
+  color: #b42318;
+}
+
+.autoSwitch span {
+  border: 1px solid #050505;
+  box-shadow: none;
+}

@@ -80,3 +80,25 @@
   outline: 1px solid rgba(250, 250, 250, 0.35);
   outline-offset: 2px;
 }
+
+/* Production outline UI cleanup */
+
+.renameBtn,
+.deleteBtn {
+  border: 1px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.renameBtn:hover,
+.deleteBtn:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.renameInput {
+  color: #050505;
+  background: #ffffff;
+}

@@ -253,3 +253,73 @@
   justify-content: center;
   border-radius: 10px;
 }
+
+/* Production outline compatibility overrides. */
+
+.page {
+  background: #ffffff;
+  color: #050505;
+}
+
+.plainDockText {
+  color: #5f5f5a;
+}
+
+.dockTextLink:hover {
+  color: #050505;
+}
+
+.dockTextLink:focus-visible {
+  outline: 2px solid #050505;
+}
+
+.navLink {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.navLink:hover:not(:disabled),
+.navLinkPrimary,
+.navLinkPrimary:hover:not(:disabled),
+.navLinkActive {
+  border-color: #050505 !important;
+  background: #050505 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.navLink:focus-visible {
+  outline: 2px solid #050505;
+}
+
+.navLinkDanger {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.navLinkDanger:hover:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.segmented {
+  border: 3px solid #050505;
+  background: #ffffff;
+}
+
+.segmentedItem {
+  color: #050505;
+}
+
+.segmentedItem:hover,
+.segmentedItemActive,
+.segmentedItemActive:hover {
+  background: #050505;
+  color: #ffffff;
+  box-shadow: none;
+}

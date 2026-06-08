@@ -100,3 +100,42 @@
     transform: rotate(360deg);
   }
 }
+
+/* Production outline UI override */
+
+.shell,
+.messages,
+.inputBar,
+.inputArea,
+.sendBtn {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.inputBar {
+  border-top: 3px solid #050505;
+}
+
+.emptyTitle {
+  color: #050505;
+}
+
+.inputArea {
+  border: 2px solid #050505;
+  border-radius: 999px;
+}
+
+.sendBtn {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #050505;
+  color: #ffffff;
+}
+
+.sendBtn:disabled {
+  background: #f3f3ef;
+  color: #5f5f5a;
+}

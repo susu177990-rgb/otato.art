@@ -250,3 +250,91 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Production outline UI override */
+
+.sectionGrid,
+.profileCard,
+.securityCard,
+.dataCard,
+.notesCard,
+.boundaryCard,
+.statCard,
+.sessionCard,
+.formCard {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.profileBadge {
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.input,
+.button,
+.dangerButton {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.button {
+  background: #050505;
+  color: #ffffff;
+}
+
+.dangerButton,
+.error {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.kvCard,
+.statCard,
+.heroMetaPill {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.kvCard:hover,
+.statCard:hover,
+.heroMetaPill:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
+}
+
+.kvLabel,
+.statLabel,
+.dataLegend,
+.heroMetaPill {
+  color: #5f5f5a;
+}
+
+.kvValue,
+.statNumber {
+  color: #050505;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+.kvCard:hover .kvLabel,
+.kvCard:hover .kvValue,
+.statCard:hover .statNumber,
+.statCard:hover .statLabel,
+.heroMetaPill:hover {
+  color: #ffffff;
+}

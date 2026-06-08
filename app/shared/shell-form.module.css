@@ -213,3 +213,121 @@
   background: rgba(127, 29, 29, 0.22);
   color: #fecaca;
 }
+
+/* Production outline compatibility overrides. Keep this split module visually
+   aligned with shell.module.css for older imports. */
+
+.fieldLabel {
+  color: #5f5f5a;
+  font-weight: 700;
+}
+
+.input,
+.select,
+.textarea,
+.textareaComposer {
+  border: 3px solid #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  background-clip: padding-box;
+  color: #050505;
+  box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.inputCompact {
+  border-radius: 999px;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus,
+.textareaComposer:focus,
+.input:hover,
+.select:hover,
+.textarea:hover,
+.textareaComposer:hover {
+  border-color: #050505;
+  background: #f3f3ef;
+}
+
+.input::placeholder,
+.textarea::placeholder,
+.textareaComposer::placeholder {
+  color: #5f5f5a;
+}
+
+.checkboxRow {
+  color: #050505;
+}
+
+.checkboxRow input[type="checkbox"] {
+  accent-color: #050505;
+}
+
+.button,
+.buttonSubtle {
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.button:hover:not(:disabled),
+.buttonSubtle:hover:not(:disabled),
+.buttonPrimary,
+.buttonPrimary:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.button:focus-visible {
+  outline: 2px solid #050505;
+  outline-offset: 3px;
+}
+
+.buttonDanger {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.buttonDanger:hover:not(:disabled) {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.banner {
+  border: 2px solid #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.bannerInfo {
+  border-color: #050505;
+  background: #f7f7f4;
+  color: #050505;
+}
+
+.bannerSuccess {
+  border-color: #146c43;
+  background: #f2fff6;
+  color: #146c43;
+}
+
+.bannerWarn {
+  border-color: #8a5a00;
+  background: #fff8df;
+  color: #8a5a00;
+}
+
+.bannerError {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}

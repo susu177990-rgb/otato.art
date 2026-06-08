@@ -38,3 +38,28 @@
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.15);
 }
+
+/* Production outline UI override */
+
+.drop,
+.disabledHint {
+  border: 2px dashed #050505;
+  border-radius: 24px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.dropHint,
+.disabledHint {
+  color: #5f5f5a;
+}
+
+.drop:hover,
+.dropActive {
+  border-style: solid;
+  background: #f3f3ef;
+}
+
+.dropText {
+  color: #050505;
+}

@@ -186,3 +186,70 @@
   letter-spacing: 0.04em;
   color: #52525b;
 }
+
+/* Production outline UI override */
+
+.firstAddButton,
+.addButton,
+.card,
+.block {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.card,
+.block {
+  border: 2px solid #050505;
+  border-radius: 22px;
+}
+
+.firstAddButton,
+.addButton {
+  border: 2px solid #050505;
+  border-radius: 999px;
+}
+
+.firstAddButton:hover,
+.addButton:hover,
+.card:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.card:hover .cardTitle,
+.card:hover .cardExcerpt,
+.card:hover .cardMeta {
+  color: #ffffff;
+}
+
+.cardTitle {
+  color: #050505;
+  font-weight: 800;
+}
+
+.cardExcerpt,
+.cardMeta {
+  color: #5f5f5a;
+}
+
+.cardMeta {
+  border-top: 2px solid #050505;
+}
+
+.cardDelete {
+  border: 2px solid #b42318;
+  border-radius: 999px;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.cardDelete:hover {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.extrasTitle {
+  color: #5f5f5a;
+}

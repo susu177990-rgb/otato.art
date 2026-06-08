@@ -37,3 +37,23 @@
   font-size: 11px;
   color: #71717a;
 }
+
+/* Production outline compatibility overrides. */
+
+.card {
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.cardTitle {
+  color: #050505;
+  font-weight: 800;
+}
+
+.cardSubtitle {
+  color: #5f5f5a;
+}

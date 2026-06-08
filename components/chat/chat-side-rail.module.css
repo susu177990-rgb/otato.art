@@ -5,6 +5,7 @@
   width: var(--chat-rail-card-width) !important;
   min-width: var(--chat-rail-card-width) !important;
   max-width: var(--chat-rail-card-width) !important;
+  min-height: min(340px, calc(100vh - 250px));
   /* 勿 hidden：会裁掉 modeRailFrame::before/after 上下小箭头（top/bottom: ±15px） */
   overflow: visible;
 }
@@ -12,6 +13,14 @@
 .railRail,
 .railRailFrame {
   overflow: visible;
+}
+
+.railRail {
+  flex: 1 1 auto;
+}
+
+.railRailFrame {
+  width: 100%;
 }
 
 .railScrollWrap,
@@ -26,6 +35,17 @@
 .railScrollWrap,
 .railScroll {
   overflow-x: hidden !important;
+}
+
+.railScrollWrap,
+.railScroll,
+.railList {
+  height: 100%;
+}
+
+.railScroll {
+  justify-content: center !important;
+  padding: 14px 10px !important;
 }
 
 .railCard {
@@ -61,4 +81,48 @@
 
 .railCardActive .railName {
   color: #09090b !important;
+}
+
+/* Production outline UI override */
+
+.rail,
+.railCard,
+.railAction,
+.railInput {
+  border-color: #050505 !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.rail {
+  border: 4px solid #050505 !important;
+  border-radius: 32px !important;
+}
+
+.railRailFrame::before,
+.railRailFrame::after {
+  display: none !important;
+}
+
+.railCard,
+.railAction,
+.railInput {
+  border: 2px solid #050505 !important;
+  border-radius: 999px !important;
+}
+
+.railCardActive {
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.railCardActive .railName,
+.railCardActive * {
+  color: #ffffff !important;
+}
+
+.railName {
+  color: #050505 !important;
 }

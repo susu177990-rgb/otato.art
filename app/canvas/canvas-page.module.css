@@ -662,10 +662,10 @@
 .genImageBox {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 16px;
-  background: rgba(10, 10, 11, 0.94);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.28);
+  border: 3px solid #050505;
+  border-radius: 26px;
+  background: #ffffff;
+  box-shadow: none;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -675,8 +675,8 @@
 }
 
 .nodeActive .genImageBox {
-  border-color: rgba(250, 250, 250, 0.55);
-  box-shadow: 0 0 0 2px rgba(250, 250, 250, 0.18), 0 8px 40px rgba(0, 0, 0, 0.44);
+  border-color: #050505;
+  box-shadow: 0 0 0 4px rgba(5, 5, 5, 0.12);
 }
 
 .nodeConnectTarget .genImageBox {
@@ -692,11 +692,11 @@
   transform-origin: top center;
   width: 680px;
   height: 140px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 16px;
-  background: rgba(24, 24, 27, 0.96);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-  overflow: visible;
+  border: 4px solid #050505;
+  border-radius: 32px;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   z-index: 20;
@@ -732,7 +732,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.25);
+  background: #ffffff;
   overflow: hidden;
 }
 
@@ -761,7 +761,7 @@
   gap: 10px;
   width: 100%;
   height: 100%;
-  color: #3f3f46;
+  color: #5f5f5a;
   padding: 16px;
   text-align: center;
 }
@@ -818,8 +818,9 @@
   min-height: 0;
   flex: 1 1 0;
   border: 0;
-  background: transparent;
-  color: #e4e4e7;
+  background: #ffffff;
+  background-clip: padding-box;
+  color: #050505;
   font: inherit;
   font-size: 12.5px;
   line-height: 1.6;
@@ -831,12 +832,12 @@
 }
 
 .generatorPrompt::placeholder {
-  color: #52525b;
+  color: #5f5f5a;
 }
 
 .generatorPromptPlaceholder {
   padding: 8px 12px 4px;
-  color: #52525b;
+  color: #5f5f5a;
   font: inherit;
   font-size: 12.5px;
   line-height: 1.6;
@@ -847,7 +848,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px 8px;
+  padding: 10px 12px;
+  border-top: 3px solid #050505;
+  background: #ffffff;
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
@@ -862,16 +865,16 @@
 /* Pill-style select (model, ratio, size, quality) — mirrors image page composerSelect */
 .generatorPill {
   flex-shrink: 0;
-  height: 28px;
-  padding: 0 20px 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 34px;
+  padding: 0 24px 0 12px;
+  border: 3px solid #050505;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: #ffffff;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 7px center;
   background-size: 8px 8px;
-  color: #d4d4d8;
+  color: #050505;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
@@ -885,8 +888,9 @@
 }
 
 .generatorPill:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background-color: rgba(255, 255, 255, 0.07);
+  border-color: #050505;
+  background-color: #050505;
+  color: #ffffff;
 }
 
 .generatorPill:focus-visible {
@@ -897,14 +901,14 @@
 /* Static label pill for videoGen toolbar */
 .generatorPillLabel {
   flex-shrink: 0;
-  height: 28px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 3px solid #050505;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.04);
-  color: #a1a1aa;
+  background-color: #ffffff;
+  color: #050505;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -915,31 +919,49 @@
 .generatorRunButton {
   flex-shrink: 0;
   margin-left: auto;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 3px solid #050505;
   border-radius: 999px;
-  background: #fafafa;
-  color: #09090b;
+  background: #050505;
+  color: #ffffff;
   cursor: pointer;
   transition: background 140ms ease, opacity 140ms ease, transform 120ms ease;
-  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15);
+  box-shadow: none;
 }
 
 .generatorRunButton:hover:not(:disabled) {
-  background: #e4e4e7;
-  transform: scale(1.06);
+  background: #ffffff;
+  color: #050505;
+  transform: none;
 }
 
 .generatorRunButton:disabled {
-  background: #3f3f46;
-  color: #71717a;
-  cursor: wait;
+  background: #f3f3ef;
+  color: #5f5f5a;
+  border-color: #050505;
+}
+
+/* Production node composer alignment with image/video/chat workspaces. */
+.generatorComposer,
+.generatorPrompt,
+.generatorToolbar {
+  background: #ffffff;
+  color: #050505;
+}
+
+.generatorSpinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #050505;
+  border-top-color: transparent;
+  border-radius: 999px;
   box-shadow: none;
+  filter: none;
 }
 
 .generatorBtnSpinner {
@@ -947,8 +969,8 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #71717a;
+  border: 2px solid rgba(5, 5, 5, 0.22);
+  border-top-color: #050505;
   animation: genSpin 0.8s linear infinite;
 }
 
@@ -2010,4 +2032,142 @@
   background: rgba(196, 181, 253, 0.22);
   color: #c4b5fd;
   border-color: rgba(196, 181, 253, 0.35);
+}
+
+/* Production outline UI override */
+
+.canvasRoot {
+  background:
+    linear-gradient(rgba(5, 5, 5, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(5, 5, 5, 0.08) 1px, transparent 1px),
+    #ffffff;
+  background-size: 40px 40px;
+  color: #050505;
+}
+
+.gridLayer {
+  opacity: 0.18;
+}
+
+.connectionPath {
+  stroke: #050505;
+}
+
+.connectionItem:hover .connectionPath,
+.connectionPathActive {
+  stroke: #050505;
+  stroke-width: 3;
+}
+
+.node {
+  color: #050505;
+}
+
+.nodeVisual,
+.imageNodeVisual,
+.textNodeVisual,
+.groupNode .nodeVisual,
+.toolbar,
+.miniMap,
+.statusPanel,
+.inspectorPanel,
+.contextMenu,
+.promptPreviewPanel,
+.presetLibraryPanel,
+.boardCard,
+.nodeChrome,
+.floatingPanel {
+  border: 3px solid #050505;
+  border-radius: 26px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.nodeActive .nodeVisual,
+.nodeActive .imageNodeVisual,
+.nodeActive .textNodeVisual {
+  border-color: #050505;
+  box-shadow: 0 0 0 4px rgba(5, 5, 5, 0.12);
+}
+
+.groupNode .nodeVisual {
+  border-style: dashed;
+  background: #f7f7f4;
+}
+
+.groupNode .nodeHead,
+.nodeHead {
+  border-bottom: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.port,
+.resizeHandle,
+.connectionBreakButton circle {
+  fill: #ffffff;
+  stroke: #050505;
+}
+
+.toolbarButton,
+.toolButton,
+.zoomButton,
+.presetMetaButton,
+.boardActions button,
+.contextMenu button {
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.toolbarButtonActive,
+.toolButtonActive,
+.presetFavoriteActive {
+  background: #050505;
+  color: #ffffff;
+}
+
+.canvasEditorShell,
+.canvasPage {
+  background: #ffffff;
+}
+
+.modalBackdrop,
+.promptPreviewBackdrop,
+.presetLibraryBackdrop {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: none;
+}
+
+.emptyCanvasHint,
+.generatorLoadingLabel,
+.presetLibraryEmpty,
+.statusText {
+  color: #050505;
+  font-weight: 800;
+}
+
+.generatorLoadingLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.toolbarButton:hover,
+.toolButton:hover,
+.zoomButton:hover,
+.presetMetaButton:hover:not(:disabled),
+.boardActions button:hover,
+.contextMenu button:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
 }

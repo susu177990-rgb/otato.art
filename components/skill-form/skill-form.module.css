@@ -319,3 +319,68 @@
   margin-top: 10px;
   font-size: 12px;
 }
+
+/* Production outline UI override */
+
+.form,
+.field,
+.arrayItem,
+.assetRow,
+.assetDropHint,
+.outputBlock,
+.markdownSource,
+.imageLink {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.field,
+.arrayItem,
+.assetRow,
+.assetDropHint,
+.outputBlock,
+.markdownSource,
+.imageLink {
+  border: 2px solid #050505;
+  border-radius: 22px;
+}
+
+.assetDropHint {
+  border-style: dashed;
+}
+
+.input,
+.textarea,
+.select {
+  border: 2px solid #050505;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.input:hover,
+.textarea:hover,
+.select:hover,
+.assetDropHint:hover {
+  border-color: #050505;
+  background: #f3f3ef;
+}
+
+.fieldLabel,
+.description,
+.arrayHelp,
+.outputBlockTitle {
+  color: #5f5f5a;
+}
+
+.markdownSource,
+.rawOutput {
+  color: #050505;
+}
+
+.imageLink {
+  overflow: hidden;
+}

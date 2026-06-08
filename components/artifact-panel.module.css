@@ -95,3 +95,49 @@
   text-align: center;
   line-height: 1.6;
 }
+
+/* Production outline UI override */
+
+.panel,
+.header,
+.body,
+.section,
+.toolbar,
+.empty {
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.header {
+  border-bottom: 3px solid #050505;
+}
+
+.section,
+.empty {
+  border: 2px solid #050505;
+  border-radius: 24px;
+}
+
+.empty p {
+  color: #5f5f5a;
+}
+
+.stageBadge,
+.stageBadgeActive {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.stageBadgeActive {
+  background: #050505;
+  color: #ffffff;
+}
+
+.stageName,
+.sectionTitle,
+.sectionBody {
+  color: #050505;
+}
