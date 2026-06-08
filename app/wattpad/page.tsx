@@ -365,9 +365,6 @@ export default function WattpadPage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>扒网文 · Wattpad 搜索与导出</p>
-          </div>
         </div>
       </header>
 

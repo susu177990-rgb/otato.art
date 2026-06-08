@@ -13,9 +13,6 @@ export default function ChatPage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>对话</p>
-          </div>
         </div>
       </header>
 

@@ -44,6 +44,37 @@
   overflow: hidden;
 }
 
+.canvasTitleInput {
+  width: 220px;
+  height: 44px;
+  padding: 0 22px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-clip: padding-box;
+  cursor: text;
+  outline: none;
+}
+
+.canvasTitleInput:hover,
+.canvasTitleInput:focus {
+  border-color: #050505 !important;
+  border-radius: 15px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .canvasEditorShell .canvasPage {
   position: absolute;
   inset: 0;
@@ -72,9 +103,7 @@
   /* crosshair = rubber-band mode is always active on empty canvas */
   cursor: crosshair;
   user-select: none;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(39, 39, 42, 0.34), rgba(5, 5, 6, 0) 36%),
-    linear-gradient(180deg, #070708 0%, #030304 100%);
+  background: #ffffff;
 }
 
 /* Space held or middle button: switch to pan */
@@ -90,7 +119,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.36;
+  opacity: 1;
 }
 
 .world {
@@ -150,14 +179,6 @@
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.connectionBreakButton circle {
-  fill: rgba(127, 29, 29, 0.94);
-  stroke: rgba(254, 202, 202, 0.86);
-  stroke-width: 1.5;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.42));
-  transition: fill 120ms ease, stroke 120ms ease, transform 120ms ease;
-}
-
 .connectionBreakButton path {
   fill: none;
   stroke: #fecaca;
@@ -170,12 +191,6 @@
 .connectionBreakButtonActive {
   opacity: 1;
   pointer-events: all;
-}
-
-.connectionBreakButton:hover circle {
-  fill: rgba(185, 28, 28, 0.98);
-  stroke: #fee2e2;
-  transform: scale(1.08);
 }
 
 .node {
@@ -575,6 +590,7 @@
   align-items: center;
   justify-content: center;
   background: #000;
+  overflow: hidden;
 }
 
 .imageFrame img {
@@ -582,6 +598,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: 0;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -594,33 +611,34 @@
   background: #000;
   object-fit: contain;
   display: block;
+  border-radius: 0;
 }
 
 .audioFrame {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: 42px 1fr;
-  grid-template-rows: 1fr auto;
-  gap: 8px 10px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 6px 10px;
   align-items: center;
-  padding: 12px;
+  padding: 10px 12px;
   background:
     radial-gradient(circle at 16% 18%, rgba(250, 204, 21, 0.14), transparent 34%),
     rgba(10, 10, 11, 0.96);
 }
 
 .audioGlyph {
-  grid-row: 1 / span 2;
+  grid-row: 1;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border: 1px solid rgba(250, 204, 21, 0.22);
   border-radius: 10px;
   background: rgba(250, 204, 21, 0.08);
   color: #fde68a;
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 800;
 }
 
@@ -648,10 +666,117 @@
   font-size: 11px;
 }
 
-.audioMedia {
-  width: 100%;
-  height: 30px;
+.audioPlayer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+  height: 30px;
+  padding: 2px 7px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.audioPlayButton {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: #050505;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform 140ms ease;
+}
+
+.audioPlayButton:hover {
+  transform: rotate(8deg);
+}
+
+.audioPlayButton:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.audioTime {
+  flex: 0 0 auto;
+  min-width: 26px;
+  color: #050505;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.audioProgress {
+  --audio-progress: 0%;
+  flex: 1 1 auto;
+  min-width: 70px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  accent-color: #050505;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.audioProgress::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 2px solid #050505;
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, #050505 0 var(--audio-progress), #ffffff var(--audio-progress) 100%);
+}
+
+.audioProgress::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border: 2px solid #050505;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.audioProgress::-moz-range-track {
+  height: 6px;
+  border: 2px solid #050505;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.audioProgress::-moz-range-progress {
+  height: 6px;
+  border-radius: 10px;
+  background: #050505;
+}
+
+.audioProgress::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #050505;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -676,7 +801,7 @@
 
 .nodeActive .genImageBox {
   border-color: #050505;
-  box-shadow: 0 0 0 4px rgba(5, 5, 5, 0.12);
+  box-shadow: none;
 }
 
 .nodeConnectTarget .genImageBox {
@@ -690,11 +815,13 @@
   left: 50%;
   transform: translate(-50%, -8px) scale(var(--canvas-zoom-inverse, 1));
   transform-origin: top center;
-  width: 680px;
-  height: 140px;
-  border: 4px solid #050505;
-  border-radius: 32px;
+  width: 840px;
+  max-width: min(840px, calc(100vw - 80px));
+  height: 172px;
+  border: 3px solid #050505;
+  border-radius: 30px;
   background: #ffffff;
+  background-clip: padding-box;
   box-shadow: none;
   overflow: hidden;
   display: flex;
@@ -826,7 +953,7 @@
   line-height: 1.6;
   outline: none;
   resize: none;
-  padding: 8px 12px 4px;
+  padding: 16px 20px 8px;
   overflow-y: auto;
   cursor: text;
 }
@@ -836,7 +963,7 @@
 }
 
 .generatorPromptPlaceholder {
-  padding: 8px 12px 4px;
+  padding: 16px 20px 8px;
   color: #5f5f5a;
   font: inherit;
   font-size: 12.5px;
@@ -847,10 +974,10 @@
 .generatorToolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border-top: 3px solid #050505;
-  background: #ffffff;
+  gap: 8px;
+  padding: 10px 18px 12px;
+  border-top: 0;
+  background: transparent;
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
@@ -868,8 +995,9 @@
   height: 34px;
   padding: 0 24px 0 12px;
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: 15px;
   background-color: #ffffff;
+  background-clip: padding-box;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 7px center;
@@ -884,18 +1012,21 @@
   appearance: none;
   -webkit-appearance: none;
   white-space: nowrap;
+  overflow: hidden;
   transition: border-color 140ms ease, background-color 140ms ease;
 }
 
 .generatorPill:hover {
   border-color: #050505;
-  background-color: #050505;
-  color: #ffffff;
+  background-color: #ffffff;
+  color: #050505;
 }
 
 .generatorPill:focus-visible {
-  border-color: rgba(255, 255, 255, 0.32);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  border-color: #050505;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
 }
 
 /* Static label pill for videoGen toolbar */
@@ -906,8 +1037,9 @@
   display: flex;
   align-items: center;
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: 15px;
   background-color: #ffffff;
+  background-clip: padding-box;
   color: #050505;
   font-size: 11px;
   font-weight: 500;
@@ -919,24 +1051,30 @@
 .generatorRunButton {
   flex-shrink: 0;
   margin-left: auto;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  min-width: 72px;
+  height: 34px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: 15px;
   background: #050505;
+  background-clip: padding-box;
   color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
   cursor: pointer;
   transition: background 140ms ease, opacity 140ms ease, transform 120ms ease;
   box-shadow: none;
+  overflow: hidden;
 }
 
 .generatorRunButton:hover:not(:disabled) {
-  background: #ffffff;
-  color: #050505;
+  background: #050505;
+  color: #ffffff;
   transform: none;
 }
 
@@ -1162,7 +1300,8 @@
 .minimapCanvas {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border: 0;
+  border-radius: 0;
   background:
     linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px),
@@ -1170,20 +1309,13 @@
   background-size: 16px 16px;
 }
 
-.minimapNode,
-.minimapViewport {
+.minimapNode {
   position: absolute;
   border-radius: 3px;
 }
 
 .minimapNode {
   opacity: 0.78;
-}
-
-.minimapViewport {
-  border: 1px solid rgba(250, 250, 250, 0.9);
-  background: rgba(250, 250, 250, 0.06);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .nodeHoverToolbar {
@@ -1390,6 +1522,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 0;
 }
 
 .assetTextThumb {
@@ -1446,27 +1579,48 @@
 }
 
 .shortcutModal {
-  width: min(460px, calc(100% - 32px));
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  background: rgba(8, 8, 9, 0.94);
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(28px);
+  width: min(620px, calc(100% - 40px));
+  padding: 22px;
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .shortcutGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 9px 14px;
-  margin-top: 14px;
-  color: #a1a1aa;
+  margin-top: 10px;
+  color: #050505;
   font-size: 12px;
 }
 
 .shortcutGrid strong {
-  color: #e4e4e7;
-  font-weight: 600;
+  color: #050505;
+  font-weight: 900;
+}
+
+.helpSections {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.helpSection {
+  border: 2px solid #050505;
+  border-radius: 20px;
+  padding: 14px 16px 16px;
+  background: #ffffff;
+}
+
+.helpSection h3 {
+  margin: 0;
+  color: #050505;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .emptyCanvasHint {
@@ -1868,6 +2022,7 @@
   max-width: min(96vw, 1600px);
   max-height: 92vh;
   object-fit: contain;
+  border-radius: 0;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -2037,16 +2192,12 @@
 /* Production outline UI override */
 
 .canvasRoot {
-  background:
-    linear-gradient(rgba(5, 5, 5, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(5, 5, 5, 0.08) 1px, transparent 1px),
-    #ffffff;
-  background-size: 40px 40px;
+  background: #ffffff;
   color: #050505;
 }
 
 .gridLayer {
-  opacity: 0.18;
+  opacity: 1;
 }
 
 .connectionPath {
@@ -2089,7 +2240,7 @@
 .nodeActive .imageNodeVisual,
 .nodeActive .textNodeVisual {
   border-color: #050505;
-  box-shadow: 0 0 0 4px rgba(5, 5, 5, 0.12);
+  box-shadow: none;
 }
 
 .groupNode .nodeVisual {
@@ -2106,7 +2257,7 @@
 
 .port,
 .resizeHandle,
-.connectionBreakButton circle {
+.connectionBreakButton rect {
   fill: #ffffff;
   stroke: #050505;
 }
@@ -2118,7 +2269,7 @@
 .boardActions button,
 .contextMenu button {
   border: 2px solid #050505;
-  border-radius: 999px;
+  border-radius: 15px;
   background: #ffffff;
   color: #050505;
   box-shadow: none;
@@ -2157,7 +2308,7 @@
   min-height: 24px;
   padding: 0 10px;
   border: 2px solid #050505;
-  border-radius: 999px;
+  border-radius: 15px;
   background: #ffffff;
 }
 
@@ -2170,4 +2321,889 @@
   border-color: #050505;
   background: #050505;
   color: #ffffff;
+}
+
+.promptPreviewTitle,
+.presetLibraryTitle,
+.presetLibraryEyebrow {
+  color: #050505;
+  opacity: 1;
+}
+
+.presetLibraryClose,
+.imagePreviewClose {
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.presetLibraryClose:hover,
+.imagePreviewClose:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+/* Final canvas surface cleanup: floating tools use production linework. */
+
+.toolbar,
+.statusText,
+.uploadMenu,
+.minimap,
+.nodeHoverToolbar,
+.multiSelectionToolbar,
+.assetDrawer,
+.shortcutModal,
+.quickAddBar,
+.canvasPresetCard,
+.presetLibraryPanel {
+  border: 3px solid #050505 !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.toolbar,
+.uploadMenu,
+.minimap,
+.assetDrawer,
+.shortcutModal,
+.quickAddBar,
+.presetLibraryPanel {
+  border-radius: 28px;
+}
+
+.minimap {
+  padding: 0 !important;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.minimap:active {
+  cursor: grabbing;
+}
+
+.toolbarTextBtn,
+.toolbarIconBtn,
+.nodeHoverToolbar button,
+.multiSelectionToolbar button,
+.quickAddBtn,
+.uploadMenu button,
+.assetDrawer button {
+  border: 2px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.toolbarTextBtn:hover,
+.toolbarIconBtn:hover:not(:disabled),
+.toolbarBtnActive,
+.nodeHoverToolbar button:hover,
+.multiSelectionToolbar button:hover,
+.quickAddBtn:hover,
+.uploadMenu button:hover,
+.assetDrawer button:hover {
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.toolbarZoomBtn {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 34px !important;
+  border-radius: 15px !important;
+  font-size: 18px;
+}
+
+.toolbarStrokeIcon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.canvasSvgIcon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.quickAddBtnIcon,
+.nodeOverlayIcon,
+.audioGlyph {
+  color: currentColor;
+}
+
+.quickAddBtnIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 0;
+}
+
+.nodeOverlayIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #050505 !important;
+  font-size: 0;
+}
+
+.audioGlyph .canvasSvgIcon {
+  width: 20px;
+  height: 20px;
+}
+
+.audioPlayButton .canvasSvgIcon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.1;
+}
+
+.uploadMenu button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.uploadMenu button .canvasSvgIcon {
+  width: 15px;
+  height: 15px;
+}
+
+.toolbarToggleBtn[aria-pressed="true"],
+.toolbarToggleBtn[aria-pressed="true"]:hover,
+.toolbarToggleBtn[aria-pressed="true"]:focus-visible {
+  border-color: #050505 !important;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.toolbarToggleBtn[aria-pressed="false"] {
+  border-color: #050505 !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+}
+
+.toolbarDivider,
+.multiSelectionToolbarDivider,
+.quickAddDivider,
+.uploadMenuDivider {
+  background: #050505;
+}
+
+.zoomDisplay,
+.shortcutGrid,
+.emptyCanvasHint,
+.assetDrawer,
+.generatorBadge,
+.presetCardDesc {
+  color: #5f5f5a;
+  text-shadow: none;
+}
+
+.minimapCanvas {
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(rgba(5, 5, 5, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(5, 5, 5, 0.08) 1px, transparent 1px),
+    #ffffff;
+  background-size: 16px 16px;
+}
+
+.nodeTitleEdit {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  outline: none;
+}
+
+.resizeHandle {
+  border-color: #050505;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.presetCardCover {
+  background: #ffffff;
+  color: #050505;
+}
+
+.presetCardCover::after {
+  background: transparent;
+}
+
+.presetCardTitle {
+  color: #050505;
+  text-shadow: none;
+}
+
+.presetCardOverlay {
+  padding: 14px;
+}
+
+.presetModelChip,
+.generatorBadge {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  backdrop-filter: none;
+}
+
+.presetLibraryRoot,
+.imagePreviewBackdrop,
+.shortcutModalBackdrop {
+  background: rgba(255, 255, 255, 0.78) !important;
+  backdrop-filter: none !important;
+}
+
+/* Canvas final pass: generation nodes use the same outline controls as image,
+   video and chat workbenches. Media is clipped by its frame, not by a second
+   inner radius, so corners do not show white gaps. */
+.imageFrame,
+.videoFrame,
+.assetThumb,
+.nodePreview,
+.imagePreviewFrame {
+  border: 4px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.imageFrame img,
+.videoMedia,
+.assetThumb img,
+.nodePreview img,
+.imagePreviewFrame img,
+.imagePreviewFrame video {
+  display: block;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.nodeHoverToolbar,
+.multiSelectionToolbar,
+.toolbar,
+.quickAddBar {
+  gap: 8px;
+  border-radius: 28px !important;
+  padding: 8px !important;
+}
+
+.nodeHoverToolbar button,
+.multiSelectionToolbar button,
+.toolbarTextBtn,
+.toolbarIconBtn,
+.quickAddBtn,
+.uploadMenu button,
+.assetDrawer button,
+.presetMetaButton {
+  min-height: 34px;
+  border: 3px solid #050505 !important;
+  border-radius: 15px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  font-weight: 800;
+}
+
+.nodeHoverToolbar button:hover,
+.multiSelectionToolbar button:hover,
+.toolbarTextBtn:hover,
+.toolbarIconBtn:hover:not(:disabled),
+.quickAddBtn:hover,
+.uploadMenu button:hover,
+.assetDrawer button:hover,
+.presetMetaButton:hover:not(:disabled) {
+  border-color: #050505 !important;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.canvasPresetCard {
+  border: 4px solid #050505 !important;
+  border-radius: 28px !important;
+  overflow: hidden;
+}
+
+.presetCardCover,
+.presetCardCover img {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.presetCardOverlay {
+  background: #ffffff !important;
+  color: #050505 !important;
+}
+
+.presetCardDesc,
+.presetCardTitle {
+  color: #050505 !important;
+}
+
+/* Generation node composers mirror /image, /video and /chat operation bars. */
+.genComposerBox {
+  width: 840px !important;
+  max-width: min(840px, calc(100vw - 80px));
+  height: 172px;
+  border: 3px solid #050505 !important;
+  border-radius: 30px !important;
+  background: #ffffff !important;
+  background-clip: padding-box;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.generatorPrompt,
+.generatorPrompt :where(textarea, input, [contenteditable="true"]) {
+  background: #ffffff !important;
+  color: #050505 !important;
+}
+
+.generatorToolbar {
+  gap: 8px;
+  padding: 10px 18px 12px !important;
+  border-top: 0 !important;
+  background: transparent !important;
+}
+
+.generatorPill,
+.generatorPill:hover,
+.generatorPill:focus,
+.generatorPill:focus-visible,
+.generatorPill:active,
+.generatorPillLabel {
+  height: 34px;
+  border: 3px solid #050505 !important;
+  border-radius: 15px !important;
+  background-color: #ffffff !important;
+  background-clip: padding-box;
+  color: #050505 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.generatorRunButton,
+.generatorRunButton:hover:not(:disabled) {
+  min-width: 72px;
+  width: auto;
+  height: 34px;
+  border: 3px solid #050505 !important;
+  border-radius: 15px !important;
+  background: #050505 !important;
+  background-clip: padding-box;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.generatorRunButton:disabled {
+  background: #f3f3ef !important;
+  color: #5f5f5a !important;
+  opacity: 1;
+}
+
+/* Canvas node cleanup: one border owner, no dark-glass leftovers. */
+.textChatBox,
+.nodeVisual {
+  border: 3px solid #050505 !important;
+  border-radius: 28px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  overflow: hidden;
+}
+
+.nodeActive .textChatBox,
+.nodeActive .nodeVisual,
+.nodeConnectTarget .textChatBox,
+.nodeConnectTarget .nodeVisual {
+  border-color: #050505 !important;
+  box-shadow: none !important;
+}
+
+.textNodeMarkdownPreview,
+.textNodeInput,
+.textChatMarkdown,
+.textChatEmpty {
+  background: #ffffff !important;
+  color: #050505 !important;
+}
+
+.textNodeMarkdownPreview {
+  padding: 14px 16px;
+}
+
+.textNodeInput {
+  border: 0;
+}
+
+.textNodeEmptyHint,
+.textNodePlaceholder,
+.textChatTry,
+.textChatEmpty > svg {
+  color: #5f5f5a !important;
+}
+
+.textChatTry button {
+  border: 2px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  padding: 0 10px;
+  min-height: 28px;
+  font-weight: 900;
+}
+
+.textChatTry button:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+.textChatRunning,
+.textChatError {
+  border: 2px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  backdrop-filter: none;
+}
+
+.textChatError {
+  border-color: #b42318;
+  background: #fff2f0;
+  color: #b42318;
+}
+
+.imageFrame,
+.videoFrame,
+.audioFrame {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.imageFrame img,
+.videoMedia {
+  object-fit: cover;
+}
+
+.audioFrame {
+  color: #050505;
+}
+
+.audioGlyph {
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.audioTitle {
+  color: #050505;
+}
+
+.audioMeta {
+  color: #5f5f5a;
+}
+
+.canvasPresetCard {
+  border: 3px solid #050505 !important;
+  border-radius: 28px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.presetCardCover,
+.presetCardCover img {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+}
+
+.presetCardOverlay {
+  background: #ffffff !important;
+  color: #050505 !important;
+}
+
+.presetModelChip {
+  border: 2px solid #050505 !important;
+  border-radius: 15px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  backdrop-filter: none !important;
+}
+
+.shortcutModalBackdrop {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: none !important;
+}
+
+.shortcutModal .toolbarIconBtn {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 15px !important;
+}
+
+.shortcutModal .assetDrawerTitle {
+  color: #050505 !important;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.shortcutModal .assetDrawerMeta {
+  color: #5f5f5a !important;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shortcutModal .shortcutGrid span {
+  color: #050505;
+  font-weight: 700;
+}
+
+/* Canvas connection system: black linework with quiet controls. */
+.connectionPath {
+  fill: none;
+  stroke: #050505 !important;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.connectionItem:hover .connectionPath,
+.connectionPathActive {
+  stroke: #050505 !important;
+  stroke-width: 3;
+}
+
+.connectionPathDraft {
+  stroke: #050505 !important;
+  stroke-dasharray: 8 8;
+  stroke-width: 2.25;
+}
+
+.connectionBreakButton {
+  opacity: 0;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.connectionItem:hover .connectionBreakButton,
+.connectionBreakButtonActive {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.connectionBreakButton rect {
+  fill: #ffffff;
+  stroke: #050505;
+  stroke-width: 2.5;
+  filter: none;
+  transition: fill 120ms ease, stroke 120ms ease, transform 120ms ease;
+}
+
+.connectionBreakButton path {
+  fill: none;
+  stroke: #ff9c9c;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.connectionBreakButton:hover rect {
+  fill: #fff2f0;
+  stroke: #050505;
+  transform: scale(1.04);
+}
+
+.connPort {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: none;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.92);
+}
+
+.connPortInput {
+  left: -7px;
+}
+
+.connPortOutput {
+  right: -7px;
+}
+
+.node:hover .connPort,
+.nodeActive .connPort,
+.connPortConnected {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.connPortConnected {
+  background: radial-gradient(circle, #050505 0 43%, #ffffff 46% 100%);
+}
+
+.connPort:hover,
+.connPortSnap {
+  opacity: 1 !important;
+  border-color: #050505 !important;
+  background: #050505 !important;
+  box-shadow: none !important;
+  transform: translateY(-50%) scale(1.22) !important;
+  animation: none !important;
+}
+
+/* Preset cards: full-cover image with floating readable metadata. */
+.canvasPresetCard,
+.presetLibraryGrid .presetCard {
+  border: 3px solid #050505 !important;
+  border-radius: 28px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.presetLibraryGrid .presetCard {
+  min-height: 214px;
+}
+
+.presetCardCover {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  overflow: hidden !important;
+}
+
+.presetCardCover img {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+  opacity: 1 !important;
+  transform: none !important;
+  z-index: 0 !important;
+}
+
+.presetCardCover > span:not(.presetCardOverlay) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: #5f5f5a;
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 1;
+}
+
+.presetCardCover::after {
+  display: none !important;
+}
+
+.presetCardOverlay {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px !important;
+  border-top: 0;
+  background: transparent !important;
+  color: #050505 !important;
+  pointer-events: none;
+}
+
+.presetCardOverlayTop {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: calc(100% - 74px);
+  gap: 6px;
+}
+
+.presetCardTitle {
+  display: inline-flex !important;
+  width: auto;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 10px;
+  border: 2px solid #050505;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #050505 !important;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: none !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presetCardDesc {
+  display: inline-flex !important;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 9px;
+  border: 2px solid #050505;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #050505 !important;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: none !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.presetModelChips {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.presetModelChip {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 2px solid #050505 !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: #050505 !important;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  backdrop-filter: none !important;
+}
+
+.presetMetaActions {
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+}
+
+.presetLibraryClose {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 3px solid #050505 !important;
+  border-radius: 15px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  font-size: 0;
+}
+
+.presetLibraryClose:hover {
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.presetLibraryTabs {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 2px !important;
+  width: fit-content;
+  min-height: 38px;
+  padding: 3px !important;
+  border: 3px solid #050505 !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+  justify-self: center;
+}
+
+.presetLibraryTabBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: 28px;
+  padding: 0 14px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  color: #050505 !important;
+  font: inherit;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+.presetLibraryTabBtn:hover {
+  background: #f3f3ef !important;
+  color: #050505 !important;
+}
+
+.presetLibraryTabActive,
+.presetLibraryTabActive:hover {
+  background: #050505 !important;
+  color: #ffffff !important;
 }

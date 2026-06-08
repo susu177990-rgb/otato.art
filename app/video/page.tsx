@@ -756,9 +756,6 @@ export default function VideoPage() {
           >
             提示词预设
           </button>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>统一生视频工作台</p>
-          </div>
         </div>
       </header>
 
@@ -810,6 +807,11 @@ export default function VideoPage() {
               <div className={styles.loadingOverlay} role="status" aria-live="polite">
                 <span className={styles.bigSpinner} aria-hidden />
                 <span className={styles.statusLabel}>生成中</span>
+              </div>
+            ) : null}
+            {!isGenerating && !modelReady ? (
+              <div className={styles.centerStatus} role="status" aria-live="polite">
+                当前模型未配置
               </div>
             ) : null}
           </div>
@@ -1037,7 +1039,6 @@ export default function VideoPage() {
               </select>
 
               <div className={styles.toolbarActions}>
-                {!modelReady ? <span className={styles.warning}>当前模型未配置</span> : null}
                 <button
                   type="button"
                   className={[styles.freeModeToggle, isFreeMode ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}

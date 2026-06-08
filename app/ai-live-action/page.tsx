@@ -248,9 +248,6 @@ export default function AiLiveActionPage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>AI+实拍 · 首帧工作台</p>
-          </div>
         </div>
         <nav className={shellStyles.topnav}>
           <Link href="/image/gallery" className={shellStyles.navLink}>

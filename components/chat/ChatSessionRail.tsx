@@ -47,7 +47,7 @@ export function ChatSessionRail({
   const faded = items.length > 7;
 
   return (
-    <aside className={imageStyles.historyPanel} aria-label="会话">
+    <aside className={[imageStyles.historyPanel, railStyles.sessionPanel].join(" ")} aria-label="会话">
       <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>

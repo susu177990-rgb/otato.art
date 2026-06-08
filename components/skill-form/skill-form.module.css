@@ -176,9 +176,10 @@
   width: 80px;
   height: 80px;
   object-fit: cover;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #ffffff;
+  border: 3px solid #050505;
+  box-shadow: none;
 }
 
 .assetFields {
@@ -383,4 +384,73 @@
 
 .imageLink {
   overflow: hidden;
+}
+
+.panelTitle,
+.panelMeta,
+.panelEyebrow,
+.formWrap :global(.control-label),
+.formWrap :global(.field-description),
+.formWrap :global(legend),
+.outputBlockTitle {
+  color: #050505;
+  opacity: 1;
+  letter-spacing: 0;
+}
+
+.panelMeta,
+.panelEyebrow,
+.formWrap :global(.field-description) {
+  color: #5f5f5a;
+}
+
+.formWrap :global(input[type="text"]),
+.formWrap :global(input[type="number"]),
+.formWrap :global(input[type="email"]),
+.formWrap :global(input[type="url"]),
+.formWrap :global(textarea),
+.formWrap :global(select),
+.formWrap :global(fieldset) {
+  border: 2px solid #050505;
+  border-radius: 18px;
+  background: #ffffff;
+  background-clip: padding-box;
+  color: #050505;
+  box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.formWrap :global(fieldset) {
+  border-radius: 22px;
+}
+
+.formWrap :global(input[type="text"]:hover),
+.formWrap :global(input[type="number"]:hover),
+.formWrap :global(input[type="email"]:hover),
+.formWrap :global(input[type="url"]:hover),
+.formWrap :global(textarea:hover),
+.formWrap :global(select:hover),
+.formWrap :global(input[type="text"]:focus),
+.formWrap :global(input[type="number"]:focus),
+.formWrap :global(input[type="email"]:focus),
+.formWrap :global(input[type="url"]:focus),
+.formWrap :global(textarea:focus),
+.formWrap :global(select:focus) {
+  border-color: #050505;
+  background: #f3f3ef;
+  outline: none;
+}
+
+.outputEmpty {
+  border: 2px dashed #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #5f5f5a;
+}
+
+.outputImage {
+  display: block;
+  border-radius: 0;
+  background: #ffffff;
 }

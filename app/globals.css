@@ -27,6 +27,28 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+input,
+select,
+textarea,
+[contenteditable="true"] {
+  background-clip: padding-box;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+input:focus,
+input:focus-visible,
+select:focus,
+select:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+[contenteditable="true"]:focus,
+[contenteditable="true"]:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

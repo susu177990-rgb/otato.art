@@ -1,4 +1,4 @@
-/* GitHub markdown-body 深色预览（对齐 primer / github-markdown-css dark） */
+/* Project outline markdown for chat responses. */
 
 .markdownBody {
   -webkit-text-size-adjust: 100%;
@@ -14,7 +14,7 @@
     "Segoe UI Emoji";
   font-size: 14px;
   line-height: 1.5;
-  color: #e6edf3;
+  color: #050505;
   word-wrap: break-word;
 }
 
@@ -36,20 +36,20 @@
   margin-bottom: 1em;
   font-weight: 600;
   line-height: 1.25;
-  color: #f0f6fc;
+  color: #050505;
 }
 
 .h1 {
   margin: 0.67em 0;
   padding-bottom: 0.3em;
   font-size: 2em;
-  border-bottom: 1px solid #3d444d;
+  border-bottom: 2px solid #050505;
 }
 
 .h2 {
   padding-bottom: 0.3em;
   font-size: 1.5em;
-  border-bottom: 1px solid #3d444d;
+  border-bottom: 2px solid #050505;
 }
 
 .h3 {
@@ -66,7 +66,7 @@
 
 .h6 {
   font-size: 0.85em;
-  color: #9198a1;
+  color: #5f5f5a;
 }
 
 .p,
@@ -96,8 +96,8 @@
 
 .blockquote {
   padding: 0 1em;
-  color: #9198a1;
-  border-left: 0.25em solid #3d444d;
+  color: #050505;
+  border-left: 3px solid #050505;
 }
 
 .blockquote > :first-child {
@@ -113,7 +113,7 @@
   margin: 1.5em 0;
   padding: 0;
   border: 0;
-  background-color: #3d444d;
+  background-color: #050505;
 }
 
 .tableWrap {
@@ -133,26 +133,28 @@
 .th,
 .td {
   padding: 6px 13px;
-  border: 1px solid #3d444d;
+  border: 2px solid #050505;
 }
 
 .tr {
   background-color: transparent;
-  border-top: 1px solid #3d444d;
+  border-top: 2px solid #050505;
 }
 
 .tr:nth-child(2n) {
-  background-color: rgba(99, 110, 123, 0.08);
+  background-color: #f3f3ef;
 }
 
 .th {
   font-weight: 600;
-  background-color: rgba(99, 110, 123, 0.12);
+  background-color: #ffffff;
 }
 
 .link {
-  color: #4493f8;
-  text-decoration: none;
+  color: #050505;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .link:hover {
@@ -161,7 +163,7 @@
 
 .strong {
   font-weight: 600;
-  color: #f0f6fc;
+  color: #050505;
 }
 
 .em {
@@ -170,7 +172,7 @@
 
 .del {
   text-decoration: line-through;
-  color: #9198a1;
+  color: #5f5f5a;
 }
 
 .taskCheckbox {
@@ -185,10 +187,10 @@
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  color: #e6edf3;
-  background-color: #161b22;
-  border-radius: 6px;
-  border: 1px solid #30363d;
+  color: #050505;
+  background-color: #ffffff;
+  border-radius: 16px;
+  border: 2px solid #050505;
 }
 
 .codeBlock {
@@ -210,8 +212,9 @@
   margin: 0;
   font-size: 85%;
   white-space: break-spaces;
-  background-color: rgba(110, 118, 129, 0.35);
-  border-radius: 6px;
+  background-color: #f3f3ef;
+  border: 1px solid #050505;
+  border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
@@ -219,8 +222,8 @@
   max-width: 100%;
   box-sizing: content-box;
   background-color: transparent;
-  border-radius: 6px;
-  border: 1px solid #30363d;
+  border-radius: 18px;
+  border: 2px solid #050505;
 }
 
 /* 空状态 Skill 说明：弱化 + 居中 */
@@ -230,7 +233,7 @@
   align-items: center;
   width: 100%;
   opacity: 0.72;
-  color: #9198a1;
+  color: #5f5f5a;
   font-size: 13px;
 }
 

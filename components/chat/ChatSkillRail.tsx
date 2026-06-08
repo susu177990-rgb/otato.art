@@ -22,7 +22,7 @@ export function ChatSkillRail({
   const faded = skillPacks.length + 1 > 7;
 
   return (
-    <aside className={imageStyles.modePanel} aria-label="Skill">
+    <aside className={[imageStyles.modePanel, railStyles.presetPanel].join(" ")} aria-label="Skill">
       <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>

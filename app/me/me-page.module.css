@@ -177,6 +177,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   gap: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .sectionColumn {
@@ -253,7 +257,6 @@
 
 /* Production outline UI override */
 
-.sectionGrid,
 .profileCard,
 .securityCard,
 .dataCard,
@@ -264,6 +267,25 @@
 .formCard {
   border: 3px solid #050505;
   border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.sectionGrid {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.heroCard,
+.flexCard,
+.accountFormCard {
+  border: 3px solid #050505;
+  border-radius: 28px;
   background: #ffffff;
   color: #050505;
   box-shadow: none;
@@ -311,8 +333,8 @@
 .statCard:hover,
 .heroMetaPill:hover {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: #f3f3ef;
+  color: #050505;
   transform: none;
   box-shadow: none;
 }
@@ -332,9 +354,18 @@
 }
 
 .kvCard:hover .kvLabel,
+.statCard:hover .statLabel {
+  color: #5f5f5a;
+}
+
 .kvCard:hover .kvValue,
 .statCard:hover .statNumber,
-.statCard:hover .statLabel,
 .heroMetaPill:hover {
-  color: #ffffff;
+  color: #050505;
+}
+
+.accountForm :global(input:focus),
+.accountForm :global(input:focus-visible) {
+  outline: none;
+  box-shadow: none;
 }

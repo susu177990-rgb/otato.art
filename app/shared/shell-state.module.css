@@ -149,8 +149,9 @@
 }
 
 .tile:focus-visible {
-  outline: 1px solid rgba(250, 250, 250, 0.4);
-  outline-offset: 2px;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
 }
 
 .tileIcon {
@@ -611,11 +612,144 @@
 }
 
 .iconBtn:focus-visible {
-  outline: 1px solid rgba(250, 250, 250, 0.4);
-  outline-offset: 2px;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
 }
 
 .iconBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Final production outline cleanup. */
+
+.empty,
+.heroTitle,
+.tileTitle,
+.modalTitle {
+  color: #050505;
+}
+
+.helpText,
+.heroSubtitle,
+.tileMeta,
+.thinRailFootHint,
+.metaPill,
+.metaPillMute {
+  color: #5f5f5a;
+}
+
+.spinner,
+.bigSpinner {
+  border-color: rgba(5, 5, 5, 0.18);
+  border-top-color: #050505;
+  box-shadow: none;
+  filter: none;
+}
+
+.tile,
+.bubbleUser,
+.bubbleAssistant,
+.thinRail,
+.modalCard,
+.drawerCard,
+.metaPill,
+.iconBtn {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.tile {
+  border: 3px solid #050505;
+  border-radius: 30px;
+}
+
+.tile:hover {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+  transform: none;
+}
+
+.tile:hover .tileTitle,
+.tile:hover .tileMeta,
+.tile:hover .tileIcon {
+  color: #ffffff;
+}
+
+.tileIcon {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.bubbleUser,
+.bubbleAssistant {
+  border: 2px solid #050505;
+  border-radius: 22px;
+}
+
+.thinRail {
+  border-left: 3px solid #050505;
+}
+
+.thinRailHeader {
+  border-bottom: 2px solid #050505;
+}
+
+.thinRailItem,
+.thinRailItemActive {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.thinRailItem:hover,
+.thinRailItemActive,
+.thinRailItemActive:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+.modalScrim,
+.drawerScrim {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: none;
+}
+
+.modalCard,
+.drawerCard {
+  border: 4px solid #050505;
+  border-radius: 32px;
+}
+
+.drawerHead {
+  border-bottom: 3px solid #050505;
+}
+
+.stickyCta {
+  background: #ffffff;
+}
+
+.metaPill,
+.iconBtn {
+  border: 2px solid #050505;
+  border-radius: 999px;
+}
+
+.metaPillOk {
+  border-color: #146c43;
+  background: #f2fff6;
+  color: #146c43;
+}
+
+.iconBtn:hover:not(:disabled) {
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
 }

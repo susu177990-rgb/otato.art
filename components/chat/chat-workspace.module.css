@@ -14,6 +14,7 @@
   --chat-skill-rail: 120px;
   --chat-session-rail: 120px;
   --chat-rail-gutter: 24px;
+  --chat-message-width: min(980px, calc(100vw - 430px));
 }
 
 .messages {
@@ -125,9 +126,11 @@
 .toolMedia {
   max-width: 100%;
   max-height: 240px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  border: 3px solid #050505;
+  background: #ffffff;
   object-fit: contain;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {
@@ -169,6 +172,33 @@
   border-radius: 32px;
   margin: 18px 214px 18px;
   padding: 22px;
+}
+
+/* Chat keeps the canvas open; each message bubble owns the outline. */
+.messages {
+  border: 0;
+  border-radius: 0;
+  width: var(--chat-message-width);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 14px 0 18px;
+  background: transparent;
+}
+
+.messageList {
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .stage {
+    --chat-message-width: calc(100vw - 40px);
+  }
+
+  .messages {
+    width: var(--chat-message-width);
+    padding-left: 0;
+    padding-right: 0;
+  }
 }
 
 .sending,

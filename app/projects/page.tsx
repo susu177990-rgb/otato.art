@@ -108,9 +108,6 @@ function ProjectsHubInner() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>创作剧本 · 项目列表</p>
-          </div>
         </div>
         <nav className={shellStyles.topnav}>
           <button

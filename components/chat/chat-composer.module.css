@@ -126,6 +126,7 @@
   border: 3px solid #050505;
   border-radius: 28px;
   background: #ffffff;
+  background-clip: padding-box;
   color: #050505;
   box-shadow: none;
   backdrop-filter: none;
@@ -139,7 +140,7 @@
 .modelSelect,
 .addBtn {
   border-width: 2px;
-  border-radius: 999px;
+  border-radius: 15px;
 }
 
 .addPlus {
@@ -159,4 +160,93 @@
 
 .attachFileName {
   color: #050505;
+}
+
+/* Chat-specific composer fixes: no color wash, no fake scrollbar, no framed upload icon. */
+.inputShell {
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.promptInput {
+  min-width: 0;
+  overflow-x: hidden !important;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: #ffffff !important;
+  color: #050505 !important;
+  scrollbar-width: thin;
+  scrollbar-color: #050505 #ffffff;
+}
+
+.promptInput:hover,
+.promptInput:focus,
+.promptInput:focus-visible,
+.promptInput:disabled {
+  background: #ffffff !important;
+  color: #050505 !important;
+  outline: none;
+}
+
+.promptInput::placeholder {
+  color: #5f5f5a !important;
+  opacity: 1;
+}
+
+.attachChip {
+  border: 2px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.attachRemove {
+  border: 2px solid #050505;
+  background: #ffffff;
+  color: #050505;
+}
+
+.attachRemove:hover,
+.attachRemove:focus-visible {
+  background: #050505;
+  color: #ffffff;
+  outline: none;
+}
+
+.toolbar {
+  border-top: 0 !important;
+  background: transparent;
+  padding-inline: 18px;
+  padding-bottom: 12px;
+}
+
+.addBtn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  color: #050505 !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.addBtn:hover,
+.addBtn:focus-visible {
+  border: 0 !important;
+  background: transparent !important;
+  color: #050505 !important;
+  outline: none !important;
+}
+
+.addBtn:hover .addPlus,
+.addBtn:focus-visible .addPlus {
+  color: #050505;
+  transform: rotate(360deg);
+}
+
+.addPlus {
+  display: inline-block;
+  transform-origin: center;
+  transition: transform 360ms ease, color 140ms ease;
 }

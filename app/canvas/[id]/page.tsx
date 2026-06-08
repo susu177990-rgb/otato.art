@@ -73,7 +73,22 @@ type DragState = {
 };
 
 type PanState = { startX: number; startY: number; initial: CanvasViewport };
+type MinimapPanState = { startX: number; startY: number; initial: CanvasViewport; moved: boolean };
 type UploadKind = "image" | "video" | "audio";
+type CanvasIconName =
+  | "text"
+  | "image"
+  | "video"
+  | "audio"
+  | "preset"
+  | "group"
+  | "ungroup"
+  | "copy"
+  | "paste"
+  | "delete"
+  | "generate"
+  | "play"
+  | "pause";
 type MenuState =
   | { kind: "canvas"; x: number; y: number; world: CanvasPosition }
   | { kind: "node"; x: number; y: number; nodeId: string }
@@ -159,6 +174,169 @@ function readAudioDuration(url: string): Promise<number | undefined> {
     audio.onerror = () => resolve(undefined);
     audio.src = url;
   });
+}
+
+function formatAudioTime(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0:00";
+  const total = Math.floor(value);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function CanvasAudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const progress = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  const togglePlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      void audio.play().catch(() => setPlaying(false));
+    } else {
+      audio.pause();
+    }
+  };
+
+  const seek = (value: string) => {
+    const audio = audioRef.current;
+    const nextTime = Number(value);
+    if (!audio || !Number.isFinite(nextTime)) return;
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  return (
+    <div
+      className={styles.audioPlayer}
+      data-canvas-no-zoom
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+      <button
+        type="button"
+        className={styles.audioPlayButton}
+        aria-label={playing ? "暂停音频" : "播放音频"}
+        onClick={togglePlayback}
+      >
+        <CanvasIcon name={playing ? "pause" : "play"} />
+      </button>
+      <span className={styles.audioTime}>{formatAudioTime(currentTime)}</span>
+      <input
+        className={styles.audioProgress}
+        type="range"
+        min="0"
+        max={duration || 0}
+        step="0.01"
+        value={Math.min(currentTime, duration || currentTime)}
+        onChange={(e) => seek(e.currentTarget.value)}
+        style={{ "--audio-progress": `${progress}%` } as CSSProperties}
+        aria-label="音频播放进度"
+      />
+      <span className={styles.audioTime}>{formatAudioTime(duration)}</span>
+    </div>
+  );
+}
+
+function CanvasIcon({ name }: { name: CanvasIconName }) {
+  const common = { vectorEffect: "non-scaling-stroke" as const };
+  return (
+    <svg className={styles.canvasSvgIcon} viewBox="0 0 24 24" aria-hidden>
+      {name === "text" ? (
+        <>
+          <path {...common} d="M5 6h14" />
+          <path {...common} d="M8 6v12" />
+          <path {...common} d="M16 6v12" />
+          <path {...common} d="M7 18h10" />
+        </>
+      ) : name === "image" ? (
+        <>
+          <rect {...common} x="4" y="5" width="16" height="14" rx="3" />
+          <path {...common} d="m7 16 4-4 3 3 2-2 3 3" />
+          <circle {...common} cx="15.5" cy="9.5" r="1.5" />
+        </>
+      ) : name === "video" ? (
+        <>
+          <rect {...common} x="4" y="6" width="13" height="12" rx="3" />
+          <path {...common} d="m17 10 4-2v8l-4-2" />
+        </>
+      ) : name === "audio" ? (
+        <>
+          <path {...common} d="M9 18V6l9-2v12" />
+          <circle {...common} cx="7" cy="18" r="3" />
+          <circle {...common} cx="16" cy="16" r="3" />
+        </>
+      ) : name === "preset" ? (
+        <>
+          <path {...common} d="M12 3l1.4 4.2L18 8.6l-4.1 2.2L12 15l-1.9-4.2L6 8.6l4.6-1.4L12 3z" />
+          <path {...common} d="M5 15h5" />
+          <path {...common} d="M14 18h5" />
+          <path {...common} d="M6 20h9" />
+        </>
+      ) : name === "group" ? (
+        <>
+          <rect {...common} x="4" y="5" width="7" height="7" rx="2" />
+          <rect {...common} x="13" y="5" width="7" height="7" rx="2" />
+          <rect {...common} x="4" y="14" width="7" height="5" rx="2" />
+          <rect {...common} x="13" y="14" width="7" height="5" rx="2" />
+        </>
+      ) : name === "ungroup" ? (
+        <>
+          <rect {...common} x="4" y="5" width="7" height="7" rx="2" />
+          <rect {...common} x="13" y="12" width="7" height="7" rx="2" />
+          <path {...common} d="M14 5h4v4" />
+          <path {...common} d="M10 19H6v-4" />
+        </>
+      ) : name === "copy" ? (
+        <>
+          <rect {...common} x="8" y="8" width="11" height="11" rx="2" />
+          <path {...common} d="M5 15V6a1 1 0 0 1 1-1h9" />
+        </>
+      ) : name === "paste" ? (
+        <>
+          <path {...common} d="M9 5h6l1 3H8l1-3z" />
+          <rect {...common} x="5" y="7" width="14" height="13" rx="3" />
+          <path {...common} d="M9 13h6" />
+          <path {...common} d="M9 16h4" />
+        </>
+      ) : name === "delete" ? (
+        <>
+          <path {...common} d="M5 7h14" />
+          <path {...common} d="M10 7V5h4v2" />
+          <path {...common} d="M8 10v8" />
+          <path {...common} d="M12 10v8" />
+          <path {...common} d="M16 10v8" />
+          <path {...common} d="M7 7l1 14h8l1-14" />
+        </>
+      ) : name === "generate" ? (
+        <>
+          <path {...common} d="M12 3l1.2 4.2L17 9l-3.8 1.8L12 15l-1.2-4.2L7 9l3.8-1.8L12 3z" />
+          <path {...common} d="M5 17h5" />
+          <path {...common} d="M14 19h5" />
+        </>
+      ) : name === "pause" ? (
+        <>
+          <path {...common} d="M9 7v10" />
+          <path {...common} d="M15 7v10" />
+        </>
+      ) : (
+        <path {...common} d="M9 7v10l8-5-8-5z" />
+      )}
+    </svg>
+  );
 }
 
 function clampViewport(vp: CanvasViewport): CanvasViewport {
@@ -327,6 +505,13 @@ function newNodeId(type: CanvasNodeType) {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function presetModelLabels(kind?: PromptPresetKind) {
+  if (kind === "image") return ["GPT Image", "Nano Banana"];
+  if (kind === "video") return ["Seedance", "Kling", "Veo"];
+  if (kind === "chat") return ["LLM"];
+  return ["预设"];
+}
+
 function makePresetNode(pos: CanvasPosition, preset: SitePromptPreset): CanvasNode {
   const width = 320;
   const height = 214;
@@ -445,7 +630,7 @@ function makeMediaNode(
   kind: UploadKind,
   media: { url: string; width: number; height: number; mimeType: string; filename?: string; audioDurationSeconds?: number },
 ): CanvasNode {
-  const size = kind === "audio" ? { width: 320, height: 96 } : fitMediaSize(media);
+  const size = kind === "audio" ? { width: 360, height: 116 } : fitMediaSize(media);
   const title = media.filename || (kind === "image" ? "图片" : kind === "video" ? "视频" : "音频");
   return {
     id: newNodeId(kind), type: kind, title,
@@ -467,20 +652,20 @@ function makeMediaNode(
 function makeMediaNodeFromAsset(pos: CanvasPosition, kind: UploadKind, asset: { url: string; title: string }): CanvasNode {
   return makeMediaNode(pos, kind, {
     url: asset.url,
-    width: kind === "image" ? 1024 : kind === "video" ? 1280 : 320,
-    height: kind === "image" ? 768 : kind === "video" ? 720 : 96,
+    width: kind === "image" ? 1024 : kind === "video" ? 1280 : 360,
+    height: kind === "image" ? 768 : kind === "video" ? 720 : 116,
     mimeType: kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/mpeg",
     filename: asset.title,
   });
 }
 
-function nodeTypeIcon(type: CanvasNodeType) {
-  if (type === "group") return "🗂️";
-  if (type === "image") return "🖼️";
-  if (type === "video") return "🎬";
-  if (type === "audio") return "♪";
+function nodeTypeIcon(type: CanvasNodeType): CanvasIconName {
+  if (type === "group") return "group";
+  if (type === "image") return "image";
+  if (type === "video") return "video";
+  if (type === "audio") return "audio";
 
-  return "✏️";
+  return "text";
 }
 
 function nodeTypeColor(type: CanvasNodeType) {
@@ -510,6 +695,7 @@ export default function CanvasBoardPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const panRef = useRef<PanState | null>(null);
+  const minimapPanRef = useRef<MinimapPanState | null>(null);
   const selectBoxStartRef = useRef<{ x: number; y: number } | null>(null);
   const canvasPendingRef = useRef<CanvasPending | null>(null);
   const menuWorldRef = useRef<CanvasPosition | null>(null);
@@ -1867,10 +2053,13 @@ export default function CanvasBoardPage() {
 
   const gridSize = GRID_SIZE * viewport.k;
   const gridStyle = {
-    backgroundImage: "linear-gradient(rgba(255,255,255,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.12) 1px, transparent 1px)",
+    backgroundImage: [
+      "linear-gradient(rgba(5,5,5,0.10) 1px, transparent 1px)",
+      "linear-gradient(90deg, rgba(5,5,5,0.10) 1px, transparent 1px)",
+    ].join(", "),
     backgroundSize: `${gridSize}px ${gridSize}px`,
     backgroundPosition: `${viewport.x % gridSize}px ${viewport.y % gridSize}px`,
-  };
+  } satisfies CSSProperties;
 
 
   const hasSelection = selectedNodeIds.size > 0 || selectedConnectionIds.size > 0 || !!selectedConnectionId;
@@ -1939,7 +2128,7 @@ export default function CanvasBoardPage() {
     return { width, height, minX, minY, scale, ox, oy, viewportWorld, mapRect };
   }, [nodes, viewport]);
 
-  const moveViewportFromMinimap = useCallback((clientX: number, clientY: number) => {
+  const centerViewportFromMinimap = useCallback((clientX: number, clientY: number) => {
     const miniRect = minimapRef.current?.getBoundingClientRect();
     const canvasRect = containerRef.current?.getBoundingClientRect();
     if (!miniRect || !canvasRect) return;
@@ -1955,6 +2144,21 @@ export default function CanvasBoardPage() {
     }));
     markDirty();
   }, [markDirty, minimap, setViewportBoth]);
+
+  const dragViewportFromMinimap = useCallback((clientX: number, clientY: number) => {
+    const drag = minimapPanRef.current;
+    if (!drag) return;
+    const dx = clientX - drag.startX;
+    const dy = clientY - drag.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+    const damping = 2;
+    setViewportBoth(clampViewport({
+      x: drag.initial.x - dx * damping,
+      y: drag.initial.y - dy * damping,
+      k: drag.initial.k,
+    }));
+    markDirty();
+  }, [markDirty, setViewportBoth]);
 
   const setZoom = useCallback((nextK: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -1983,7 +2187,12 @@ export default function CanvasBoardPage() {
         <div className={shellStyles.topbarLeft}>
           <Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link>
           <div className={shellStyles.topbarTagline}>
-            <input className={[shellStyles.input, shellStyles.inputCompact].join(" ")} value={title} onChange={(e) => { setTitle(e.target.value); markDirty(); }} aria-label="画布标题" style={{ width: 220 }} />
+            <input
+              className={styles.canvasTitleInput}
+              value={title}
+              onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+              aria-label="画布标题"
+            />
           </div>
         </div>
         <nav className={shellStyles.topnav}>
@@ -2056,19 +2265,19 @@ export default function CanvasBoardPage() {
           {quickAddBar && (
             <div className={styles.quickAddBar} style={{ left: quickAddBar.left, top: quickAddBar.top }} onPointerDown={(e) => e.stopPropagation()}>
               <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeTextNode(quickAddBar.world))}>
-                <span className={styles.quickAddBtnIcon}>✏️</span>文本
+                <span className={styles.quickAddBtnIcon}><CanvasIcon name="text" /></span>文本
               </button>
               <button type="button" className={styles.quickAddBtn} onClick={() => appendImageNodeWithSelection(quickAddBar.world)}>
-                <span className={styles.quickAddBtnIcon}>🖼️</span>图片
+                <span className={styles.quickAddBtnIcon}><CanvasIcon name="image" /></span>图片
               </button>
               <button type="button" className={styles.quickAddBtn} onClick={() => appendNode(makeEmptyVideoNode(quickAddBar.world, currentVideoNodeDefaults()))}>
-                <span className={styles.quickAddBtnIcon}>🎬</span>视频
+                <span className={styles.quickAddBtnIcon}><CanvasIcon name="video" /></span>视频
               </button>
               <button type="button" className={styles.quickAddBtn} onClick={() => { openPresetLibraryForAddingNode(quickAddBar.world); setQuickAddBar(null); }}>
-                <span className={styles.quickAddBtnIcon}>🎨</span>预设
+                <span className={styles.quickAddBtnIcon}><CanvasIcon name="preset" /></span>预设
               </button>
               <button type="button" className={styles.quickAddBtn} onClick={() => { menuWorldRef.current = quickAddBar.world; setQuickAddBar(null); audioInputRef.current?.click(); }}>
-                <span className={styles.quickAddBtnIcon}>♪</span>音频
+                <span className={styles.quickAddBtnIcon}><CanvasIcon name="audio" /></span>音频
               </button>
             </div>
           )}
@@ -2120,7 +2329,7 @@ export default function CanvasBoardPage() {
                       onPointerDown={(e) => { e.stopPropagation(); deleteConnectionById(conn.id); }}
                       aria-label="断开连线"
                     >
-                      <circle r="16" />
+                      <rect x="-13" y="-13" width="26" height="26" rx="10" />
                       <path d="M -6 -6 L 6 6 M 6 -6 L -6 6" />
                     </g>
                   </g>
@@ -2163,9 +2372,9 @@ export default function CanvasBoardPage() {
                 
                 <div className={styles.multiSelectionToolbar} style={{ left: multiSelectionBox.x + multiSelectionBox.width / 2, top: multiSelectionBox.y }} onPointerDown={(e) => e.stopPropagation()}>
                   {canGroup ? (
-                    <button type="button" title="打组 (Ctrl+G)" onClick={(e) => { e.stopPropagation(); groupSelected(); }}>🗂️ 打组</button>
+                    <button type="button" title="打组 (Ctrl+G)" onClick={(e) => { e.stopPropagation(); groupSelected(); }}><CanvasIcon name="group" />打组</button>
                   ) : canUngroup ? (
-                    <button type="button" title="解散组 (Ctrl+Shift+G)" onClick={(e) => { e.stopPropagation(); for (const id of selectedNodeIds) { if (nodeMap.get(id)?.type === "group") { ungroupNode(id); break; } } }}>✂️ 解散组</button>
+                    <button type="button" title="解散组 (Ctrl+Shift+G)" onClick={(e) => { e.stopPropagation(); for (const id of selectedNodeIds) { if (nodeMap.get(id)?.type === "group") { ungroupNode(id); break; } } }}><CanvasIcon name="ungroup" />解散组</button>
                   ) : null}
                   <div className={styles.multiSelectionToolbarDivider} />
                   <button type="button" title="创建副本 (Ctrl+C & V)" onClick={(e) => { e.stopPropagation(); duplicateSelected(); }}>复制</button>
@@ -2214,7 +2423,7 @@ export default function CanvasBoardPage() {
                     className={styles.nodeOverlay}
                     onDoubleClick={(e) => { e.stopPropagation(); setEditingNodeTitleId(node.id); }}
                   >
-                    <span className={styles.nodeOverlayIcon}>{isPresetText ? "🎨" : nodeTypeIcon(node.type)}</span>
+                    <span className={styles.nodeOverlayIcon}><CanvasIcon name={isPresetText ? "preset" : nodeTypeIcon(node.type)} /></span>
                     {editingNodeTitleId === node.id ? (
                       <input
                         className={styles.nodeOverlayTitleEdit}
@@ -2241,7 +2450,7 @@ export default function CanvasBoardPage() {
                     <div className={styles.nodeHoverToolbar} onPointerDown={(e) => e.stopPropagation()}>
                       {isGroup ? (
                         <>
-                          <button type="button" title="解散组 (Ctrl+Shift+G)" onClick={(e) => { e.stopPropagation(); ungroupNode(node.id); }}>✂️ 解散组</button>
+                          <button type="button" title="解散组 (Ctrl+Shift+G)" onClick={(e) => { e.stopPropagation(); ungroupNode(node.id); }}><CanvasIcon name="ungroup" />解散组</button>
                           <div className={styles.multiSelectionToolbarDivider} />
                           <button type="button" title="创建副本" onClick={(e) => { e.stopPropagation(); duplicateSelected(); }}>复制</button>
                           <button type="button" title="删除组及内容" onClick={(e) => { e.stopPropagation(); deleteGroupWithChildren(node.id); }}>删除</button>
@@ -2319,9 +2528,9 @@ export default function CanvasBoardPage() {
                             ) : null}
                           </span>
                           <span className={styles.presetModelChips}>
-                            <span className={styles.presetModelChip}>
-                              {node.metadata?.presetKind === "image" ? "生图预设" : node.metadata?.presetKind === "video" ? "生视频预设" : "对话预设"}
-                            </span>
+                            {presetModelLabels(node.metadata?.presetKind).map((label) => (
+                              <span key={label} className={styles.presetModelChip}>{label}</span>
+                            ))}
                           </span>
                         </span>
                         {node.metadata?.previewImageUrl?.trim() ? (
@@ -2494,9 +2703,7 @@ export default function CanvasBoardPage() {
                             {node.metadata?.chatStatus === "running" ? (
                               <span className={styles.generatorBtnSpinner} aria-hidden />
                             ) : (
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                <path d="M4 12l8-8 8 8-1.41 1.41L13 7.83V20h-2V7.83l-5.59 5.58L4 12z" />
-                              </svg>
+                              "发送"
                             )}
                           </button>
                         </div>
@@ -2730,9 +2937,7 @@ export default function CanvasBoardPage() {
                             {node.metadata?.status === "running" ? (
                               <span className={styles.generatorBtnSpinner} aria-hidden />
                             ) : (
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                <path d="M4 12l8-8 8 8-1.41 1.41L13 7.83V20h-2V7.83l-5.59 5.58L4 12z" />
-                              </svg>
+                              "生成"
                             )}
                           </button>
                         </div>
@@ -2793,12 +2998,12 @@ export default function CanvasBoardPage() {
                         <div className={styles.imageFrame}>{node.metadata?.videoUrl && <video src={node.metadata.videoUrl} controls className={styles.videoMedia} />}</div>
                       ) : node.type === "audio" ? (
                         <div className={styles.audioFrame}>
-                          <div className={styles.audioGlyph} aria-hidden>♪</div>
+                          <div className={styles.audioGlyph} aria-hidden><CanvasIcon name="audio" /></div>
                           <div className={styles.audioInfo}>
                             <span className={styles.audioTitle}>{node.title || "音频"}</span>
                             <span className={styles.audioMeta}>{node.metadata?.mimeType || "audio"}</span>
                           </div>
-                          {node.metadata?.audioUrl ? <audio src={node.metadata.audioUrl} controls className={styles.audioMedia} /> : null}
+                          {node.metadata?.audioUrl ? <CanvasAudioPlayer src={node.metadata.audioUrl} /> : null}
                         </div>
                       ) : null}
                     </div>
@@ -2849,12 +3054,12 @@ export default function CanvasBoardPage() {
           {menu?.kind === "canvas" && (
             <div className={styles.uploadMenu} style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
               {/* Group / ungroup based on selection */}
-              {canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}>🗂️ 打组选中 (Ctrl+G)</button>}
-              {canUngroup && <button type="button" onClick={() => { for (const id of selectedNodeIds) { if (nodeMap.get(id)?.type === "group") { ungroupNode(id); break; } } setMenu(null); }}>✂️ 解散组 (Ctrl+⇧+G)</button>}
-              {selectedNodeIds.size > 0 && <button type="button" onClick={() => { const s = nodesRef.current.filter(n => selectedNodeIds.has(n.id)); if (s.length) { nodeClipboardRef.current = s; setHasClipboard(true); } setMenu(null); }}>📋 复制选中 (Ctrl+C)</button>}
-              {hasSelection && <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteSelected(); setMenu(null); }}>🗑️ 删除选中 (Del)</button>}
+              {canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}><CanvasIcon name="group" />打组选中 (Ctrl+G)</button>}
+              {canUngroup && <button type="button" onClick={() => { for (const id of selectedNodeIds) { if (nodeMap.get(id)?.type === "group") { ungroupNode(id); break; } } setMenu(null); }}><CanvasIcon name="ungroup" />解散组 (Ctrl+⇧+G)</button>}
+              {selectedNodeIds.size > 0 && <button type="button" onClick={() => { const s = nodesRef.current.filter(n => selectedNodeIds.has(n.id)); if (s.length) { nodeClipboardRef.current = s; setHasClipboard(true); } setMenu(null); }}><CanvasIcon name="copy" />复制选中 (Ctrl+C)</button>}
+              {hasSelection && <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteSelected(); setMenu(null); }}><CanvasIcon name="delete" />删除选中 (Del)</button>}
               {(canGroup || canUngroup || hasSelection) && <div className={styles.uploadMenuDivider} />}
-              <button type="button" disabled={!hasClipboard} onClick={() => { pasteNodes(menu.world); setMenu(null); }}>📋 粘贴节点 (Ctrl+V)</button>
+              <button type="button" disabled={!hasClipboard} onClick={() => { pasteNodes(menu.world); setMenu(null); }}><CanvasIcon name="paste" />粘贴节点 (Ctrl+V)</button>
               <button type="button" onClick={() => { setSelectedNodeIds(new Set(nodesRef.current.map(n => n.id))); setSelectedConnectionIds(new Set(connectionsRef.current.map(conn => conn.id))); setSelectedConnectionId(null); setMenu(null); }}>全选 (Ctrl+A)</button>
               <button type="button" onClick={() => {
                 const snapshot = historyRef.current.pop();
@@ -2892,16 +3097,16 @@ export default function CanvasBoardPage() {
             if (isGroup) {
               return (
                 <div className={styles.uploadMenu} style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
-                  <button type="button" onClick={() => { ungroupNode(nodeId); setMenu(null); }}>✂️ 解散组（保留内容）</button>
-                  <button type="button" onClick={() => { duplicateNodes(new Set([nodeId])); setMenu(null); }}>📋 复制节点 (Ctrl+D)</button>
+                  <button type="button" onClick={() => { ungroupNode(nodeId); setMenu(null); }}><CanvasIcon name="ungroup" />解散组（保留内容）</button>
+                  <button type="button" onClick={() => { duplicateNodes(new Set([nodeId])); setMenu(null); }}><CanvasIcon name="copy" />复制节点 (Ctrl+D)</button>
                   <div className={styles.uploadMenuDivider} />
-                  <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteGroupWithChildren(nodeId); setMenu(null); }}>🗑️ 删除组和全部内容</button>
+                  <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteGroupWithChildren(nodeId); setMenu(null); }}><CanvasIcon name="delete" />删除组和全部内容</button>
                 </div>
               );
             }
             return (
               <div className={styles.uploadMenu} style={{ left: menu.x, top: menu.y }} onPointerDown={(e) => e.stopPropagation()}>
-                {multiSelected && canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}>🗂️ 打组选中 (Ctrl+G)</button>}
+                {multiSelected && canGroup && <button type="button" onClick={() => { groupSelected(); setMenu(null); }}><CanvasIcon name="group" />打组选中 (Ctrl+G)</button>}
                 {multiSelected && canGroup && <div className={styles.uploadMenuDivider} />}
                 {(nodeData?.type === "image" || nodeData?.type === "video") && nodeData?.metadata?.source !== "upload" ? (
                   <>
@@ -2911,17 +3116,17 @@ export default function CanvasBoardPage() {
                       if (targetNode?.type === "video") void runVideoGenNode(nodeId);
                       setMenu(null);
                     }}>
-                      {nodeData.metadata?.status === "success" ? "✨ 重新生成" : "✨ 生成"}
+                      <CanvasIcon name="generate" />{nodeData.metadata?.status === "success" ? "重新生成" : "生成"}
                     </button>
                     <div className={styles.uploadMenuDivider} />
                   </>
                 ) : null}
-                <button type="button" onClick={() => { setEditingNodeTitleId(nodeId); setMenu(null); }}>✏️ 重命名</button>
-                <button type="button" onClick={() => { duplicateNodes(new Set([nodeId])); setMenu(null); }}>📋 复制节点 (Ctrl+D)</button>
+                <button type="button" onClick={() => { setEditingNodeTitleId(nodeId); setMenu(null); }}><CanvasIcon name="text" />重命名</button>
+                <button type="button" onClick={() => { duplicateNodes(new Set([nodeId])); setMenu(null); }}><CanvasIcon name="copy" />复制节点 (Ctrl+D)</button>
                 <div className={styles.uploadMenuDivider} />
                 {multiSelected
-                  ? <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteSelected(); setMenu(null); }}>🗑️ 删除选中 ({selectedNodeIds.size} 个)</button>
-                  : <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteNodeById(nodeId); setMenu(null); }}>🗑️ 删除节点</button>
+                  ? <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteSelected(); setMenu(null); }}><CanvasIcon name="delete" />删除选中 ({selectedNodeIds.size} 个)</button>
+                  : <button type="button" className={styles.uploadMenuDanger} onClick={() => { deleteNodeById(nodeId); setMenu(null); }}><CanvasIcon name="delete" />删除节点</button>
                 }
               </div>
             );
@@ -2929,12 +3134,22 @@ export default function CanvasBoardPage() {
 
           {/* ── Bottom toolbar ── */}
           <div className={styles.toolbar} onPointerDown={(e) => e.stopPropagation()}>
-            <button type="button" className={styles.toolbarIconBtn} onClick={undoLast} title="撤销 (Ctrl+Z)">↶</button>
-            <button type="button" className={styles.toolbarIconBtn} onClick={redoLast} title="重做 (Ctrl+Y)">↷</button>
+            <button type="button" className={styles.toolbarIconBtn} onClick={undoLast} title="撤销 (Ctrl+Z)" aria-label="撤销">
+              <svg className={styles.toolbarStrokeIcon} viewBox="0 0 24 24" aria-hidden>
+                <path d="M9 8H5V4" />
+                <path d="M5.7 8.2A7 7 0 1 1 6 16.2" />
+              </svg>
+            </button>
+            <button type="button" className={styles.toolbarIconBtn} onClick={redoLast} title="重做 (Ctrl+Y)" aria-label="重做">
+              <svg className={styles.toolbarStrokeIcon} viewBox="0 0 24 24" aria-hidden>
+                <path d="M15 8h4V4" />
+                <path d="M18.3 8.2A7 7 0 1 0 18 16.2" />
+              </svg>
+            </button>
             <div className={styles.toolbarDivider} />
             <button type="button" className={[styles.toolbarTextBtn, minimapVisible ? styles.toolbarBtnActive : ""].join(" ")} onClick={() => setMinimapVisible((v) => !v)} title="小地图">小地图</button>
             <button type="button" className={styles.toolbarTextBtn} onClick={fitToView} title="适配全部节点">适配</button>
-            <button type="button" className={styles.toolbarIconBtn} onClick={() => zoomBy(-0.15)} title="缩小 (Ctrl+−)">−</button>
+            <button type="button" className={[styles.toolbarIconBtn, styles.toolbarZoomBtn].join(" ")} onClick={() => zoomBy(-0.15)} title="缩小 (Ctrl+−)">−</button>
             <input
               className={styles.zoomSlider}
               type="range"
@@ -2945,32 +3160,43 @@ export default function CanvasBoardPage() {
               aria-label="缩放"
             />
             <span className={styles.zoomDisplay}>{zoomPct}%</span>
-            <button type="button" className={styles.toolbarIconBtn} onClick={() => zoomBy(0.15)} title="放大 (Ctrl+=)">+</button>
+            <button type="button" className={[styles.toolbarIconBtn, styles.toolbarZoomBtn].join(" ")} onClick={() => zoomBy(0.15)} title="放大 (Ctrl+=)">+</button>
             <div className={styles.toolbarDivider} />
-            <button type="button" className={[styles.toolbarTextBtn, snapToGrid ? styles.toolbarBtnActive : ""].join(" ")} onClick={toggleSnapToGrid} title="自动对齐">对齐</button>
-            <button type="button" className={styles.toolbarIconBtn} onClick={() => setShortcutsOpen(true)} title="快捷键帮助">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>
+            <button
+              type="button"
+              className={[styles.toolbarTextBtn, styles.toolbarToggleBtn, snapToGrid ? styles.toolbarBtnActive : ""].join(" ")}
+              onClick={toggleSnapToGrid}
+              aria-pressed={snapToGrid}
+              title={snapToGrid ? "自动对齐已开启" : "自动对齐已关闭"}
+            >
+              对齐
+            </button>
+            <button type="button" className={styles.toolbarTextBtn} onClick={() => setShortcutsOpen(true)} title="帮助">
+              帮助
             </button>
           </div>
 
           {minimapVisible && (
             <div className={styles.minimap} onPointerDown={(e) => {
               e.stopPropagation();
-              moveViewportFromMinimap(e.clientX, e.clientY);
+              minimapPanRef.current = { startX: e.clientX, startY: e.clientY, initial: viewportRef.current, moved: false };
               e.currentTarget.setPointerCapture(e.pointerId);
             }} onPointerMove={(e) => {
               if (e.buttons !== 1) return;
-              moveViewportFromMinimap(e.clientX, e.clientY);
+              dragViewportFromMinimap(e.clientX, e.clientY);
+            }} onPointerUp={(e) => {
+              e.stopPropagation();
+              const drag = minimapPanRef.current;
+              minimapPanRef.current = null;
+              if (!drag?.moved) centerViewportFromMinimap(e.clientX, e.clientY);
+            }} onPointerCancel={() => {
+              minimapPanRef.current = null;
             }}>
               <div ref={minimapRef} className={styles.minimapCanvas} style={{ width: minimap.width, height: minimap.height }}>
                 {nodes.map((node) => {
                   const r = minimap.mapRect({ x: node.position.x, y: node.position.y, width: node.width, height: node.height });
                   return <span key={node.id} className={styles.minimapNode} style={{ left: r.left, top: r.top, width: r.width, height: r.height, backgroundColor: isPresetTextNode(node) ? "#c4b5fd" : nodeTypeColor(node.type) }} />;
                 })}
-                {(() => {
-                  const r = minimap.mapRect(minimap.viewportWorld);
-                  return <span className={styles.minimapViewport} style={{ left: r.left, top: r.top, width: r.width, height: r.height }} />;
-                })()}
               </div>
             </div>
           )}
@@ -2979,34 +3205,39 @@ export default function CanvasBoardPage() {
             <div className={styles.shortcutModalBackdrop} onPointerDown={(e) => { e.stopPropagation(); setShortcutsOpen(false); }}>
               <div className={styles.shortcutModal} onPointerDown={(e) => e.stopPropagation()}>
                 <div className={styles.assetDrawerHeader}>
-                  <div className={styles.assetDrawerTitle}>快捷键</div>
+                  <div>
+                    <div className={styles.assetDrawerTitle}>帮助</div>
+                    <div className={styles.assetDrawerMeta}>画布操作、节点使用和快捷键</div>
+                  </div>
                   <button type="button" className={styles.toolbarIconBtn} onClick={() => setShortcutsOpen(false)} aria-label="关闭快捷键">×</button>
                 </div>
+                <div className={styles.helpSections}>
+                  <section className={styles.helpSection}>
+                    <h3>使用方法</h3>
+                    <div className={styles.shortcutGrid}>
+                      <span>双击空白画布</span><strong>快速添加节点</strong>
+                      <span>拖拽节点边缘</span><strong>移动节点</strong>
+                      <span>拖拽节点端口</span><strong>建立连接</strong>
+                      <span>右键节点或画布</span><strong>打开更多操作</strong>
+                      <span>选中生成节点</span><strong>显示下方生成操作框</strong>
+                    </div>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h3>快捷键</h3>
                 <div className={styles.shortcutGrid}>
                   <span>Ctrl / Cmd + 滚轮</span><strong>缩放</strong>
                   <span>滚轮 / 触控板滑动</span><strong>平移画布</strong>
                   <span>Space + 拖拽 / 鼠标中键</span><strong>平移画布</strong>
-                  <span>双击空白</span><strong>快速添加</strong>
                   <span>拖拽节点端口</span><strong>连线</strong>
                   <span>Ctrl / Cmd + Z / Y</span><strong>撤销 / 重做</strong>
                   <span>Ctrl / Cmd + C / V / D</span><strong>复制 / 粘贴 / 复制节点</strong>
                   <span>Delete / Backspace</span><strong>删除选中</strong>
                 </div>
+                  </section>
+                </div>
               </div>
             </div>
           )}
-
-          {/* Status hint */}
-          <div className={styles.statusPanel}>
-            <div className={styles.statusText}>
-              {connectionDraft ? `${connectionDraft.message ?? "拖到合法输入槽"} · Esc 取消`
-                : selectedConnectionIds.size > 1 ? `已选 ${selectedConnectionIds.size} 条连线 · 点红叉或按 Delete`
-                : selectedConnectionIds.size === 1 || selectedConnectionId ? "已选连线 · 点红叉或按 Delete"
-                : selectedNodeIds.size > 1 ? `已选 ${selectedNodeIds.size} 个 · 右键菜单进行打组/删除等操作 · Ctrl+G 打组`
-                : spacePanMode ? "Space 平移模式 — 拖拽移动画布"
-                : "拖拽框选 · 双击添加节点 · 右键菜单 · Ctrl+Z 撤销"}
-            </div>
-          </div>
 
           {portalMounted && presetLibraryOpen
             ? createPortal(
@@ -3062,7 +3293,10 @@ export default function CanvasBoardPage() {
                           onClick={() => { setPresetLibraryOpen(false); setPresetAddNodePos(null); }}
                           aria-label="关闭"
                         >
-                          ×
+                          <svg className={styles.toolbarStrokeIcon} viewBox="0 0 24 24" aria-hidden>
+                            <path d="M6 6l12 12" />
+                            <path d="M18 6L6 18" />
+                          </svg>
                         </button>
                       </div>
                     </header>
@@ -3091,9 +3325,9 @@ export default function CanvasBoardPage() {
                                     ) : null}
                                   </span>
                                   <span className={styles.presetModelChips}>
-                                    <span className={styles.presetModelChip}>
-                                      {preset.kind === "image" ? "生图预设" : preset.kind === "video" ? "生视频预设" : "对话预设"}
-                                    </span>
+                                    {presetModelLabels(preset.kind).map((label) => (
+                                      <span key={label} className={styles.presetModelChip}>{label}</span>
+                                    ))}
                                   </span>
                                 </span>
                                 {coverUrl ? (

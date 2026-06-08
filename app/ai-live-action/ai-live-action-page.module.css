@@ -51,8 +51,9 @@
 }
 
 .uploadBox:focus-within {
-  outline: 1px solid rgba(250, 250, 250, 0.4);
-  outline-offset: 2px;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
 }
 
 .uploadBox:active {
@@ -123,8 +124,9 @@
 }
 
 .previewFrame:focus-within {
-  outline: 1px solid rgba(250, 250, 250, 0.4);
-  outline-offset: 2px;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
 }
 
 .preview {
@@ -405,4 +407,129 @@
 .hint,
 .muted {
   color: #5f5f5a;
+}
+
+.resultImage {
+  border: 4px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* Final production outline cleanup. */
+
+.uploadBox,
+.uploadBoxFilled,
+.previewFrame,
+.previewEmpty,
+.uploadState,
+.controlSelect,
+.assetFields input,
+.outputBlock,
+.statusLine {
+  border-color: #050505;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.previewFrame {
+  border: 4px solid #050505;
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+.preview {
+  border-radius: 0;
+}
+
+.previewEmpty,
+.uploadState {
+  border: 2px solid #050505;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+}
+
+.uploadLabel,
+.controlLabel {
+  color: #050505;
+}
+
+.fileName {
+  color: #5f5f5a;
+}
+
+.selectWrap::after {
+  border-color: #050505;
+}
+
+.controlSelect,
+.assetFields input {
+  border: 2px solid #050505;
+  border-radius: 18px;
+}
+
+.controlSelect:hover,
+.controlSelect:focus {
+  border-color: #050505;
+  background: #f3f3ef;
+  box-shadow: none;
+}
+
+.controlSelect option {
+  background: #ffffff;
+  color: #050505;
+}
+
+/* One-border pass: upload cards are layout groups; previews own the outline. */
+.uploadBox,
+.uploadBoxFilled,
+.uploadBox:hover,
+.uploadBoxFilled:hover {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  padding: 0;
+}
+
+.uploadBox:focus-within {
+  outline: none;
+}
+
+.previewFrame:hover,
+.previewFrame:focus-within {
+  border-color: #050505;
+  background: #f3f3ef;
+  transform: none;
+  outline: none;
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+.uploadLabel,
+.uploadCopy,
+.outputBlock,
+.controlLabel {
+  color: #050505;
+}
+
+.fileName,
+.statusLine {
+  color: #5f5f5a;
+}
+
+.previewEmpty,
+.uploadState {
+  font-weight: 800;
+}
+
+.outputBlock {
+  border: 2px solid #050505;
+  border-radius: 22px;
+  padding: 12px 14px;
 }

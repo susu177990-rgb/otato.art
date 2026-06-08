@@ -52,12 +52,9 @@ export default function ImageGalleryPage() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/image" className={shellStyles.navLink}>
-            返回作图
+          <Link href="/" className={shellStyles.navLink}>
+            返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>作图画廊</p>
-          </div>
         </div>
         <nav className={shellStyles.topnav}>
           <button

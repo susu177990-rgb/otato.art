@@ -196,6 +196,7 @@
 .title,
 .subtitle,
 .label,
+.eyebrow,
 .textButton {
   color: #050505;
 }
@@ -205,7 +206,8 @@
 }
 
 .input,
-.button {
+.button,
+.googleButton {
   border: 3px solid #050505;
   border-radius: 999px;
   background: #ffffff;
@@ -216,6 +218,17 @@
 .button {
   background: #050505;
   color: #ffffff;
+}
+
+.googleMark {
+  border: 2px solid #050505;
+  box-shadow: none;
+  color: #050505;
+}
+
+.divider span {
+  height: 2px;
+  background: #050505;
 }
 
 .googleButton:hover:not(:disabled),

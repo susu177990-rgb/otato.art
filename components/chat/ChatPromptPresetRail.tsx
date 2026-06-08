@@ -20,7 +20,7 @@ export function ChatPromptPresetRail({
   const faded = presets.length + 1 > 7;
 
   return (
-    <aside className={imageStyles.modePanel} aria-label="对话提示词预设">
+    <aside className={[imageStyles.modePanel, railStyles.presetPanel].join(" ")} aria-label="对话提示词预设">
       <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>

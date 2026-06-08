@@ -79,7 +79,7 @@ export function ChatComposer({
       {error ? <div className={imageStyles.error}>{error}</div> : null}
 
       <div
-        className={imageStyles.composer}
+        className={[imageStyles.composer, styles.composer].join(" ")}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();

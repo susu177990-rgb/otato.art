@@ -789,7 +789,6 @@ export default function OnboardingPage() {
             返回项目列表
           </Link>
           <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>项目立项 · {project.name || "未命名项目"}</p>
             <p className={shellStyles.helpText}>
               基本信息 → 素材 → 策划 → 立项确认 → 编剧室
               {saving ? <span style={{ marginLeft: 8 }}>· 保存中…</span> : null}

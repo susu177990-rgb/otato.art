@@ -1,13 +1,21 @@
 /* 对话页左右轨道：锁死 120px（须在 TSX 挂 rail* 类；勿用 :global(.modeX) 匹配 image 模块哈希类名） */
 
 .railColumn {
-  --chat-rail-card-width: 120px;
+  --chat-rail-card-width: 112px;
   width: var(--chat-rail-card-width) !important;
   min-width: var(--chat-rail-card-width) !important;
   max-width: var(--chat-rail-card-width) !important;
   min-height: min(340px, calc(100vh - 250px));
   /* 勿 hidden：会裁掉 modeRailFrame::before/after 上下小箭头（top/bottom: ±15px） */
   overflow: visible;
+}
+
+.presetPanel {
+  left: 48px !important;
+}
+
+.sessionPanel {
+  right: 84px !important;
 }
 
 .railRail,
@@ -34,7 +42,7 @@
 
 .railScrollWrap,
 .railScroll {
-  overflow-x: hidden !important;
+  overflow-x: visible !important;
 }
 
 .railScrollWrap,
@@ -45,7 +53,7 @@
 
 .railScroll {
   justify-content: center !important;
-  padding: 14px 10px !important;
+  padding: 14px 6px !important;
 }
 
 .railCard {
@@ -110,7 +118,23 @@
 .railAction,
 .railInput {
   border: 2px solid #050505 !important;
-  border-radius: 999px !important;
+  border-radius: 15px !important;
+}
+
+.presetPanel .railCard,
+.sessionPanel .railCard {
+  width: 104px !important;
+  max-width: 104px !important;
+  min-width: 104px !important;
+}
+
+.presetPanel .railScrollWrap,
+.presetPanel .railScroll,
+.presetPanel .railList,
+.sessionPanel .railScrollWrap,
+.sessionPanel .railScroll,
+.sessionPanel .railList {
+  overflow: visible !important;
 }
 
 .railCardActive {

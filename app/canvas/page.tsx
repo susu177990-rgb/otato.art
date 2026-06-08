@@ -88,9 +88,6 @@ export default function CanvasLibraryPage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.plainDockText}>无限画布</p>
-          </div>
         </div>
         <nav className={shellStyles.topnav}>
           <button type="button" className={[shellStyles.navLink, shellStyles.navLinkPrimary].join(" ")} onClick={createBoard} disabled={creating}>
