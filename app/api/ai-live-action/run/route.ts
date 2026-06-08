@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseLiveActionMultipart } from "@/lib/ai-live-action/request";
 import { runLiveActionFirstFrame } from "@/lib/ai-live-action/workflow";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const parsed = await parseLiveActionMultipart(req);
     if (!parsed.ok) return parsed.response;
 
-    const snapshot = await getWorkspaceSnapshot(supabase);
+    const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
     const imageModel = snapshot.imageWorkspace.models[parsed.value.options.modelId];
     if (!imageModel?.endpointUrl?.trim() || !imageModel.apiKey?.trim() || !imageModel.modelName?.trim()) {
       return NextResponse.json(

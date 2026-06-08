@@ -1,7 +1,7 @@
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
 import type { VideoWorkspaceSettings } from "@/lib/video-workspace";
 import type { Settings } from "@/lib/types";
-import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import type { ApiUsageMode, WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 
 export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", { cache: "no-store" });
@@ -12,9 +12,11 @@ export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
 }
 
 export async function saveWorkspaceSnapshot(payload: {
-  llm: Settings;
-  imageWorkspace: ImageWorkspaceSettings;
-  videoWorkspace: VideoWorkspaceSettings;
+  llm?: Settings;
+  imageWorkspace?: ImageWorkspaceSettings;
+  videoWorkspace?: VideoWorkspaceSettings;
+  apiUsageMode?: ApiUsageMode;
+  publicApiAccess?: Record<string, unknown>;
 }): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", {
     method: "POST",
@@ -24,6 +26,32 @@ export async function saveWorkspaceSnapshot(payload: {
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error?.trim() || "无法保存工作区设置");
+  }
+  return (await res.json()) as WorkspaceSnapshot;
+}
+
+export async function fetchAdminWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
+  const res = await fetch("/api/admin/workspace-settings", { cache: "no-store" });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error?.trim() || "无法加载全局设置");
+  }
+  return (await res.json()) as WorkspaceSnapshot;
+}
+
+export async function saveAdminWorkspaceSnapshot(payload: {
+  llm: Settings;
+  imageWorkspace: ImageWorkspaceSettings;
+  videoWorkspace: VideoWorkspaceSettings;
+}): Promise<WorkspaceSnapshot> {
+  const res = await fetch("/api/admin/workspace-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error?.trim() || "无法保存全局设置");
   }
   return (await res.json()) as WorkspaceSnapshot;
 }

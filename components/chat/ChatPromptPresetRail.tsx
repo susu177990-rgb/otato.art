@@ -75,7 +75,7 @@ export function ChatPromptPresetRail({
 
                   {presets.length === 0 ? (
                     <Link
-                      href="/settings?tab=chatPrompts"
+                      href="/admin?tab=chatPrompts"
                       className={[imageStyles.modeButton, railStyles.railCard].join(" ")}
                     >
                       <span className={[imageStyles.modeName, railStyles.railName].join(" ")}>添加预设</span>

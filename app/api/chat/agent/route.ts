@@ -9,7 +9,7 @@ import type { ChatAttachment, ChatMessage, ChatMessagePart, SkillPackRecord } fr
 import { getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
 import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const maxDuration = 300;
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     const conv = await getChatConversation(supabase, user.id, body.conversationId);
     if (!conv) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
 
-    const snapshot = await getWorkspaceSnapshot(supabase);
+    const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
     const preferredLlmModelId = body.preferredLlmModelId?.trim() || conv.preferredLlmModelId || null;
     const chatApiConfig = llmToChatApiConfig(snapshot.llm, preferredLlmModelId);
     const skillPacks = await listSiteSkillPacks(supabase);

@@ -1,14 +1,15 @@
 import { NextRequest } from "next/server";
 import { getProject } from "@/lib/project-store";
 import { generatePrefillMetaFromProject } from "@/lib/onboarding-prefill-meta";
-import type { Project, Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Project } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   let body: {
     projectId?: string;
-    settings?: Settings;
     /** 为 true 时仅以《创作思路确认书》长文为主调用预填（须已有或随 override 传入正文） */
     fromBriefOnly?: boolean;
     /** 可选：用当前页编辑框正文代替库里确认书参与预填（不写库） */
@@ -21,8 +22,11 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = body.projectId;
-  const settings = body.settings;
-  if (!projectId || !settings?.apiKey) {
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
+  if (!projectId) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 

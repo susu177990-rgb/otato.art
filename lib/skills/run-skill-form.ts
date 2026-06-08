@@ -8,7 +8,7 @@ import { effectiveAgentImageModelId, resolveImageModelSettings } from "@/lib/cha
 import { resolveImageSizeFromUnknownRecord } from "@/lib/chat/image-size-policy";
 import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
 import type { ImageAspectRatio, ImageGalleryRecord, ImageModelId } from "@/lib/image-workspace";
 import { validateSkillPayload, type SkillFormPayload } from "@/lib/skills/validate-skill-payload";
@@ -106,7 +106,7 @@ export async function runSkillForm(params: {
   }
   const formPayload = validated.data;
 
-  const snapshot = await getWorkspaceSnapshot(supabase);
+  const snapshot = await getUserWorkspaceSnapshot(supabase, userId, { visibility: "server" });
   const chatApiConfig = llmToChatApiConfig(snapshot.llm);
   const shouldConfirmImage = shouldUsePromptConfirmation(pack);
 

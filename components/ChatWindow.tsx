@@ -101,7 +101,6 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: newMessages,
-            settings,
             creativeDirectionId,
             projectContext: projectContext?.trim() || undefined,
           }),

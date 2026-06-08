@@ -9,10 +9,16 @@
   height: 100%;
   min-height: inherit;
   max-height: inherit;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   outline: none;
+  scrollbar-width: none;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.editorInput::-webkit-scrollbar {
+  display: none;
 }
 
 .placeholder {
@@ -40,12 +46,18 @@
   max-width: min(180px, calc(100vw - 32px));
   max-height: 180px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   background: rgba(18, 18, 22, 0.96);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
   backdrop-filter: blur(16px);
+  scrollbar-width: none;
+}
+
+.menu::-webkit-scrollbar {
+  display: none;
 }
 
 .option {
@@ -113,7 +125,7 @@
 
 .menu {
   border: 3px solid #050505;
-  border-radius: 24px;
+  border-radius: 15px;
 }
 
 .optionActive,

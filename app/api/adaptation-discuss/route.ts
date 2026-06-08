@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { loadAdaptationDiscussPrompt } from "@/lib/prompt-loader";
 import { buildCreativeDirectionContext } from "@/lib/creative-directions";
-import type { Message, Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Message } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 interface Body {
   messages: Message[];
-  settings: Settings;
   creativeDirectionId?: string;
   /** 与策划会话一致：附在系统提示后的上下文块 */
   planningBootstrap: string;
@@ -22,14 +23,11 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { messages, settings, creativeDirectionId, planningBootstrap } = body;
-
-  if (!settings?.apiKey) {
-    return new Response(
-      JSON.stringify({ error: "请先在设置 → LLM API 中填写 API Key。" }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  const { messages, creativeDirectionId, planningBootstrap } = body;
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
 
   const base = loadAdaptationDiscussPrompt();
   const directionContext = buildCreativeDirectionContext(creativeDirectionId);

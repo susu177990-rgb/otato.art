@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCanvasBoard } from "@/lib/canvas/board-store";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { executeCanvasVideoGeneration } from "@/lib/canvas/video-gen-runtime";
 
 export async function POST(req: NextRequest) {
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "画布不存在" }, { status: 404 });
     }
 
-    const workspaceSnapshot = await getWorkspaceSnapshot(supabase);
+    const workspaceSnapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
     const result = await executeCanvasVideoGeneration({
       supabase,
       userId: user.id,

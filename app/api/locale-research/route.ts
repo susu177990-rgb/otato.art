@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { getProject } from "@/lib/project-store";
 import { completeEnglishLocaleBrief } from "@/lib/locale-research";
-import type { Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 type Body = {
   projectId?: string;
-  settings?: Settings;
   /** 立项弹窗草稿：若提供则临时覆盖项目内同名字段参与生成（不写库） */
   creativeBriefOverride?: string;
   seriesBibleOverride?: string;
@@ -22,15 +22,12 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-  const settings = body.settings;
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
   if (!projectId) {
     return Response.json({ error: "缺少 projectId" }, { status: 400 });
-  }
-  if (!settings?.apiKey?.trim()) {
-    return Response.json(
-      { error: "请先在设置 → LLM API 中填写 API Key（与编剧室对话共用）。" },
-      { status: 400 }
-    );
   }
 
   const project = await getProject(projectId);

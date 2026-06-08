@@ -11,7 +11,7 @@ import type { CanvasNode } from "@/lib/canvas/types";
 import { createChatConversation, getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
 import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ImageModelId } from "@/lib/image-workspace";
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     const sourceNode = mustBeTextNode(board.nodes.find((node) => node.id === nodeId));
 
     const conv = await resolveConversation({ supabase, userId: user.id, sourceNode, userMessage });
-    const snapshot = await getWorkspaceSnapshot(supabase);
+    const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
     const preferredLlmModelId = typeof body.preferredLlmModelId === "string" && body.preferredLlmModelId.trim()
       ? body.preferredLlmModelId.trim()
       : conv.preferredLlmModelId || null;

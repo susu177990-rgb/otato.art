@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Suspense } from "react";
+import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import shellStyles from "../shared/shell.module.css";
 
@@ -13,6 +14,9 @@ export default function ChatPage() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
+        </div>
+        <div className={shellStyles.topnav}>
+          <ApiUsageModeSwitch module="llm" />
         </div>
       </header>
 

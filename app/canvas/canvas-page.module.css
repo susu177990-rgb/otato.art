@@ -405,7 +405,13 @@
   line-height: 1.6;
   outline: none;
   resize: none;
+  overflow-x: hidden;
+  scrollbar-width: none;
   cursor: text;
+}
+
+.textNodeInput::-webkit-scrollbar {
+  display: none;
 }
 
 .textNodeDragEdges {
@@ -955,7 +961,13 @@
   resize: none;
   padding: 16px 20px 8px;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   cursor: text;
+}
+
+.generatorPrompt::-webkit-scrollbar {
+  display: none;
 }
 
 .generatorPrompt::placeholder {

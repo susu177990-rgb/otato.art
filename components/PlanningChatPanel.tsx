@@ -76,7 +76,6 @@ export default function PlanningChatPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: newMessages,
-          settings,
           planningBootstrap,
           ...extraBody,
         }),

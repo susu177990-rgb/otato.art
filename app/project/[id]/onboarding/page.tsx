@@ -184,7 +184,6 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: id,
-          settings,
           replaceExisting: opts?.replaceExisting,
           creativeBriefOverride: opts?.creativeBriefOverride,
         }),
@@ -438,7 +437,6 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: id,
-          settings,
           creativeBriefOverride: briefNorm,
           seriesBibleOverride: seriesBibleDraft.trim(),
         }),
@@ -544,7 +542,7 @@ export default function OnboardingPage() {
       const res = await fetch("/api/onboarding/analyze-source", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id, settings }),
+        body: JSON.stringify({ projectId: id }),
       });
       const data = (await res.json()) as { error?: string; project?: Project };
       if (!res.ok) {
@@ -602,7 +600,6 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: id,
-          settings,
           adaptationMessages: latestDiscuss,
         }),
       });

@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
+import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
@@ -756,6 +757,9 @@ export default function VideoPage() {
           >
             提示词预设
           </button>
+        </div>
+        <div className={shellStyles.topnav}>
+          <ApiUsageModeSwitch module="video" />
         </div>
       </header>
 

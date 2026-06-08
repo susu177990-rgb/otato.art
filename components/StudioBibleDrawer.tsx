@@ -76,7 +76,6 @@ export default function StudioBibleDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          settings,
           allowWithProgress: hasStudioProgress,
         }),
       });
@@ -108,7 +107,6 @@ export default function StudioBibleDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          settings,
           replaceExisting: true,
           allowWithProgress: true,
         }),
@@ -136,7 +134,7 @@ export default function StudioBibleDrawer({
       const res = await fetch("/api/locale-research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, settings }),
+        body: JSON.stringify({ projectId }),
       });
       const data = (await res.json()) as { markdown?: string; error?: string };
       if (!res.ok) throw new Error(data.error || res.statusText);

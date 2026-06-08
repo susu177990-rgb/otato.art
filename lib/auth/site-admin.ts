@@ -1,10 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/**
- * Internal deployment policy: shared settings are editable by any signed-in user.
- * Callers still perform the auth check before reaching this helper.
- */
+export const SITE_ADMIN_EMAIL = "1779916397@qq.com";
+
 export async function canManageSiteSettings(supabase: SupabaseClient): Promise<boolean> {
-  void supabase;
-  return true;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.email?.trim().toLowerCase() === SITE_ADMIN_EMAIL;
 }

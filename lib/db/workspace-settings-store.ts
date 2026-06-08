@@ -15,6 +15,22 @@ export type WorkspaceSnapshot = {
   llm: Settings;
   imageWorkspace: ImageWorkspaceSettings;
   videoWorkspace: VideoWorkspaceSettings;
+  apiUsageMode?: ApiUsageMode;
+  publicApiAccess?: Record<string, unknown>;
+};
+
+export type ApiUsageSource = "site" | "user";
+
+export type ApiUsageMode = {
+  llm: ApiUsageSource;
+  image: ApiUsageSource;
+  video: ApiUsageSource;
+};
+
+export const DEFAULT_API_USAGE_MODE: ApiUsageMode = {
+  llm: "site",
+  image: "site",
+  video: "site",
 };
 
 function mergeLlmPartial(partial: unknown): Settings {

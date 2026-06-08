@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import {
   generateUnifiedVideo,
   VideoGenerationError,
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
   const resolution = mustBeResolution(body.resolution);
   const references = parseReferences(body.references);
 
-  const snapshot = await getWorkspaceSnapshot(supabase);
+  const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
   try {
     const requestPayload: UnifiedVideoGenerateRequest = {
       modelId,
@@ -158,7 +158,12 @@ export async function POST(req: NextRequest) {
           : error.code === "invalid_mode" || error.code === "unsupported_capability"
             ? 422
             : 500;
-      return Response.json({ error: error.message, code: error.code }, { status });
+      const message = error.code === "model_not_configured"
+        ? snapshot.apiUsageMode?.video === "user"
+          ? "请到设置页填写自己的视频 API Key。"
+          : "网站内部视频 API 暂未配置，请联系管理员。"
+        : error.message;
+      return Response.json({ error: message, code: error.code }, { status });
     }
     const message = error instanceof Error ? error.message : "生视频失败";
     return Response.json({ error: message, code: "provider_submit_failed" }, { status: 500 });

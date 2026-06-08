@@ -1,5 +1,4 @@
-/* /settings 页当前作为新 UI 结构试点：保留草图的信息架构，
- * 视觉继续使用项目的深色玻璃悬浮卡语言。 */
+/* /settings personal API configuration page. */
 
 .settingsPage {
   --settings-ink: #f4f4f5;
@@ -62,7 +61,10 @@
 }
 
 .saveButton {
-  min-width: 84px;
+  min-width: 112px;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 15px;
 }
 
 .savedHint {
@@ -80,10 +82,7 @@
 }
 
 .settingsWorkspace {
-  display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
-  align-items: start;
-  gap: 26px;
+  display: block;
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
@@ -127,8 +126,9 @@
 
 .apiCardGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(260px, 1fr));
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+  gap: 18px;
 }
 
 .floatCard {
@@ -193,78 +193,130 @@
 }
 
 .llmModelCard {
-  padding: 14px 14px 12px;
+  padding: 18px;
+  min-height: 0;
 }
 
 .llmModelCardTopBar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--settings-border);
 }
 
 .llmModelCardTopLeft {
   display: flex;
-  align-items: center;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
 }
 
 .llmModelCardTopRight {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.llmModelCardFieldsCompact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.llmModelCardRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.llmModelCardRow > * {
+  flex: 1;
+  min-width: 0;
 }
 
 .defaultBadge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  min-width: 84px;
+  height: 34px;
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #050505;
+  color: #ffffff;
   font-size: 12px;
-  font-weight: 600;
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.2);
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.defaultBadge svg {
+  display: none;
 }
 
 .setDefaultBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  height: 34px;
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--settings-ink);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--settings-border);
-  padding: 4px 10px;
-  border-radius: 6px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .setDefaultBtn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: var(--settings-border-strong);
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.setDefaultBtn:active {
+  transform: translateY(1px);
 }
 
 .deleteModelBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--settings-muted);
-  border-radius: 6px;
+  min-width: 68px;
+  height: 34px;
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .deleteModelBtn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.deleteModelBtn:active {
+  transform: translateY(1px);
 }
 
 .toggleSwitch {
@@ -279,54 +331,40 @@
 }
 
 .toggleSwitchSlider {
-  width: 38px;
-  height: 22px;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
   position: relative;
-  transition: background-color 0.2s, border-color 0.2s;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  height: 34px;
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .toggleSwitchSlider::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background-color: #a1a1aa;
-  border-radius: 50%;
-  transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  content: "停用";
 }
 
 .toggleSwitchInput:checked + .toggleSwitchSlider {
-  background-color: #10b981;
-  border-color: #059669;
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
 }
 
 .toggleSwitchInput:checked + .toggleSwitchSlider::after {
-  transform: translateX(16px);
-  background-color: #fff;
+  content: "启用";
 }
 
-.llmModelCardFieldsCompact {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.llmModelCardRow {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.llmModelCardRow > * {
-  flex: 1;
-  min-width: 0;
+.toggleSwitch:active .toggleSwitchSlider {
+  transform: translateY(1px);
 }
 
 /* 生图提示词 tab：比默认 shell 更宽，便于 4 列卡片与编辑区并排 */
@@ -413,6 +451,39 @@
   gap: 10px;
 }
 
+.promptMediaCard .promptModeEditBody {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.promptMediaCard .promptModeMainColumn {
+  width: 100%;
+}
+
+.promptMediaCard .promptModeTextarea {
+  min-height: 220px;
+  max-height: 320px;
+}
+
+.promptMediaCard .promptModeCoverSlot {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.promptMediaCard .promptModeCoverFrame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0;
+}
+
+.promptMediaCard .promptModeCoverImage,
+.promptMediaCard .promptModeCoverUploadLabel {
+  height: 100%;
+  min-height: 0;
+}
+
 .promptModeCardHead {
   margin: 0;
   padding-bottom: 6px;
@@ -473,36 +544,42 @@
 .promptModeProviderButton {
   box-sizing: border-box;
   min-width: 88px;
-  height: 28px;
+  height: 34px;
   margin: 0;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--settings-ink);
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: 15px;
+  background: #ffffff;
+  color: #050505;
   font: inherit;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
 .promptModeProviderButton:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: #050505;
+  background: #050505;
+  color: #ffffff;
+}
+
+.promptModeProviderButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .settingsContent .promptModeProviderButtonActive {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: #fafafa !important;
-  color: #09090b !important;
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
 }
 
 .settingsContent .promptModeProviderButtonActive:hover:not(:disabled) {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: #ffffff !important;
-  color: #09090b !important;
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
 }
 
 .settingsContent .promptModeProviderButton:focus-visible {
@@ -710,6 +787,21 @@
   flex-shrink: 0;
 }
 
+.promptModeCardActions button {
+  transition: background 140ms ease, color 140ms ease, transform 120ms ease;
+}
+
+.settingsContent .promptModeCardActions button:hover:not(:disabled),
+.settingsContent .promptModeCardActions button:active:not(:disabled) {
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.settingsContent .promptModeCardActions button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .chatPromptColumn {
   flex: 1;
   display: flex;
@@ -786,10 +878,9 @@
 }
 
 .settingsWorkspace {
-  display: grid;
-  grid-template-columns: minmax(168px, 196px) minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
+  display: block;
+  width: 100%;
+  max-width: 100%;
 }
 
 .subnav {
@@ -806,7 +897,6 @@
 }
 
 .subnavPill,
-.saveButton,
 .setDefaultBtn,
 .deleteModelBtn,
 .promptModeProviderButton,
@@ -815,6 +905,14 @@
 .promptCopyButton {
   border: 3px solid #050505;
   border-radius: 999px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: none;
+}
+
+.saveButton {
+  border: 3px solid #050505;
+  border-radius: 15px;
   background: #ffffff;
   color: #050505;
   box-shadow: none;
@@ -881,12 +979,28 @@
 }
 
 .toggleSwitchSlider {
-  border: 2px solid #050505;
+  border: 3px solid #050505;
   background: #ffffff;
 }
 
 .toggleSwitchInput:checked + .toggleSwitchSlider {
   background: #050505;
+}
+
+.setDefaultBtn,
+.defaultBadge,
+.deleteModelBtn,
+.toggleSwitchSlider,
+.promptModeProviderButton {
+  height: 34px;
+  border-radius: 15px;
+}
+
+.promptModeProviderButtonActive,
+.settingsContent .promptModeProviderButtonActive {
+  border-color: #050505;
+  background: #050505 !important;
+  color: #ffffff !important;
 }
 
 .promptPreviewBackdrop {
@@ -993,74 +1107,139 @@
   color: #5f5f5a;
 }
 
-/* Third-pass cleanup: reduce nested-card noise in preset cards and make top
-   status readable as a real state pill. */
-
-.savedHint {
-  display: inline-flex;
-  align-items: center;
-  max-width: min(560px, 50vw);
-  min-height: 34px;
-  padding: 0 14px;
-  border: 2px solid #050505;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #050505;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Settings model cards: restored grid-card layout. */
+.settingsWorkspace {
+  display: block;
+  width: 100%;
+  max-width: 100%;
 }
 
-.savedHint:has(:not(*)) {
-  color: #050505;
-}
-
-.promptModeCard {
-  padding: 16px;
-}
-
-.promptModeEditBody {
+.adminSettingsWorkspace {
+  display: grid;
+  grid-template-columns: minmax(168px, 196px) minmax(0, 1fr);
+  gap: 28px;
   align-items: stretch;
-  gap: 14px;
+  min-height: calc(100vh - 132px);
 }
 
-.promptModeTextareaReadOnly {
-  border: 0;
-  border-radius: 18px;
-  background: transparent;
-  padding: 6px 0;
-  color: #050505;
-  opacity: 1;
+.adminSettingsWorkspace.promptModeShell {
+  grid-template-columns: 188px minmax(0, 1fr);
 }
 
-.promptModeCoverFrameReadOnly {
-  border-width: 0;
-  border-radius: 18px;
-  background: transparent;
-  opacity: 1;
-}
-
-.promptModeCoverFrame:not(.promptModeCoverFrameReadOnly):hover,
-.promptModeTextarea:not(.promptModeTextareaReadOnly):hover {
-  border-color: #050505;
-  background: #f3f3ef;
-}
-
-.promptModeCoverFrameFilled {
-  border-width: 2px;
-}
-
-.promptModeCoverBusy {
-  border: 2px solid #050505;
-  border-radius: 999px;
+.adminSettingsWorkspace .subnav {
+  position: sticky;
+  top: 20px;
+  align-self: stretch;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 132px);
+  margin: 0;
+  padding: 14px;
+  border: 3px solid #050505;
+  border-radius: 30px;
   background: #ffffff;
-  color: #050505;
-  inset: 50%;
-  width: max-content;
-  height: 30px;
-  padding: 0 12px;
-  transform: translate(-50%, -50%);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.adminSettingsWorkspace .subnavPill {
+  width: 100%;
+}
+
+.apiCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.modelApiGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.llmModelCard {
+  padding: 18px;
+}
+
+.llmModelCardTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #050505;
+}
+
+.llmModelCardTopLeft {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.llmModelCardTopRight {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.llmModelCardFieldsCompact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.llmModelCardRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.llmModelCardRow > * {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .adminSettingsWorkspace,
+  .adminSettingsWorkspace.promptModeShell {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .adminSettingsWorkspace .subnav {
+    position: static;
+    flex-direction: row;
+    min-height: 0;
+    overflow-x: auto;
+  }
+
+  .apiCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .modelApiGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .llmModelCardTopBar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .llmModelCardTopRight {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .llmModelCardRow {
+    flex-direction: column;
+  }
 }

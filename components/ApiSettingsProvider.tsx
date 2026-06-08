@@ -13,16 +13,23 @@ import { usePathname, useRouter } from "next/navigation";
 import { DEFAULT_IMAGE_SETTINGS } from "@/lib/image-workspace";
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
 import { DEFAULT_VIDEO_SETTINGS, type VideoWorkspaceSettings } from "@/lib/video-workspace";
-import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
+import { fetchWorkspaceSnapshot, saveWorkspaceSnapshot } from "@/lib/workspace-api";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import {
+  DEFAULT_API_USAGE_MODE,
+  type ApiUsageMode,
+  type ApiUsageSource,
+} from "@/lib/db/workspace-settings-store";
 
 type ApiSettingsContextValue = {
   settings: Settings;
   imageWorkspace: ImageWorkspaceSettings;
   videoWorkspace: VideoWorkspaceSettings;
+  apiUsageMode: ApiUsageMode;
   workspaceReady: boolean;
   refreshWorkspace: () => Promise<void>;
+  setApiUsageMode: (patch: Partial<ApiUsageMode>) => Promise<void>;
   openSettings: () => void;
 };
 
@@ -42,6 +49,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [imageWorkspace, setImageWorkspace] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoWorkspace, setVideoWorkspace] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
+  const [apiUsageMode, setApiUsageModeState] = useState<ApiUsageMode>(DEFAULT_API_USAGE_MODE);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const isPublicAuthPath =
     pathname === "/" ||
@@ -55,6 +63,7 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
       setSettings(DEFAULT_SETTINGS);
       setImageWorkspace(DEFAULT_IMAGE_SETTINGS);
       setVideoWorkspace(DEFAULT_VIDEO_SETTINGS);
+      setApiUsageModeState(DEFAULT_API_USAGE_MODE);
       setWorkspaceReady(false);
       return;
     }
@@ -64,12 +73,33 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
       setSettings(snapshot.llm ?? DEFAULT_SETTINGS);
       setImageWorkspace(snapshot.imageWorkspace);
       setVideoWorkspace(snapshot.videoWorkspace);
+      setApiUsageModeState(snapshot.apiUsageMode ?? DEFAULT_API_USAGE_MODE);
     } catch (e) {
       console.error("[ApiSettingsProvider] refresh failed", e);
     } finally {
       setWorkspaceReady(true);
     }
   }, [isPublicAuthPath]);
+
+  const setApiUsageMode = useCallback(
+    async (patch: Partial<Record<keyof ApiUsageMode, ApiUsageSource>>) => {
+      const next = { ...apiUsageMode, ...patch };
+      setApiUsageModeState(next);
+      try {
+        const snapshot = await saveWorkspaceSnapshot({
+          apiUsageMode: next,
+        });
+        setSettings(snapshot.llm ?? DEFAULT_SETTINGS);
+        setImageWorkspace(snapshot.imageWorkspace);
+        setVideoWorkspace(snapshot.videoWorkspace);
+        setApiUsageModeState(snapshot.apiUsageMode ?? next);
+      } catch (error) {
+        setApiUsageModeState(apiUsageMode);
+        throw error;
+      }
+    },
+    [apiUsageMode],
+  );
 
   useEffect(() => {
     void refreshWorkspace();
@@ -80,8 +110,17 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const value = useMemo(
-    () => ({ settings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace, openSettings }),
-    [settings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace, openSettings],
+    () => ({
+      settings,
+      imageWorkspace,
+      videoWorkspace,
+      apiUsageMode,
+      workspaceReady,
+      refreshWorkspace,
+      setApiUsageMode,
+      openSettings,
+    }),
+    [settings, imageWorkspace, videoWorkspace, apiUsageMode, workspaceReady, refreshWorkspace, setApiUsageMode, openSettings],
   );
 
   return <ApiSettingsContext.Provider value={value}>{children}</ApiSettingsContext.Provider>;

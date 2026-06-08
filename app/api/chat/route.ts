@@ -2,16 +2,19 @@ import { NextRequest } from "next/server";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { loadSystemPrompt } from "@/lib/prompt-loader";
 import { normalizeCreativeDirectionId } from "@/lib/creative-directions";
-import type { Message, Settings } from "@/lib/types";
+import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
+import { resolveLlmModel } from "@/lib/llm-models";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Message } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 interface ChatRequestBody {
   messages: Message[];
-  settings: Settings;
   creativeDirectionId?: string;
   /** 工程侧项目状态（验收、圣经等），追加在系统提示后 */
   projectContext?: string;
+  preferredLlmModelId?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -22,11 +25,26 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { messages, settings, creativeDirectionId, projectContext } = body;
+  const { messages, creativeDirectionId, projectContext } = body;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: "请先登录" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
+  const modelConfig = resolveLlmModel(snapshot.llm, body.preferredLlmModelId);
 
-  if (!settings?.apiKey) {
+  if (!modelConfig.apiKey) {
+    const message = snapshot.apiUsageMode?.llm === "user"
+      ? "请到设置页填写自己的 LLM API Key。"
+      : "网站内部 LLM API 暂未配置，请联系管理员。";
     return new Response(
-      JSON.stringify({ error: "请先在设置 → LLM API 中填写 API Key。" }),
+      JSON.stringify({ error: message }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -43,17 +61,17 @@ export async function POST(req: NextRequest) {
     ...messages,
   ];
 
-  const apiUrl = settings.apiUrl || "https://api.openai.com/v1/chat/completions";
+  const apiUrl = modelConfig.apiUrl || "https://api.openai.com/v1/chat/completions";
 
   try {
     const upstream = await fetchWithRetry(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
+        Authorization: `Bearer ${modelConfig.apiKey}`,
       },
       body: JSON.stringify({
-        model: settings.model || "gpt-4o",
+        model: modelConfig.modelName || "gpt-4o",
         messages: apiMessages,
         stream: true,
       }),

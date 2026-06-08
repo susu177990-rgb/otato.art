@@ -78,7 +78,7 @@ export function ChatSkillRail({
 
                   {skillPacks.length === 0 ? (
                     <Link
-                      href="/settings?tab=skillPacks"
+                      href="/admin?tab=skillPacks"
                       className={[imageStyles.modeButton, railStyles.railCard].join(" ")}
                     >
                       <span className={[imageStyles.modeName, railStyles.railName].join(" ")}>添加 Skill</span>

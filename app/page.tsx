@@ -13,6 +13,7 @@ function ModeHomeInner() {
   const searchParams = useSearchParams();
   const projectParam = searchParams.get("project");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!projectParam) return;
@@ -46,6 +47,20 @@ function ModeHomeInner() {
     }
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    void fetch("/api/admin/me", { cache: "no-store" })
+      .then((res) => {
+        if (mounted) setIsAdmin(res.ok);
+      })
+      .catch(() => {
+        if (mounted) setIsAdmin(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   if (projectParam) {
     return <div className={shellStyles.empty}>正在跳转…</div>;
   }
@@ -55,20 +70,33 @@ function ModeHomeInner() {
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
-            <Image
+            {isAdmin ? (
+              <Link href="/admin" aria-label="进入管理页" className={shellStyles.brandLogoLink}>
+                <Image
+                  src="/oTATo.svg"
+                  alt={BRAND_NAME}
+                  width={36}
+                  height={36}
+                  className={shellStyles.brandLogo}
+                  priority
+                />
+              </Link>
+            ) : (
+              <Image
               src="/oTATo.svg"
               alt={BRAND_NAME}
               width={36}
               height={36}
               className={shellStyles.brandLogo}
               priority
-            />
+              />
+            )}
             <span className={shellStyles.brandWordmark}>oTATo Art</span>
           </div>
         </div>
         <nav className={shellStyles.topnav}>
           <Link href="/settings" className={shellStyles.navLink}>
-            设置
+            API设置
           </Link>
           <Link href={isLoggedIn ? "/me" : "/login?next=/"} className={shellStyles.navLink}>
             {isLoggedIn ? "我的" : "登录 / 注册"}

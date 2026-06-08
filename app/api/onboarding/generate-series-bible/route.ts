@@ -1,14 +1,15 @@
 import { NextRequest } from "next/server";
 import { completeSeriesBibleLlm } from "@/lib/series-bible-llm";
 import { getProject, saveProject } from "@/lib/project-store";
-import type { Project, Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Project } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   let body: {
     projectId?: string;
-    settings?: Settings;
     allowWithProgress?: boolean;
     replaceExisting?: boolean;
     creativeBriefOverride?: string;
@@ -20,10 +21,13 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = body.projectId;
-  const settings = body.settings;
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
   const allowWithProgress = Boolean(body.allowWithProgress);
   const replaceExisting = Boolean(body.replaceExisting);
-  if (!projectId || !settings?.apiKey) {
+  if (!projectId) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 

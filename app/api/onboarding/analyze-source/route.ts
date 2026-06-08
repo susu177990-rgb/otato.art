@@ -4,7 +4,9 @@ import { loadAdaptationAnalyzePrompt } from "@/lib/prompt-loader";
 import { completeChatNonStream } from "@/lib/openai-completion";
 import { totalSourceChars } from "@/lib/source-materials";
 import { buildCreativeDirectionContext } from "@/lib/creative-directions";
-import type { OnboardingStatus, Project, Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { OnboardingStatus, Project } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export const runtime = "nodejs";
 const ANALYZE_INPUT_MAX = 1_000_000;
 
 export async function POST(req: NextRequest) {
-  let body: { projectId?: string; settings?: Settings };
+  let body: { projectId?: string };
   try {
     body = await req.json();
   } catch {
@@ -25,8 +27,11 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = body.projectId;
-  const settings = body.settings;
-  if (!projectId || !settings?.apiKey) {
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
+  if (!projectId) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 

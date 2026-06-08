@@ -22,6 +22,7 @@ import {
   type ImageSizeTier,
 } from "@/lib/image-workspace";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
+import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
@@ -907,6 +908,9 @@ export default function ImagePage() {
           >
             提示词预设
           </button>
+        </div>
+        <div className={shellStyles.topnav}>
+          <ApiUsageModeSwitch module="image" />
         </div>
       </header>
 

@@ -102,6 +102,14 @@
   border-radius: 10px;
 }
 
+.brandLogoLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
 .brandWordmark {
   color: #050505;
   font-size: 14px;
@@ -1439,6 +1447,11 @@
   border: 3px solid var(--outline-border, #050505);
   border-radius: 999px;
   background: #ffffff;
+}
+
+.brandLogoLink:focus-visible {
+  outline: 3px solid var(--outline-border, #050505);
+  outline-offset: 3px;
 }
 
 .brandWordmark,

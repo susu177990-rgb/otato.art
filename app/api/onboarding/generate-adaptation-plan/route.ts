@@ -6,7 +6,9 @@ import { getProject, saveProject } from "@/lib/project-store";
 import { loadAdaptationPlannerPrompt } from "@/lib/prompt-loader";
 import { completeSeriesBibleLlm } from "@/lib/series-bible-llm";
 import { buildCreativeDirectionContext } from "@/lib/creative-directions";
-import type { Message, OnboardingStatus, Project, ProjectMeta, Settings } from "@/lib/types";
+import { requireCurrentUserLlmSettings } from "@/lib/api/current-user-settings";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Message, OnboardingStatus, Project, ProjectMeta } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,7 @@ function metaForBootstrap(p: Project): ProjectMeta {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { projectId?: string; settings?: Settings; adaptationMessages?: Message[] };
+  let body: { projectId?: string; adaptationMessages?: Message[] };
   try {
     body = await req.json();
   } catch {
@@ -42,8 +44,11 @@ export async function POST(req: NextRequest) {
   }
 
   const projectId = body.projectId;
-  const settings = body.settings;
-  if (!projectId || !settings?.apiKey) {
+  const supabase = await createSupabaseServerClient();
+  const current = await requireCurrentUserLlmSettings(supabase);
+  if (!current.ok) return current.response;
+  const settings = current.settings;
+  if (!projectId) {
     return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
   }
 

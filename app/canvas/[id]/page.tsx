@@ -5,6 +5,7 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
+import { ApiUsageModeSwitchAll } from "@/components/ApiUsageModeSwitch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPortal } from "react-dom";
 import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
@@ -2196,6 +2197,7 @@ export default function CanvasBoardPage() {
           </div>
         </div>
         <nav className={shellStyles.topnav}>
+          <ApiUsageModeSwitchAll />
         </nav>
       </header>
 
