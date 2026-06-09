@@ -111,20 +111,6 @@ function ModeHomeInner() {
         </div>
 
         <div className={shellStyles.tileGrid} style={{ marginTop: 32 }}>
-          <button type="button" onClick={() => router.push("/wattpad")} className={shellStyles.tile}>
-            <span className={shellStyles.tileIcon}>
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
-                />
-              </svg>
-            </span>
-            <p className={shellStyles.tileTitle}>扒网文</p>
-            <p className={shellStyles.tileMeta}>Wattpad 搜索与导出</p>
-          </button>
-
           <button type="button" onClick={() => router.push("/projects")} className={shellStyles.tile}>
             <span className={shellStyles.tileIcon}>
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -214,19 +200,6 @@ function ModeHomeInner() {
             <p className={shellStyles.tileMeta}>素材编排 · 分镜关系 · 灵感板</p>
           </button>
 
-          <button type="button" onClick={() => router.push("/ai-live-action")} className={shellStyles.tile}>
-            <span className={shellStyles.tileIcon}>
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6.75h16.5m-16.5 0v10.5A2.25 2.25 0 0 0 6 19.5h12a2.25 2.25 0 0 0 2.25-2.25V6.75m-16.5 0A2.25 2.25 0 0 1 6 4.5h12a2.25 2.25 0 0 1 2.25 2.25M8.25 14.25l2.25-2.25 1.5 1.5 2.25-3 1.5 2.25"
-                />
-              </svg>
-            </span>
-            <p className={shellStyles.tileTitle}>AI+实拍</p>
-            <p className={shellStyles.tileMeta}>首帧重构 · 转绘</p>
-          </button>
         </div>
       </div>
     </main>

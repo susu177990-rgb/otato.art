@@ -7,8 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "wattpad-api": "bash scripts/start-wattpad-api.sh",
-    "dev": "concurrently -k --kill-others-on-fail -n next,wattpad -c cyan,magenta \"npm run dev:web\" \"bash scripts/start-wattpad-api.sh\"",
+    "dev": "npm run dev:web",
     "dev:web": "next dev -p 4000 --webpack",
     "dev:web:turbopack": "next dev -p 4000",
     "dev:web:webpack": "next dev -p 4000 --webpack",
@@ -67,7 +66,6 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "concurrently": "^9.2.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",

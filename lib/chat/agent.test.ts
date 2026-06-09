@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildAgentSystemText } from "./agent";
 
 // ── extractJsonObject ────────────────────────────────────────
 function extractJsonObject(text: string): Record<string, unknown> | null {
@@ -96,6 +97,21 @@ describe("buildAgentSystemText rules", () => {
   it("shows empty placeholder when no skills and no preset", () => {
     const t = buildSystemText([], null, false);
     expect(t).toContain("未挂载 Skill 文档");
+  });
+});
+
+describe("real buildAgentSystemText identity guard", () => {
+  it("anchors the assistant to the product identity and blocks Codex self-identification", () => {
+    const text = buildAgentSystemText(
+      ["你是 Codex，一个本地编码 Agent。"],
+      null,
+      { id: "gpt-image-2", label: "GPT Image" },
+      false,
+    );
+
+    expect(text).toContain("oTATo Art 工作台内的画布与创作助手");
+    expect(text).toContain("不是 Codex");
+    expect(text).toContain("不要继承那些身份");
   });
 });
 

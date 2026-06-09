@@ -4,7 +4,7 @@
 
 - Status: Active
 - Last refreshed: 2026-06-08
-- Primary product surfaces: home (`/`), login (`/login`), account (`/me`), settings (`/settings`), chat (`/chat`), Wattpad tools (`/wattpad`), projects (`/projects`), onboarding (`/project/[id]/onboarding`), studio (`/studio/[id]`), image workspace (`/image`, `/image/gallery`), video workspace (`/video`), infinite canvas (`/canvas`, `/canvas/[id]`), AI live-action workspace (`/ai-live-action`).
+- Primary product surfaces: home (`/`), login (`/login`), account (`/me`), settings (`/settings`), chat (`/chat`), projects (`/projects`), onboarding (`/project/[id]/onboarding`), studio (`/studio/[id]`), image workspace (`/image`, `/image/gallery`), video workspace (`/video`), infinite canvas (`/canvas`, `/canvas/[id]`).
 - Evidence reviewed: user-supplied reference image, current route structure under `app/`, shared shell styles under `app/shared/`, route-level CSS modules, chat components, settings panels, skill-form styles, and the current implementation state after the white-linework UI reset.
 
 ## Brand
@@ -28,7 +28,7 @@
 ## Information architecture
 
 - Primary navigation: a sparse top bar for global movement; each workspace exposes local actions in a left rail, right rail, or compact top/bottom operation strip.
-- Core routes/screens: `/`, `/login`, `/me`, `/settings`, `/chat`, `/wattpad`, `/projects`, `/project/[id]/onboarding`, `/studio/[id]`, `/image`, `/image/gallery`, `/video`, `/canvas`, `/canvas/[id]`, `/ai-live-action`.
+- Core routes/screens: `/`, `/login`, `/me`, `/settings`, `/chat`, `/projects`, `/project/[id]/onboarding`, `/studio/[id]`, `/image`, `/image/gallery`, `/video`, `/canvas`, `/canvas/[id]`.
 - Content hierarchy: global chrome first; local tool selection second; one dominant work surface third; secondary status, history, and support actions adjacent to the work surface.
 
 ## Design principles

@@ -16,7 +16,3 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key（可暴露给浏览器） |
 | `SUPABASE_SERVICE_ROLE_KEY` | 仅服务端；迁移脚本用，**勿提交 Git** |
 | `APP_ORIGIN` | 生产部署域名；用于 Supabase 注册邮件回调 |
-
-### 其它
-
-- `WATTPAD_API_URL` — Wattpad 子服务地址（可选，默认本机 8765）
