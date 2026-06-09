@@ -361,6 +361,12 @@ function normWheelDelta(e: WheelEvent) {
   return { dx: e.deltaX * factor, dy: e.deltaY * factor };
 }
 
+function isCanvasGestureBlockedTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(
+    target.closest("textarea,input,select,button,video,audio,[contenteditable='true'],[data-canvas-no-zoom],[data-canvas-scroll-area]"),
+  );
+}
+
 function bezierPath(from: CanvasNode, to: CanvasNode, targetPort: CanvasTargetPort) {
   const { start, cp1, cp2, end } = connectionBezierControls(from, to, targetPort);
   return `M ${start.x} ${start.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${end.x} ${end.y}`;
@@ -879,8 +885,7 @@ export default function CanvasBoardPage() {
   }, [videoSettings]);
 
   const handleCanvasWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("textarea,input,select,video,audio,[data-canvas-no-zoom]")) return;
+    if (isCanvasGestureBlockedTarget(event.target)) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -918,7 +923,10 @@ export default function CanvasBoardPage() {
     const el = containerRef.current;
     if (!el) return;
 
-    const handler = (event: WheelEvent) => event.preventDefault();
+    const handler = (event: WheelEvent) => {
+      if (isCanvasGestureBlockedTarget(event.target)) return;
+      event.preventDefault();
+    };
     el.addEventListener("wheel", handler, { passive: false });
     return () => {
       el.removeEventListener("wheel", handler);
@@ -2238,6 +2246,7 @@ export default function CanvasBoardPage() {
           }}
           onWheel={handleCanvasWheel}
           onPointerDown={(e) => {
+            if (isCanvasGestureBlockedTarget(e.target)) return;
             dismissOverlays();
 
             // Middle button OR Space+left button → pan
@@ -2591,7 +2600,11 @@ export default function CanvasBoardPage() {
                           <span className={[styles.textNodeDragEdge, styles.textNodeDragEdgeLeft].join(" ")} onPointerDown={startTextNodeEdgeDrag} />
                         </div>
                         {node.metadata?.chatPreviewMarkdown?.trim() ? (
-                          <div className={styles.textChatMarkdown}>
+                          <div
+                            className={styles.textChatMarkdown}
+                            data-canvas-scroll-area
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
                             <ChatMarkdown markdown={node.metadata.chatPreviewMarkdown} />
                           </div>
                         ) : (
@@ -2985,7 +2998,11 @@ export default function CanvasBoardPage() {
                             onPointerDown={(e) => e.stopPropagation()}
                           />
                         ) : (
-                          <div className={[styles.textNodeMarkdownPreview, styles.textNodePreview].join(" ")}>
+                          <div
+                            className={[styles.textNodeMarkdownPreview, styles.textNodePreview].join(" ")}
+                            data-canvas-scroll-area
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
                             {node.metadata?.text?.trim() ? (
                               <ChatMarkdown markdown={node.metadata.text} />
                             ) : (
@@ -3257,6 +3274,7 @@ export default function CanvasBoardPage() {
                 >
                   <section
                     className={styles.presetLibraryPanel}
+                    data-canvas-no-zoom
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -3303,7 +3321,12 @@ export default function CanvasBoardPage() {
                       </div>
                     </header>
                     {presetLibraryError ? <div className={styles.presetLibraryError}>{presetLibraryError}</div> : null}
-                    <div className={styles.presetLibraryGrid}>
+                    <div
+                      className={styles.presetLibraryGrid}
+                      data-canvas-scroll-area
+                      onWheel={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
                       {promptPresets.length === 0 ? (
                         <div className={styles.presetLibraryEmpty}>暂无提示词预设</div>
                       ) : (

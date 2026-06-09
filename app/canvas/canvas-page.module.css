@@ -408,6 +408,8 @@
   overflow-x: hidden;
   scrollbar-width: none;
   cursor: text;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .textNodeInput::-webkit-scrollbar {
@@ -471,6 +473,8 @@
   overflow: auto;
   padding: 12px;
   background: rgba(10, 10, 11, 0.94);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .textNodeEmptyHint {
@@ -522,6 +526,8 @@
   width: 100%;
   overflow: auto;
   padding: 16px;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .textChatEmpty {
@@ -2127,6 +2133,8 @@
 .presetLibraryGrid {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 32px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
