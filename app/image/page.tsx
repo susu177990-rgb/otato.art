@@ -68,6 +68,51 @@ type ImageGenerationRuntimeState = {
   error?: string;
 };
 
+type ImageGenerateFailureDetails = {
+  stage?: string;
+  routeKind?: string;
+  endpoint?: string;
+  status?: number;
+  taskId?: string;
+  modelId?: string;
+  apiUsageMode?: string;
+  upstreamBody?: string;
+};
+
+type ImageGenerateFailurePayload = {
+  error?: string;
+  code?: string;
+  traceId?: string;
+  details?: ImageGenerateFailureDetails;
+};
+
+const IMAGE_GENERATE_STAGE_LABELS: Record<string, string> = {
+  request_parse: "请求解析",
+  model_config: "模型配置",
+  upstream_submit: "提交到 API 中转站",
+  upstream_poll: "查询中转站任务结果",
+  upstream_parse: "解析中转站响应",
+  upstream_timeout: "等待中转站结果超时",
+  storage: "保存生成图到云存储",
+  unknown: "未知阶段",
+};
+
+function formatImageGenerateFailure(data: ImageGenerateFailurePayload, fallback = "生图失败"): string {
+  const message = typeof data.error === "string" && data.error.trim() ? data.error.trim() : fallback;
+  const details = data.details && typeof data.details === "object" ? data.details : {};
+  const parts: string[] = [];
+  if (details.stage) parts.push(`阶段：${IMAGE_GENERATE_STAGE_LABELS[details.stage] ?? details.stage}`);
+  if (details.routeKind) parts.push(`路由：${details.routeKind}`);
+  if (details.endpoint) parts.push(`Endpoint：${details.endpoint}`);
+  if (details.status) parts.push(`HTTP：${details.status}`);
+  if (details.taskId) parts.push(`任务ID：${details.taskId}`);
+  if (details.modelId) parts.push(`模型槽位：${details.modelId}`);
+  if (details.apiUsageMode) parts.push(`API模式：${details.apiUsageMode === "site" ? "全局" : "个人"}`);
+  if (data.traceId) parts.push(`Trace：${data.traceId}`);
+  if (details.upstreamBody) parts.push(`上游响应：${details.upstreamBody}`);
+  return parts.length ? `${message}\n${parts.join("\n")}` : message;
+}
+
 function createEmptyRefSlots(): RefSlot[] {
   return Array.from({ length: IMAGE_REF_SLOT_COUNT }, () => null);
 }
@@ -861,10 +906,10 @@ export default function ImagePage() {
         method: "POST",
         body: fd,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "生图失败");
+      const data = (await res.json().catch(() => ({}))) as ImageGenerateFailurePayload & { imageUrl?: string };
+      if (!res.ok) throw new Error(formatImageGenerateFailure(data));
       const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl.trim() : "";
-      if (!imageUrl) throw new Error(typeof data.error === "string" && data.error ? data.error : "服务器未返回图片地址");
+      if (!imageUrl) throw new Error(formatImageGenerateFailure(data, "服务器未返回图片地址"));
       if (runtimeState) {
         writeGenerationRuntimeState({
           ...runtimeState,

@@ -17,6 +17,62 @@ type GenerateBody = {
   refImages?: string[];
 };
 
+export type ImageGenerationFailureStage =
+  | "request_parse"
+  | "model_config"
+  | "upstream_submit"
+  | "upstream_poll"
+  | "upstream_parse"
+  | "upstream_timeout"
+  | "storage"
+  | "unknown";
+
+export type ImageGenerationErrorDetails = {
+  stage: ImageGenerationFailureStage;
+  routeKind?: string;
+  endpoint?: string;
+  status?: number;
+  taskId?: string;
+  upstreamBody?: string;
+};
+
+export class ImageGenerationError extends Error {
+  readonly details: ImageGenerationErrorDetails;
+
+  constructor(message: string, details: ImageGenerationErrorDetails, cause?: unknown) {
+    super(message);
+    this.name = "ImageGenerationError";
+    this.details = details;
+    if (cause !== undefined) {
+      this.cause = cause;
+    }
+  }
+}
+
+function endpointForDiagnostics(url: string): string {
+  const raw = url.trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return raw.replace(/[?#].*$/, "");
+  }
+}
+
+function textSnippet(value: string, max = 700): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+async function responseTextSnippet(response: Response): Promise<string> {
+  return textSnippet(await response.text().catch(() => ""));
+}
+
+function networkErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  return "网络请求失败";
+}
+
 async function blobToDataUrl(blob: Blob): Promise<string> {
   const buf = Buffer.from(await blob.arrayBuffer());
   const mime = blob.type || "application/octet-stream";
@@ -389,18 +445,35 @@ async function generateViaGrsai(
         };
   if (urls.length > 0) body.urls = urls;
 
-  const submit = await fetch(route.submitUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const diagnosticBase = {
+    routeKind: route.kind,
+    endpoint: endpointForDiagnostics(route.submitUrl),
+  };
+
+  let submit: Response;
+  try {
+    submit = await fetch(route.submitUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw new ImageGenerationError(
+      `未能连接到 API 中转站：${networkErrorMessage(error)}`,
+      { ...diagnosticBase, stage: "upstream_submit" },
+      error,
+    );
+  }
 
   if (!submit.ok) {
-    const err = await submit.text();
-    throw new Error(`API 错误 (${submit.status}): ${err}`);
+    const err = await responseTextSnippet(submit);
+    throw new ImageGenerationError(
+      `API 中转站提交失败 (${submit.status})${err ? `: ${err}` : ""}`,
+      { ...diagnosticBase, stage: "upstream_submit", status: submit.status, upstreamBody: err },
+    );
   }
 
   const initData = await readGrsaiBody(submit);
@@ -408,7 +481,11 @@ async function generateViaGrsai(
   if (immediate) return immediate;
 
   if (initData && typeof initData.code === "number" && !grsaiResponseOk(initData.code)) {
-    throw new Error((initData.msg as string) || `上游错误码 ${initData.code}`);
+    const upstreamBody = textSnippet(JSON.stringify(initData));
+    throw new ImageGenerationError(
+      (initData.msg as string) || `API 中转站返回错误码 ${initData.code}`,
+      { ...diagnosticBase, stage: "upstream_submit", upstreamBody },
+    );
   }
 
   const dataObj = (initData?.data as Record<string, unknown> | undefined) || {};
@@ -418,27 +495,68 @@ async function generateViaGrsai(
     (initData?.taskId as string) ||
     (typeof initData?.task_id === "string" ? initData.task_id : "");
   const taskId = typeof taskIdRaw === "string" ? taskIdRaw.trim() : "";
-  if (!taskId) throw new Error((initData?.msg as string) || "未返回任务 ID");
+  if (!taskId) {
+    const upstreamBody = initData ? textSnippet(JSON.stringify(initData)) : "";
+    throw new ImageGenerationError(
+      (initData?.msg as string) || "API 中转站已响应，但没有返回任务 ID；后台可能没有真正创建绘图任务。",
+      { ...diagnosticBase, stage: "upstream_parse", upstreamBody },
+    );
+  }
 
   /** POST `route.resultUrl`（一般为 `/v1/draw/result`），与文档一致：`{ "id": taskId }` */
   for (let i = 0; i < POLL_MAX_TRIES; i += 1) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    const res = await fetch(route.resultUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ id: taskId }),
-    });
+    let res: Response;
+    try {
+      res = await fetch(route.resultUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ id: taskId }),
+      });
+    } catch (error) {
+      throw new ImageGenerationError(
+        `查询绘图结果失败：${networkErrorMessage(error)}`,
+        { stage: "upstream_poll", routeKind: route.kind, endpoint: endpointForDiagnostics(route.resultUrl), taskId },
+        error,
+      );
+    }
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`获取结果失败 (${res.status}): ${err}`);
+      const err = await responseTextSnippet(res);
+      throw new ImageGenerationError(
+        `查询绘图结果失败 (${res.status})${err ? `: ${err}` : ""}`,
+        {
+          stage: "upstream_poll",
+          routeKind: route.kind,
+          endpoint: endpointForDiagnostics(route.resultUrl),
+          status: res.status,
+          taskId,
+          upstreamBody: err,
+        },
+      );
     }
     const r = await readGrsaiBody(res);
     if (!r) continue;
-    if (r.code === -22) throw new Error("任务不存在");
-    if (typeof r.code === "number" && !grsaiResponseOk(r.code)) throw new Error((r.msg as string) || "获取结果失败");
+    if (r.code === -22) {
+      throw new ImageGenerationError("API 中转站提示任务不存在。", {
+        stage: "upstream_poll",
+        routeKind: route.kind,
+        endpoint: endpointForDiagnostics(route.resultUrl),
+        taskId,
+        upstreamBody: textSnippet(JSON.stringify(r)),
+      });
+    }
+    if (typeof r.code === "number" && !grsaiResponseOk(r.code)) {
+      throw new ImageGenerationError((r.msg as string) || "获取绘图结果失败", {
+        stage: "upstream_poll",
+        routeKind: route.kind,
+        endpoint: endpointForDiagnostics(route.resultUrl),
+        taskId,
+        upstreamBody: textSnippet(JSON.stringify(r)),
+      });
+    }
 
     const data = (r.data as Record<string, unknown>) || r;
     const statusStr = data.status ?? r.status;
@@ -448,15 +566,29 @@ async function generateViaGrsai(
       !grsaiTerminalSuccessStatus(statusStr)
     ) {
       const reason = (data.failure_reason as string) || (data.error as string) || statusStr || "未知错误";
-      if (reason.includes("output_moderation")) throw new Error("输出违规");
-      if (reason.includes("input_moderation")) throw new Error("输入违规");
-      throw new Error(reason);
+      const message = reason.includes("output_moderation")
+        ? "输出违规"
+        : reason.includes("input_moderation")
+          ? "输入违规"
+          : reason;
+      throw new ImageGenerationError(message, {
+        stage: "upstream_poll",
+        routeKind: route.kind,
+        endpoint: endpointForDiagnostics(route.resultUrl),
+        taskId,
+        upstreamBody: textSnippet(JSON.stringify(r)),
+      });
     }
     if (data.status === "failed") {
       const reason = (data.failure_reason as string) || (data.error as string) || "未知错误";
-      if (reason === "output_moderation") throw new Error("输出违规");
-      if (reason === "input_moderation") throw new Error("输入违规");
-      throw new Error(reason);
+      const message = reason === "output_moderation" ? "输出违规" : reason === "input_moderation" ? "输入违规" : reason;
+      throw new ImageGenerationError(message, {
+        stage: "upstream_poll",
+        routeKind: route.kind,
+        endpoint: endpointForDiagnostics(route.resultUrl),
+        taskId,
+        upstreamBody: textSnippet(JSON.stringify(r)),
+      });
     }
 
     const imgUrl = parseGrsaiImageUrl(data) ?? parseGrsaiImageUrl(r);
@@ -470,7 +602,12 @@ async function generateViaGrsai(
     if (imgUrl && grsaiTerminalSuccessStatus(statusStr)) return imgUrl;
   }
 
-  throw new Error("生成超时，请稍后重试");
+  throw new ImageGenerationError("生成超时，请稍后重试", {
+    stage: "upstream_timeout",
+    routeKind: route.kind,
+    endpoint: endpointForDiagnostics(route.resultUrl),
+    taskId,
+  });
 }
 
 // ---------- OpenAI Images（/v1/images/generations 与 /v1/images/edits） ----------
@@ -502,14 +639,32 @@ async function generateViaOpenAIImages(
     } else {
       payload.image_size = imageSize;
     }
-    const r = await fetch(endpointUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(payload),
-    });
+    let r: Response;
+    try {
+      r = await fetch(endpointUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      throw new ImageGenerationError(
+        `未能连接到图片 API：${networkErrorMessage(error)}`,
+        { stage: "upstream_submit", routeKind: "openai-images", endpoint: endpointForDiagnostics(endpointUrl) },
+        error,
+      );
+    }
     if (!r.ok) {
-      const err = await r.text();
-      throw new Error(`API 错误 (${r.status}): ${err}`);
+      const err = await responseTextSnippet(r);
+      throw new ImageGenerationError(
+        `图片 API 提交失败 (${r.status})${err ? `: ${err}` : ""}`,
+        {
+          stage: "upstream_submit",
+          routeKind: "openai-images",
+          endpoint: endpointForDiagnostics(endpointUrl),
+          status: r.status,
+          upstreamBody: err,
+        },
+      );
     }
     return readImageOrThrow(r);
   }
@@ -560,10 +715,28 @@ async function generateViaOpenAIImages(
     fd.append("image_size", imageSize);
   }
 
-  const r = await fetch(editsUrl, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: fd });
+  let r: Response;
+  try {
+    r = await fetch(editsUrl, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: fd });
+  } catch (error) {
+    throw new ImageGenerationError(
+      `未能连接到图片编辑 API：${networkErrorMessage(error)}`,
+      { stage: "upstream_submit", routeKind: "openai-images", endpoint: endpointForDiagnostics(editsUrl) },
+      error,
+    );
+  }
   if (!r.ok) {
-    const err = await r.text();
-    throw new Error(`API 错误 (${r.status}): ${err}`);
+    const err = await responseTextSnippet(r);
+    throw new ImageGenerationError(
+      `图片编辑 API 提交失败 (${r.status})${err ? `: ${err}` : ""}`,
+      {
+        stage: "upstream_submit",
+        routeKind: "openai-images",
+        endpoint: endpointForDiagnostics(editsUrl),
+        status: r.status,
+        upstreamBody: err,
+      },
+    );
   }
   return readImageOrThrow(r);
 }
@@ -600,14 +773,32 @@ async function generateViaChatCompletions(
       { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
     ];
   }
-  const r = await fetch(endpointUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(payload),
-  });
+  let r: Response;
+  try {
+    r = await fetch(endpointUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw new ImageGenerationError(
+      `未能连接到 Chat Completions API：${networkErrorMessage(error)}`,
+      { stage: "upstream_submit", routeKind: "chat-completions", endpoint: endpointForDiagnostics(endpointUrl) },
+      error,
+    );
+  }
   if (!r.ok) {
-    const err = await r.text();
-    throw new Error(`API 错误 (${r.status}): ${err}`);
+    const err = await responseTextSnippet(r);
+    throw new ImageGenerationError(
+      `Chat Completions API 提交失败 (${r.status})${err ? `: ${err}` : ""}`,
+      {
+        stage: "upstream_submit",
+        routeKind: "chat-completions",
+        endpoint: endpointForDiagnostics(endpointUrl),
+        status: r.status,
+        upstreamBody: err,
+      },
+    );
   }
   return readImageOrThrow(r);
 }

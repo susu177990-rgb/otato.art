@@ -1940,6 +1940,8 @@
   box-shadow: none;
   background-clip: padding-box;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .freeModeToggle:hover,
