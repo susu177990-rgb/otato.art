@@ -298,7 +298,7 @@ async function downloadGeneratedImage(url: string): Promise<void> {
 }
 
 export default function ImagePage() {
-  const { settings: llmSettings, imageWorkspace, videoWorkspace, workspaceReady, refreshWorkspace } = useApiSettings();
+  const { settings: llmSettings, imageWorkspace, videoWorkspace, apiUsageMode, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
   const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
@@ -494,7 +494,11 @@ export default function ImagePage() {
     [promptTemplate, slotInputs],
   );
   const refSlotHintsLines = settings.refSlotHintsByMode[selectedModeId] ?? [];
-  const modelReady = Boolean(selectedModel.endpointUrl.trim() && selectedModel.apiKey.trim() && selectedModel.modelName.trim());
+  const modelReady = Boolean(
+    selectedModel.endpointUrl.trim() &&
+      selectedModel.modelName.trim() &&
+      (apiUsageMode.image === "site" || selectedModel.apiKey.trim()),
+  );
   const filledRefFileCount = useMemo(() => refSlots.filter(Boolean).length, [refSlots]);
   const sidebarHistoryRecords = useMemo(() => {
     const success = records.filter((r) => r.status === "success" && Boolean(r.imageUrl)).slice(0, 24);
@@ -792,8 +796,11 @@ export default function ImagePage() {
     }
     const cleanedPrompt = mentionResolution.prompt;
 
+    const liveImageApiMode = liveSnapshot.apiUsageMode?.image ?? "site";
     const liveReady = Boolean(
-      liveModel.endpointUrl && liveModel.apiKey && liveModel.modelName,
+      liveModel.endpointUrl &&
+        liveModel.modelName &&
+        (liveImageApiMode === "site" || liveModel.apiKey),
     );
 
     if (!liveReady) {
