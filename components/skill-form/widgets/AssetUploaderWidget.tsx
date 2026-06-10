@@ -107,6 +107,7 @@ export function AssetUploaderWidget(props: WidgetProps) {
         <div className={styles.assetList}>
           {rows.map((row, index) => (
             <div key={`${row.asset_id}-${index}`} className={styles.assetRow}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Asset previews may use user-supplied temporary or remote URLs outside next/image remotePatterns. */}
               <img src={row.asset_url} alt="" className={styles.assetThumb} />
               <div className={styles.assetFields}>
                 <label className={shellStyles.field}>

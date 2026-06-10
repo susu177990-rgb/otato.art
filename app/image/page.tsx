@@ -662,6 +662,27 @@ export default function ImagePage() {
     });
   }, [sidebarHistoryRecords]);
 
+  function markRefSlotsUserEdited() {
+    refSlotsUserEditedRef.current = true;
+  }
+
+  const addRefImages = useCallback((files: File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    refSlotsUserEditedRef.current = true;
+    setRefSlots((prev) => {
+      const next = normalizeRefSlots(prev);
+      let imageIndex = 0;
+      for (let slotIndex = 0; slotIndex < next.length && imageIndex < images.length; slotIndex += 1) {
+        if (!next[slotIndex]) {
+          next[slotIndex] = refSlotFromFile(images[imageIndex]);
+          imageIndex += 1;
+        }
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
       const items = Array.from(e.clipboardData?.items || []);
@@ -677,28 +698,7 @@ export default function ImagePage() {
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, []);
-
-  function markRefSlotsUserEdited() {
-    refSlotsUserEditedRef.current = true;
-  }
-
-  function addRefImages(files: File[]) {
-    const images = files.filter((file) => file.type.startsWith("image/"));
-    if (images.length === 0) return;
-    markRefSlotsUserEdited();
-    setRefSlots((prev) => {
-      const next = normalizeRefSlots(prev);
-      let imageIndex = 0;
-      for (let slotIndex = 0; slotIndex < next.length && imageIndex < images.length; slotIndex += 1) {
-        if (!next[slotIndex]) {
-          next[slotIndex] = refSlotFromFile(images[imageIndex]);
-          imageIndex += 1;
-        }
-      }
-      return next;
-    });
-  }
+  }, [addRefImages]);
 
   function fillRefImagesFromIndex(index: number, files: FileList | File[] | null | undefined) {
     if (!files) return;

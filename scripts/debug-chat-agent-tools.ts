@@ -1,4 +1,3 @@
-import { DEFAULT_IMAGE_SETTINGS } from "../lib/image-workspace";
 import { BAKED_LLM_SETTINGS } from "../lib/baked-api-defaults";
 import { OPENAI_AGENT_TOOLS } from "../lib/chat/agent";
 import { parseAssistantChoice, sendChatCompletionRaw, messageToOpenAiMessage } from "../lib/chat/completion";

@@ -146,7 +146,6 @@ const GROUP_PAD = 28;
 const DRAG_THRESHOLD = 5;
 const PORT_SNAP_RADIUS = 80;
 const GRID_SIZE = 32;
-const TEXT_ASSET_STORAGE_KEY = "otato-canvas-text-assets";
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
 
@@ -656,16 +655,6 @@ function makeMediaNode(
   };
 }
 
-function makeMediaNodeFromAsset(pos: CanvasPosition, kind: UploadKind, asset: { url: string; title: string }): CanvasNode {
-  return makeMediaNode(pos, kind, {
-    url: asset.url,
-    width: kind === "image" ? 1024 : kind === "video" ? 1280 : 360,
-    height: kind === "image" ? 768 : kind === "video" ? 720 : 116,
-    mimeType: kind === "image" ? "image/png" : kind === "video" ? "video/mp4" : "audio/mpeg",
-    filename: asset.title,
-  });
-}
-
 function nodeTypeIcon(type: CanvasNodeType): CanvasIconName {
   if (type === "group") return "group";
   if (type === "image") return "image";
@@ -730,9 +719,9 @@ export default function CanvasBoardPage() {
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(new Set());
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [dirty, setDirty] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [, setUploading] = useState(false);
   const [menu, setMenu] = useState<MenuState>(null);
   const [selectBox, setSelectBox] = useState<SelectBoxScreen>(null);
   const [quickAddBar, setQuickAddBar] = useState<QuickAddBar>(null);

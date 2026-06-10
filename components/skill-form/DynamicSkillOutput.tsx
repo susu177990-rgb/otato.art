@@ -64,6 +64,7 @@ function ImageViewer({ url, title }: { url: string; title?: string }) {
     <section className={styles.outputBlock}>
       {title ? <h4 className={styles.outputBlockTitle}>{title}</h4> : null}
       <a href={url} target="_blank" rel="noopener noreferrer" className={styles.imageLink}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- Skill outputs can be arbitrary generated/blob URLs that are not safe for next/image remotePatterns. */}
         <img src={url} alt={title || "生成结果"} className={styles.outputImage} />
       </a>
       <button
