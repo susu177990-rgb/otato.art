@@ -1,5 +1,6 @@
 import { BAKED_IMAGE_MODEL_DEFAULTS, BAKED_LLM_SETTINGS } from "@/lib/baked-api-defaults";
 import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { normalizePromptTags } from "@/lib/prompt-tags";
 export type ImageModeId =
   | "free";
 
@@ -75,6 +76,10 @@ export interface ImageWorkspaceSettings {
   coverImageUrlByMode: Record<string, string>;
   /** 设置页为各作图提示词预设标记适配哪些生图模型，可同时多选 */
   promptModelProvidersByMode: Record<string, ImageModelSettings["provider"][]>;
+  /** 设置页为各作图提示词预设标记二级标签，可多选 */
+  promptTagsByMode: Record<string, string[]>;
+  /** 设置页为各作图提示词预设配置的简短描述 */
+  promptDescriptionsByMode: Record<string, string>;
 }
 
 export interface ImageGalleryRecord {
@@ -132,6 +137,8 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   refSlotHintsByMode: {},
   coverImageUrlByMode: {},
   promptModelProvidersByMode: {},
+  promptTagsByMode: {},
+  promptDescriptionsByMode: {},
   prompts: {
     /** 自由模式：不使用固定模版，最终提示词 = 用户输入（需在界面填写，见作图页校验） */
     free: "",
@@ -217,6 +224,26 @@ function coercePromptModelProvidersByMode(raw: unknown): Record<string, ImageMod
   return out;
 }
 
+function coercePromptTagsByMode(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
+    const tags = normalizePromptTags(val);
+    if (tags.length > 0) out[modeId] = tags;
+  }
+  return out;
+}
+
+function coercePromptDescriptionsByMode(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
+    const description = String(val ?? "").trim();
+    if (description) out[modeId] = description;
+  }
+  return out;
+}
+
 /** 设置页多行文案 → 存入 settings 的数组（去掉末尾空行） */
 export function parseRefSlotHintsTextarea(text: string): string[] {
   const rawLines = text.split(/\r?\n/);
@@ -277,6 +304,8 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
     promptModelProvidersByMode: coercePromptModelProvidersByMode(
       source.promptModelProvidersByMode ?? (source as { promptModelProviderByMode?: unknown }).promptModelProviderByMode,
     ),
+    promptTagsByMode: coercePromptTagsByMode(source.promptTagsByMode),
+    promptDescriptionsByMode: coercePromptDescriptionsByMode(source.promptDescriptionsByMode),
     prompts: {
       ...DEFAULT_IMAGE_SETTINGS.prompts,
       ...sourcePrompts,

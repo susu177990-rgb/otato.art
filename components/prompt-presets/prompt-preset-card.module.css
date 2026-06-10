@@ -1,0 +1,239 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 164px;
+  border: 2px solid #050505;
+  border-radius: 20px;
+  background: #ffffff;
+  color: #050505;
+  overflow: hidden;
+}
+
+.cardActive {
+  background: #f3f3ef;
+  box-shadow: inset 0 0 0 1px #050505;
+}
+
+.cardCompact {
+  min-height: 172px;
+}
+
+.main {
+  --preset-cover-height: 108px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cover {
+  position: relative;
+  display: block;
+  align-self: start;
+  width: min(calc(var(--preset-cover-aspect, 1.777) * var(--preset-cover-height)), 238px);
+  height: min(var(--preset-cover-height), calc(238px / var(--preset-cover-aspect, 1.777)));
+  aspect-ratio: var(--preset-cover-aspect, 1.777);
+  min-width: 0;
+  border: 2px solid #050505;
+  border-radius: 15px;
+  background: #f3f3ef;
+  overflow: hidden;
+}
+
+.cover img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #ffffff;
+}
+
+.coverFallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  color: #050505;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 1px 0;
+}
+
+.coverChip,
+.coverModelChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 0 7px;
+  border: 2px solid #050505;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #050505;
+  font-size: 9px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.coverTopChips,
+.coverModelChips {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.coverTopChips {
+  top: 8px;
+}
+
+.coverModelChips {
+  bottom: 8px;
+}
+
+.coverChip,
+.coverModelChip {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 20px;
+  max-width: 100%;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: #050505;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: 0;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.description {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: #5f5f5a;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.cardFooter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 8px;
+  border-top: 2px solid #050505;
+}
+
+.cardFooterSingle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.footerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 2px solid #050505;
+  border-radius: 13px;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.main:hover .cover,
+.footerButton:hover:not(:disabled) {
+  background: #050505;
+  color: #ffffff;
+}
+
+.main:disabled {
+  cursor: default;
+}
+
+.main:disabled .cover,
+.main:disabled .info {
+  opacity: 0.72;
+}
+
+.footerButton:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.favoriteActive {
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+@media (max-width: 720px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .cover {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    aspect-ratio: var(--preset-cover-aspect, 1.777);
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .cardFooter {
+    gap: 8px;
+  }
+}

@@ -43,6 +43,7 @@ import {
 } from "@/lib/video-workspace";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { fetchSitePromptPresets, replaceSitePromptPresets } from "@/lib/prompt-preset-api-client";
+import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
 type SettingsCategory = "api" | "prompts";
 type Tab = "llmApi" | "imageApi" | "videoApi" | "imagePrompts" | "videoPrompts" | "chatPrompts" | "skillPacks";
@@ -67,6 +68,18 @@ const SUBPAGE_DEFS: Record<SettingsCategory, ReadonlyArray<{ id: Tab; label: str
 };
 
 const settingsCardClass = [shellStyles.card, styles.floatCard].join(" ");
+
+function mergePromptDescription(
+  current: Record<string, string> | undefined,
+  modeId: string,
+  description: string,
+): Record<string, string> {
+  const next = { ...(current ?? {}) };
+  const trimmed = description.trim();
+  if (trimmed) next[modeId] = trimmed;
+  else delete next[modeId];
+  return next;
+}
 
 function apiKeyInputValue(value: string): string {
   return isApiKeyConfiguredPlaceholder(value) ? "" : value;
@@ -226,6 +239,7 @@ function AdminPageInner() {
       promptTemplate: "",
       coverImageUrl: "",
       refSlotHints: [],
+      tags: [],
     };
     const next = [nextPreset, ...chatPromptPresets];
     setChatPromptPresets(next);
@@ -239,6 +253,8 @@ function AdminPageInner() {
       customModes: [...(imageSettings.customModes ?? []), { id, label: `生图预设 ${(imageSettings.customModes?.length ?? 0) + 1}` }],
       prompts: { ...imageSettings.prompts, [id]: "" },
       promptModelProvidersByMode: { ...imageSettings.promptModelProvidersByMode, [id]: ["gpt-image", "nano-banana"] },
+      promptTagsByMode: { ...imageSettings.promptTagsByMode, [id]: [] },
+      promptDescriptionsByMode: mergePromptDescription(imageSettings.promptDescriptionsByMode, id, ""),
     };
     setImageSettings(next);
     void persistWorkspace(llmSettings, next, videoSettings);
@@ -250,6 +266,8 @@ function AdminPageInner() {
       ...videoSettings,
       customModes: [...(videoSettings.customModes ?? []), { id, label: `生视频预设 ${(videoSettings.customModes?.length ?? 0) + 1}` }],
       prompts: { ...videoSettings.prompts, [id]: "" },
+      promptTagsByMode: { ...videoSettings.promptTagsByMode, [id]: [] },
+      promptDescriptionsByMode: mergePromptDescription(videoSettings.promptDescriptionsByMode, id, ""),
     };
     setVideoSettings(next);
     void persistWorkspace(llmSettings, imageSettings, next);
@@ -395,6 +413,39 @@ function newChatPromptPresetId(): string {
   return `chat_preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function PromptTagPicker({
+  kind,
+  value,
+  onChange,
+}: {
+  kind: "image" | "video" | "chat";
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const tags = normalizePromptTags(value);
+  return (
+    <div className={styles.promptTagField}>
+      <span className={shellStyles.fieldLabel}>二级标签</span>
+      <div className={styles.promptTagPicker} role="group" aria-label="二级标签">
+        {PROMPT_TAG_GROUPS[kind].map((tag) => {
+          const active = tags.includes(tag);
+          return (
+            <button
+              key={tag}
+              type="button"
+              className={[styles.promptTagButton, active ? styles.promptTagButtonActive : ""].filter(Boolean).join(" ")}
+              aria-pressed={active}
+              onClick={() => onChange(togglePromptTag(tags, tag))}
+            >
+              {tag}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChatPromptsPanel({
   value,
   onChange,
@@ -414,11 +465,13 @@ function ChatPromptsPanel({
   const [draftTitleById, setDraftTitleById] = useState<Record<string, string>>({});
   const [draftPromptById, setDraftPromptById] = useState<Record<string, string>>({});
   const [draftDescriptionById, setDraftDescriptionById] = useState<Record<string, string>>({});
+  const [draftTagsById, setDraftTagsById] = useState<Record<string, string[]>>({});
 
   function seedDraft(preset: SitePromptPreset) {
     setDraftTitleById((prev) => ({ ...prev, [preset.id]: preset.title }));
     setDraftPromptById((prev) => ({ ...prev, [preset.id]: preset.promptTemplate }));
     setDraftDescriptionById((prev) => ({ ...prev, [preset.id]: preset.description ?? "" }));
+    setDraftTagsById((prev) => ({ ...prev, [preset.id]: normalizePromptTags(preset.tags) }));
   }
 
   async function persist(next: SitePromptPreset[]) {
@@ -439,6 +492,7 @@ function ChatPromptsPanel({
             title: draftTitleById[id]?.trim() || preset.title,
             promptTemplate: draftPromptById[id] ?? preset.promptTemplate,
             description: draftDescriptionById[id]?.trim() || undefined,
+            tags: normalizePromptTags(draftTagsById[id] ?? preset.tags),
           }
         : preset,
     );
@@ -450,6 +504,17 @@ function ChatPromptsPanel({
     const next = value.filter((preset) => preset.id !== id);
     await persist(next);
     setEditingId((cur) => (cur === id ? null : cur));
+  }
+
+  async function setChatPromptTags(preset: SitePromptPreset, nextTagsRaw: string[], isEditing: boolean) {
+    const nextTags = normalizePromptTags(nextTagsRaw);
+    if (isEditing) {
+      setDraftTagsById((prev) => ({ ...prev, [preset.id]: nextTags }));
+      return;
+    }
+    const next = value.map((item) => (item.id === preset.id ? { ...item, tags: nextTags } : item));
+    onChange(next);
+    await persist(next);
   }
 
   return (
@@ -471,6 +536,7 @@ function ChatPromptsPanel({
           const titleValue = isEditing ? (draftTitleById[preset.id] ?? preset.title) : preset.title;
           const promptValue = isEditing ? (draftPromptById[preset.id] ?? preset.promptTemplate) : preset.promptTemplate;
           const descriptionValue = isEditing ? (draftDescriptionById[preset.id] ?? (preset.description ?? "")) : (preset.description ?? "");
+          const tagValue = isEditing ? (draftTagsById[preset.id] ?? preset.tags) : preset.tags;
 
           return (
             <article key={preset.id} className={[settingsCardClass, styles.promptModeCard].join(" ")}>
@@ -533,6 +599,11 @@ function ChatPromptsPanel({
                   </label>
                 </div>
                 <div className={styles.chatPromptColumn}>
+                  <PromptTagPicker
+                    kind="chat"
+                    value={tagValue}
+                    onChange={(next) => void setChatPromptTags(preset, next, isEditing)}
+                  />
                   <label className={shellStyles.field}>
                     <span className={shellStyles.fieldLabel}>使用说明 (可选)</span>
                     <textarea
@@ -757,6 +828,8 @@ function ImagePromptsPanel({
   const [draftPromptProviders, setDraftPromptProviders] = useState<
     Partial<Record<string, ImageWorkspaceSettings["models"][keyof ImageWorkspaceSettings["models"]]["provider"][]>>
   >({});
+  const [draftPromptTags, setDraftPromptTags] = useState<Partial<Record<string, string[]>>>({});
+  const [draftPromptDescriptions, setDraftPromptDescriptions] = useState<Partial<Record<string, string>>>({});
   const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
   const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
 
@@ -824,6 +897,15 @@ function ImagePromptsPanel({
           ...value.promptModelProvidersByMode,
           [id]: draftPromptProviders[id] ?? value.promptModelProvidersByMode?.[id] ?? ["gpt-image", "nano-banana"],
         },
+        promptTagsByMode: {
+          ...value.promptTagsByMode,
+          [id]: normalizePromptTags(draftPromptTags[id] ?? value.promptTagsByMode?.[id]),
+        },
+        promptDescriptionsByMode: mergePromptDescription(
+          value.promptDescriptionsByMode,
+          id,
+          draftPromptDescriptions[id] ?? value.promptDescriptionsByMode?.[id] ?? "",
+        ),
       };
       if (id.startsWith("custom_")) {
         const labelRaw =
@@ -846,6 +928,8 @@ function ImagePromptsPanel({
     draftPrompts,
     draftLabels,
     draftPromptProviders,
+    draftPromptTags,
+    draftPromptDescriptions,
   ]);
 
   function handleSavePrompt(modeId: string) {
@@ -857,6 +941,15 @@ function ImagePromptsPanel({
         ...value.promptModelProvidersByMode,
         [modeId]: draftPromptProviders[modeId] ?? value.promptModelProvidersByMode?.[modeId] ?? ["gpt-image", "nano-banana"],
       },
+      promptTagsByMode: {
+        ...value.promptTagsByMode,
+        [modeId]: normalizePromptTags(draftPromptTags[modeId] ?? value.promptTagsByMode?.[modeId]),
+      },
+      promptDescriptionsByMode: mergePromptDescription(
+        value.promptDescriptionsByMode,
+        modeId,
+        draftPromptDescriptions[modeId] ?? value.promptDescriptionsByMode?.[modeId] ?? "",
+      ),
     };
     if (modeId.startsWith("custom_")) {
       const labelRaw =
@@ -885,6 +978,16 @@ function ImagePromptsPanel({
       delete copy[modeId];
       return copy;
     });
+    setDraftPromptTags((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    setDraftPromptDescriptions((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
   }
 
   function handleEditPrompt(modeId: string) {
@@ -906,6 +1009,18 @@ function ImagePromptsPanel({
       ...prev,
       [modeId]: value.promptModelProvidersByMode?.[modeId] ?? ["gpt-image", "nano-banana"],
     }));
+    setDraftPromptTags((prev) => ({
+      ...prev,
+      [modeId]: normalizePromptTags(value.promptTagsByMode?.[modeId]),
+    }));
+    setDraftPromptDescriptions((prev) => {
+      const copy = { ...prev };
+      if (editingPromptModeId !== null && editingPromptModeId !== modeId) {
+        delete copy[editingPromptModeId];
+      }
+      copy[modeId] = value.promptDescriptionsByMode?.[modeId] ?? "";
+      return copy;
+    });
     setEditingPromptModeId(modeId);
   }
 
@@ -923,11 +1038,17 @@ function ImagePromptsPanel({
       delete restPrompts[modeId];
       const restPromptProviders = { ...value.promptModelProvidersByMode };
       delete restPromptProviders[modeId];
+      const restPromptTags = { ...value.promptTagsByMode };
+      delete restPromptTags[modeId];
+      const restPromptDescriptions = { ...value.promptDescriptionsByMode };
+      delete restPromptDescriptions[modeId];
       const next: ImageWorkspaceSettings = {
         ...value,
         customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
         prompts: restPrompts,
         promptModelProvidersByMode: restPromptProviders,
+        promptTagsByMode: restPromptTags,
+        promptDescriptionsByMode: restPromptDescriptions,
         coverImageUrlByMode,
       };
       onChange(next);
@@ -944,6 +1065,16 @@ function ImagePromptsPanel({
         return copy;
       });
       setDraftPromptProviders((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftPromptTags((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftPromptDescriptions((prev) => {
         const copy = { ...prev };
         delete copy[modeId];
         return copy;
@@ -976,6 +1107,8 @@ function ImagePromptsPanel({
         ...value,
         prompts: { ...value.prompts, [mode.id]: defaultPrompt },
         promptModelProvidersByMode: { ...value.promptModelProvidersByMode, [mode.id]: ["gpt-image", "nano-banana"] },
+        promptTagsByMode: { ...value.promptTagsByMode, [mode.id]: [] },
+        promptDescriptionsByMode: mergePromptDescription(value.promptDescriptionsByMode, mode.id, ""),
         coverImageUrlByMode,
       };
       onChange(next);
@@ -987,6 +1120,16 @@ function ImagePromptsPanel({
         return copy;
       });
       setDraftPromptProviders((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+      setDraftPromptTags((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+      setDraftPromptDescriptions((prev) => {
         const copy = { ...prev };
         delete copy[mode.id];
         return copy;
@@ -1021,6 +1164,20 @@ function ImagePromptsPanel({
     void onPersistImage(next);
   }
 
+  function setImagePromptTags(modeId: string, nextTagsRaw: string[], isEditing: boolean) {
+    const nextTags = normalizePromptTags(nextTagsRaw);
+    if (isEditing) {
+      setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
+      return;
+    }
+    const next: ImageWorkspaceSettings = {
+      ...value,
+      promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
+    };
+    onChange(next);
+    void onPersistImage(next);
+  }
+
   return (
     <section className={styles.panel}>
       <div className={settingsCardClass}>
@@ -1044,6 +1201,10 @@ function ImagePromptsPanel({
           const providerValues = isEditing
             ? (draftPromptProviders[mode.id] ?? value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"])
             : (value.promptModelProvidersByMode?.[mode.id] ?? ["gpt-image", "nano-banana"]);
+          const tagValues = isEditing ? (draftPromptTags[mode.id] ?? value.promptTagsByMode?.[mode.id] ?? []) : (value.promptTagsByMode?.[mode.id] ?? []);
+          const descriptionValue = isEditing
+            ? (draftPromptDescriptions[mode.id] ?? value.promptDescriptionsByMode?.[mode.id] ?? "")
+            : (value.promptDescriptionsByMode?.[mode.id] ?? "");
           const coverBusy = coverBusyModeId === mode.id;
           const coverError = coverErrorByMode[mode.id];
 
@@ -1118,6 +1279,37 @@ function ImagePromptsPanel({
                         Nano Banana
                       </button>
                     </div>
+                  </label>
+                  <PromptTagPicker
+                    kind="image"
+                    value={tagValues}
+                    onChange={(next) => setImagePromptTags(mode.id, next, isEditing)}
+                  />
+                  <label className={styles.promptDescriptionField}>
+                    <span className={shellStyles.fieldLabel}>卡片描述</span>
+                    <textarea
+                      className={[
+                        shellStyles.textarea,
+                        styles.promptDescriptionTextarea,
+                        !isEditing ? styles.promptModeTextareaReadOnly : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      value={descriptionValue}
+                      readOnly={!isEditing}
+                      aria-readonly={!isEditing}
+                      placeholder="显示在预设卡标题下方的简短说明"
+                      onClick={() => {
+                        if (!isEditing) handleEditPrompt(mode.id);
+                      }}
+                      onFocus={() => {
+                        if (!isEditing) handleEditPrompt(mode.id);
+                      }}
+                      onChange={(e) => {
+                        if (!isEditing) return;
+                        setDraftPromptDescriptions((prev) => ({ ...prev, [mode.id]: e.target.value }));
+                      }}
+                    />
                   </label>
                   <textarea
                     className={[
@@ -1491,6 +1683,8 @@ function VideoPromptsPanel({
   const [editingPromptModeId, setEditingPromptModeId] = useState<string | null>(null);
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
+  const [draftPromptTags, setDraftPromptTags] = useState<Partial<Record<string, string[]>>>({});
+  const [draftPromptDescriptions, setDraftPromptDescriptions] = useState<Partial<Record<string, string>>>({});
   const [coverBusyModeId, setCoverBusyModeId] = useState<string | null>(null);
   const [coverErrorByMode, setCoverErrorByMode] = useState<Partial<Record<string, string>>>({});
 
@@ -1554,6 +1748,15 @@ function VideoPromptsPanel({
       let merged: VideoWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [id]: text },
+        promptTagsByMode: {
+          ...value.promptTagsByMode,
+          [id]: normalizePromptTags(draftPromptTags[id] ?? value.promptTagsByMode?.[id]),
+        },
+        promptDescriptionsByMode: mergePromptDescription(
+          value.promptDescriptionsByMode,
+          id,
+          draftPromptDescriptions[id] ?? value.promptDescriptionsByMode?.[id] ?? "",
+        ),
       };
       if (id.startsWith("custom_video_")) {
         const labelRaw = draftLabels[id] ?? value.customModes?.find((mode) => mode.id === id)?.label ?? id;
@@ -1568,13 +1771,22 @@ function VideoPromptsPanel({
     return () => {
       ref.current = null;
     };
-  }, [persistMergeRef, value, editingPromptModeId, draftPrompts, draftLabels]);
+  }, [persistMergeRef, value, editingPromptModeId, draftPrompts, draftLabels, draftPromptTags, draftPromptDescriptions]);
 
   function handleSavePrompt(modeId: string) {
     const text = draftPrompts[modeId] ?? value.prompts[modeId] ?? "";
     let next: VideoWorkspaceSettings = {
       ...value,
       prompts: { ...value.prompts, [modeId]: text },
+      promptTagsByMode: {
+        ...value.promptTagsByMode,
+        [modeId]: normalizePromptTags(draftPromptTags[modeId] ?? value.promptTagsByMode?.[modeId]),
+      },
+      promptDescriptionsByMode: mergePromptDescription(
+        value.promptDescriptionsByMode,
+        modeId,
+        draftPromptDescriptions[modeId] ?? value.promptDescriptionsByMode?.[modeId] ?? "",
+      ),
     };
     if (modeId.startsWith("custom_video_")) {
       const labelRaw = draftLabels[modeId] ?? value.customModes?.find((mode) => mode.id === modeId)?.label ?? modeId;
@@ -1597,6 +1809,16 @@ function VideoPromptsPanel({
       delete copy[modeId];
       return copy;
     });
+    setDraftPromptTags((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
+    setDraftPromptDescriptions((prev) => {
+      const copy = { ...prev };
+      delete copy[modeId];
+      return copy;
+    });
   }
 
   function handleEditPrompt(modeId: string) {
@@ -1614,6 +1836,18 @@ function VideoPromptsPanel({
         [modeId]: value.customModes?.find((mode) => mode.id === modeId)?.label ?? "",
       }));
     }
+    setDraftPromptTags((prev) => ({
+      ...prev,
+      [modeId]: normalizePromptTags(value.promptTagsByMode?.[modeId]),
+    }));
+    setDraftPromptDescriptions((prev) => {
+      const copy = { ...prev };
+      if (editingPromptModeId !== null && editingPromptModeId !== modeId) {
+        delete copy[editingPromptModeId];
+      }
+      copy[modeId] = value.promptDescriptionsByMode?.[modeId] ?? "";
+      return copy;
+    });
     setEditingPromptModeId(modeId);
   }
 
@@ -1629,10 +1863,16 @@ function VideoPromptsPanel({
       }
       const restPrompts = { ...value.prompts };
       delete restPrompts[modeId];
+      const restPromptTags = { ...value.promptTagsByMode };
+      delete restPromptTags[modeId];
+      const restPromptDescriptions = { ...value.promptDescriptionsByMode };
+      delete restPromptDescriptions[modeId];
       const next: VideoWorkspaceSettings = {
         ...value,
         customModes: (value.customModes ?? []).filter((mode) => mode.id !== modeId),
         prompts: restPrompts,
+        promptTagsByMode: restPromptTags,
+        promptDescriptionsByMode: restPromptDescriptions,
         coverImageUrlByMode,
       };
       onChange(next);
@@ -1644,6 +1884,16 @@ function VideoPromptsPanel({
         return copy;
       });
       setDraftLabels((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftPromptTags((prev) => {
+        const copy = { ...prev };
+        delete copy[modeId];
+        return copy;
+      });
+      setDraftPromptDescriptions((prev) => {
         const copy = { ...prev };
         delete copy[modeId];
         return copy;
@@ -1668,6 +1918,8 @@ function VideoPromptsPanel({
       const next: VideoWorkspaceSettings = {
         ...value,
         prompts: { ...value.prompts, [mode.id]: defaultVideoModePrompt(mode.id as VideoPromptModeId) },
+        promptTagsByMode: { ...value.promptTagsByMode, [mode.id]: [] },
+        promptDescriptionsByMode: mergePromptDescription(value.promptDescriptionsByMode, mode.id, ""),
         coverImageUrlByMode,
       };
       onChange(next);
@@ -1678,7 +1930,31 @@ function VideoPromptsPanel({
         delete copy[mode.id];
         return copy;
       });
+      setDraftPromptTags((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
+      setDraftPromptDescriptions((prev) => {
+        const copy = { ...prev };
+        delete copy[mode.id];
+        return copy;
+      });
     })();
+  }
+
+  function setVideoPromptTags(modeId: string, nextTagsRaw: string[], isEditing: boolean) {
+    const nextTags = normalizePromptTags(nextTagsRaw);
+    if (isEditing) {
+      setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
+      return;
+    }
+    const next: VideoWorkspaceSettings = {
+      ...value,
+      promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
+    };
+    onChange(next);
+    void onPersistVideo(next);
   }
 
   return (
@@ -1703,6 +1979,10 @@ function VideoPromptsPanel({
           const coverUrl = value.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
           const coverBusy = coverBusyModeId === mode.id;
           const coverError = coverErrorByMode[mode.id];
+          const tagValues = isEditing ? (draftPromptTags[mode.id] ?? value.promptTagsByMode?.[mode.id] ?? []) : (value.promptTagsByMode?.[mode.id] ?? []);
+          const descriptionValue = isEditing
+            ? (draftPromptDescriptions[mode.id] ?? value.promptDescriptionsByMode?.[mode.id] ?? "")
+            : (value.promptDescriptionsByMode?.[mode.id] ?? "");
 
           return (
             <article key={mode.id} className={[settingsCardClass, styles.promptModeCard, styles.promptMediaCard].join(" ")}>
@@ -1742,6 +2022,37 @@ function VideoPromptsPanel({
                 <p className={styles.promptOccWarn}>当前模版含 {occCount} 处占位符，视频页将显示 {occCount} 栏输入。</p>
               ) : null}
               <div className={styles.promptModeEditBody}>
+                <PromptTagPicker
+                  kind="video"
+                  value={tagValues}
+                  onChange={(next) => setVideoPromptTags(mode.id, next, isEditing)}
+                />
+                <label className={styles.promptDescriptionField}>
+                  <span className={shellStyles.fieldLabel}>卡片描述</span>
+                  <textarea
+                    className={[
+                      shellStyles.textarea,
+                      styles.promptDescriptionTextarea,
+                      !isEditing ? styles.promptModeTextareaReadOnly : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    value={descriptionValue}
+                    readOnly={!isEditing}
+                    aria-readonly={!isEditing}
+                    placeholder="显示在预设卡标题下方的简短说明"
+                    onClick={() => {
+                      if (!isEditing) handleEditPrompt(mode.id);
+                    }}
+                    onFocus={() => {
+                      if (!isEditing) handleEditPrompt(mode.id);
+                    }}
+                    onChange={(e) => {
+                      if (!isEditing) return;
+                      setDraftPromptDescriptions((prev) => ({ ...prev, [mode.id]: e.target.value }));
+                    }}
+                  />
+                </label>
                 <textarea
                   className={[
                     shellStyles.textarea,

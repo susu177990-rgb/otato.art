@@ -1,4 +1,5 @@
 import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { normalizePromptTags } from "@/lib/prompt-tags";
 import {
   VIDEO_MODEL_ORDER,
   VIDEO_MODEL_REGISTRY,
@@ -70,6 +71,8 @@ export interface VideoWorkspaceSettings {
   models: Record<VideoModelId, VideoModelSettings>;
   customModes: CustomVideoMode[];
   coverImageUrlByMode: Record<string, string>;
+  promptTagsByMode: Record<string, string[]>;
+  promptDescriptionsByMode: Record<string, string>;
   uiDefaults: {
     defaultModelId: VideoModelId;
     defaultModeByModel: Partial<Record<VideoModelId, VideoGenerationModeId>>;
@@ -95,6 +98,8 @@ type LegacyVideoWorkspaceSettings = {
   customPresets?: unknown;
   presets?: unknown;
   coverImageUrlByMode?: unknown;
+  promptTagsByMode?: unknown;
+  promptDescriptionsByMode?: unknown;
 };
 
 function defaultModelSettings(modelId: VideoModelId): VideoModelSettings {
@@ -124,6 +129,8 @@ export function defaultVideoModePrompt(id: VideoPromptModeId): string {
 export const DEFAULT_VIDEO_SETTINGS: VideoWorkspaceSettings = {
   customModes: [],
   coverImageUrlByMode: {},
+  promptTagsByMode: {},
+  promptDescriptionsByMode: {},
   prompts: {
     free: "",
   },
@@ -202,6 +209,26 @@ function coerceCoverImageUrlByMode(value: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(value)) {
     if (typeof raw === "string" && raw.trim()) out[key] = raw.trim();
+  }
+  return out;
+}
+
+function coercePromptTagsByMode(value: unknown): Record<string, string[]> {
+  if (!isObject(value)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const tags = normalizePromptTags(raw);
+    if (tags.length > 0) out[key] = tags;
+  }
+  return out;
+}
+
+function coercePromptDescriptionsByMode(value: unknown): Record<string, string> {
+  if (!isObject(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const description = String(raw ?? "").trim();
+    if (description) out[key] = description;
   }
   return out;
 }
@@ -336,6 +363,8 @@ export function mergeVideoSettings(partial: unknown): VideoWorkspaceSettings {
     models,
     customModes,
     coverImageUrlByMode: coerceCoverImageUrlByMode(p.coverImageUrlByMode),
+    promptTagsByMode: coercePromptTagsByMode(p.promptTagsByMode),
+    promptDescriptionsByMode: coercePromptDescriptionsByMode(p.promptDescriptionsByMode),
     uiDefaults: coerceUiDefaults(p.uiDefaults),
   };
 }

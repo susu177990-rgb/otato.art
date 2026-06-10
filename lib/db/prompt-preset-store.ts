@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
 import type { VideoWorkspaceSettings } from "@/lib/video-workspace";
+import { normalizePromptTags } from "@/lib/prompt-tags";
 
 export type PromptPresetKind = "image" | "video" | "chat";
 
@@ -11,6 +12,7 @@ export type SitePromptPreset = {
   promptTemplate: string;
   coverImageUrl: string;
   refSlotHints: string[];
+  tags: string[];
   description?: string;
   isFavorite?: boolean;
 };
@@ -27,7 +29,7 @@ function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset): Record<s
     description,
     summary: description,
     body: promptTemplate,
-    tags: [],
+    tags: normalizePromptTags(preset.tags),
     sort_order: 0,
     preset_type: kind,
     prompt_template: promptTemplate,
@@ -51,6 +53,7 @@ type SitePromptPresetRow = {
   prompt_template: string | null;
   cover_image_url: string | null;
   ref_slot_hints: unknown;
+  tags: unknown;
   description: string | null;
 };
 
@@ -86,6 +89,7 @@ function rowToPreset(row: SitePromptPresetRow): SitePromptPreset {
     promptTemplate: row.prompt_template ?? "",
     coverImageUrl: row.cover_image_url?.trim() ?? "",
     refSlotHints,
+    tags: normalizePromptTags(row.tags),
     description: row.description ?? undefined,
     isFavorite: false,
   };
@@ -128,7 +132,7 @@ export async function listSitePromptPresetsByKind(
 export async function listSitePromptPresets(supabase: SupabaseClient): Promise<SitePromptPreset[]> {
   const { data, error } = await supabase
     .from("site_prompt_presets")
-    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, description")
+    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -150,6 +154,8 @@ export function applyPromptLibraryToImageWorkspace(
   const coverImageUrlByMode = { ...workspace.coverImageUrlByMode };
   const refSlotHintsByMode = { ...workspace.refSlotHintsByMode };
   const customModes = [...workspace.customModes];
+  const promptTagsByMode = { ...workspace.promptTagsByMode };
+  const promptDescriptionsByMode = { ...workspace.promptDescriptionsByMode };
 
   for (const preset of imagePresets) {
     prompts[preset.id] = preset.promptTemplate;
@@ -160,9 +166,12 @@ export function applyPromptLibraryToImageWorkspace(
     if (!customModes.some((mode) => mode.id === preset.id)) {
       customModes.push({ id: preset.id, label: preset.title });
     }
+    promptTagsByMode[preset.id] = normalizePromptTags(preset.tags);
+    if (preset.description?.trim()) promptDescriptionsByMode[preset.id] = preset.description.trim();
+    else delete promptDescriptionsByMode[preset.id];
   }
 
-  return { ...workspace, prompts, coverImageUrlByMode, refSlotHintsByMode, customModes };
+  return { ...workspace, prompts, coverImageUrlByMode, refSlotHintsByMode, customModes, promptTagsByMode, promptDescriptionsByMode };
 }
 
 export function applyPromptLibraryToVideoWorkspace(
@@ -175,6 +184,8 @@ export function applyPromptLibraryToVideoWorkspace(
   const prompts = { ...workspace.prompts };
   const coverImageUrlByMode = { ...workspace.coverImageUrlByMode };
   const customModes = [...workspace.customModes];
+  const promptTagsByMode = { ...workspace.promptTagsByMode };
+  const promptDescriptionsByMode = { ...workspace.promptDescriptionsByMode };
 
   for (const preset of videoPresets) {
     prompts[preset.id] = preset.promptTemplate;
@@ -183,9 +194,12 @@ export function applyPromptLibraryToVideoWorkspace(
     if (!customModes.some((mode) => mode.id === preset.id)) {
       customModes.push({ id: preset.id, label: preset.title });
     }
+    promptTagsByMode[preset.id] = normalizePromptTags(preset.tags);
+    if (preset.description?.trim()) promptDescriptionsByMode[preset.id] = preset.description.trim();
+    else delete promptDescriptionsByMode[preset.id];
   }
 
-  return { ...workspace, prompts, coverImageUrlByMode, customModes };
+  return { ...workspace, prompts, coverImageUrlByMode, customModes, promptTagsByMode, promptDescriptionsByMode };
 }
 
 export async function replaceSitePromptPresetsByKind(
@@ -221,6 +235,8 @@ function imageWorkspaceRows(workspace: ImageWorkspaceSettings): Array<Record<str
       promptTemplate: workspace.prompts[mode.id] ?? "",
       coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
       refSlotHints: workspace.refSlotHintsByMode[mode.id] ?? [],
+      tags: workspace.promptTagsByMode?.[mode.id] ?? [],
+      description: workspace.promptDescriptionsByMode?.[mode.id],
     }),
   );
 }
@@ -234,6 +250,8 @@ function videoWorkspaceRows(workspace: VideoWorkspaceSettings): Array<Record<str
       promptTemplate: workspace.prompts[mode.id] ?? "",
       coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
       refSlotHints: [],
+      tags: workspace.promptTagsByMode?.[mode.id] ?? [],
+      description: workspace.promptDescriptionsByMode?.[mode.id],
     }),
   );
 }

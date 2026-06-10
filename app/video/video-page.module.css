@@ -1554,6 +1554,20 @@
   color: #ffffff;
 }
 
+/* Shared prompt preset cards own their height and internal structure. */
+.presetLibraryGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-auto-rows: auto !important;
+  gap: 12px !important;
+  padding: 14px !important;
+}
+
+@media (max-width: 720px) {
+  .presetLibraryGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 /* Final production rail pass: rails are layout only; items own the outline. */
 .modePanel,
 .historyPanel {

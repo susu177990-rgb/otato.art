@@ -6,9 +6,9 @@ import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import { ApiUsageModeSwitchAll } from "@/components/ApiUsageModeSwitch";
+import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPortal } from "react-dom";
-import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
 import type { SitePromptPreset, PromptPresetKind } from "@/lib/db/prompt-preset-store";
 import { detectMediaKind, mediaContentType, mediaFileExtension } from "@/lib/media-file";
 import {
@@ -743,11 +743,7 @@ export default function CanvasBoardPage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Preset Library States
   const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
-  const [presetLibraryTab, setPresetLibraryTab] = useState<PromptPresetKind>("image");
   const [presetAddNodePos, setPresetAddNodePos] = useState<CanvasPosition | null>(null);
-  const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
-  const [presetLibraryError, setPresetLibraryError] = useState("");
-  const [favoriteSavingById, setFavoriteSavingById] = useState<Record<string, boolean>>({});
   const [portalMounted, setPortalMounted] = useState(false);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
@@ -977,36 +973,8 @@ export default function CanvasBoardPage() {
     setPortalMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!presetLibraryOpen) return;
-    setPresetLibraryError("");
-    fetchSitePromptPresets(presetLibraryTab)
-      .then((presets) => {
-        setPromptPresets(presets);
-      })
-      .catch((e) => {
-        setPresetLibraryError(e instanceof Error ? e.message : "无法加载提示词预设");
-      });
-  }, [presetLibraryOpen, presetLibraryTab]);
-
-  const togglePromptPresetFavorite = useCallback(async (preset: SitePromptPreset) => {
-    const nextFavorite = !preset.isFavorite;
-    setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: true }));
-    try {
-      await setSitePromptPresetFavorite(preset.id, nextFavorite);
-      setPromptPresets((prev) =>
-        prev.map((item) => (item.id === preset.id ? { ...item, isFavorite: nextFavorite } : item))
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "更新收藏失败");
-    } finally {
-      setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: false }));
-    }
-  }, []);
-
   const openPresetLibraryForAddingNode = useCallback((pos: CanvasPosition) => {
     setPresetAddNodePos(pos);
-    setPresetLibraryTab("image");
     setPresetLibraryOpen(true);
   }, []);
 
@@ -3258,142 +3226,15 @@ export default function CanvasBoardPage() {
             </div>
           )}
 
-          {portalMounted && presetLibraryOpen
-            ? createPortal(
-                <div
-                  className={styles.presetLibraryRoot}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="选择提示词预设"
-                  onPointerDown={(e) => {
-                    if (e.target === e.currentTarget) {
-                      setPresetLibraryOpen(false);
-                      setPresetAddNodePos(null);
-                    }
-                  }}
-                >
-                  <section
-                    className={styles.presetLibraryPanel}
-                    data-canvas-no-zoom
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <header className={styles.presetLibraryHead}>
-                      <div>
-                        <p className={styles.presetLibraryEyebrow}>无限画布</p>
-                        <h2 className={styles.presetLibraryTitle}>选择提示词预设</h2>
-                      </div>
-                      <div className={styles.presetLibraryTabs}>
-                        <button
-                          type="button"
-                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "image" ? styles.presetLibraryTabActive : ""].join(" ")}
-                          onClick={() => setPresetLibraryTab("image")}
-                        >
-                          生图
-                        </button>
-                        <button
-                          type="button"
-                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "video" ? styles.presetLibraryTabActive : ""].join(" ")}
-                          onClick={() => setPresetLibraryTab("video")}
-                        >
-                          生视频
-                        </button>
-                        <button
-                          type="button"
-                          className={[styles.presetLibraryTabBtn, presetLibraryTab === "chat" ? styles.presetLibraryTabActive : ""].join(" ")}
-                          onClick={() => setPresetLibraryTab("chat")}
-                        >
-                          对话
-                        </button>
-                      </div>
-                      <div className={styles.presetLibraryHeadActions}>
-                        <button
-                          type="button"
-                          className={styles.presetLibraryClose}
-                          onClick={() => { setPresetLibraryOpen(false); setPresetAddNodePos(null); }}
-                          aria-label="关闭"
-                        >
-                          <svg className={styles.toolbarStrokeIcon} viewBox="0 0 24 24" aria-hidden>
-                            <path d="M6 6l12 12" />
-                            <path d="M18 6L6 18" />
-                          </svg>
-                        </button>
-                      </div>
-                    </header>
-                    {presetLibraryError ? <div className={styles.presetLibraryError}>{presetLibraryError}</div> : null}
-                    <div
-                      className={styles.presetLibraryGrid}
-                      data-canvas-scroll-area
-                      onWheel={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      {promptPresets.length === 0 ? (
-                        <div className={styles.presetLibraryEmpty}>暂无提示词预设</div>
-                      ) : (
-                        promptPresets.map((preset) => {
-                          const coverUrl = preset.coverImageUrl?.trim();
-                          const hasDescription = Boolean(preset.description?.trim());
-                          return (
-                            <article
-                              key={preset.id}
-                              className={styles.presetCard}
-                              style={{ cursor: "pointer" }}
-                              onClick={() => handlePresetSelect(preset)}
-                            >
-                              {/* 预设卡片内容展示层 */}
-                              <div className={styles.presetCardCover}>
-                                <span className={styles.presetCardOverlay}>
-                                  <span className={styles.presetCardOverlayTop}>
-                                    <span className={styles.presetCardTitle}>{preset.title}</span>
-                                    {hasDescription ? (
-                                      <span className={styles.presetCardDesc}>{preset.description!.trim()}</span>
-                                    ) : null}
-                                  </span>
-                                  <span className={styles.presetModelChips}>
-                                    {presetModelLabels(preset.kind).map((label) => (
-                                      <span key={label} className={styles.presetModelChip}>{label}</span>
-                                    ))}
-                                  </span>
-                                </span>
-                                {coverUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={coverUrl} alt="" />
-                                ) : (
-                                  <span>{preset.title}</span>
-                                )}
-                              </div>
-                              <div className={styles.presetMetaActions}>
-                                <button
-                                  type="button"
-                                  className={[
-                                    styles.presetMetaButton,
-                                    styles.presetFavoriteButton,
-                                    preset.isFavorite ? styles.presetFavoriteActive : "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void togglePromptPresetFavorite(preset);
-                                  }}
-                                  disabled={Boolean(favoriteSavingById[preset.id])}
-                                  aria-pressed={Boolean(preset.isFavorite)}
-                                  aria-label={preset.isFavorite ? "取消收藏" : "收藏"}
-                                  title={preset.isFavorite ? "取消收藏" : "收藏"}
-                                >
-                                  {preset.isFavorite ? "已收藏" : "收藏"}
-                                </button>
-                              </div>
-                            </article>
-                          );
-                        })
-                      )}
-                    </div>
-                  </section>
-                </div>,
-                document.body,
-              )
-            : null}
+          <PromptPresetLibraryDialog
+            open={portalMounted && presetLibraryOpen}
+            onClose={() => {
+              setPresetLibraryOpen(false);
+              setPresetAddNodePos(null);
+            }}
+            allowedApplyKinds="all"
+            onApplyPreset={handlePresetSelect}
+          />
 
           {portalMounted && imagePreviewNode
             ? createPortal(

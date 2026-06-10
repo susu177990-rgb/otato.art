@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
+import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
@@ -16,7 +17,7 @@ import {
   prependVideoGalleryRecordApi,
 } from "@/lib/workspace-api";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
-import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
+import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import {
@@ -189,7 +190,8 @@ function workspaceModeToPromptPreset(
     promptTemplate: videoWorkspace.prompts[mode.id] ?? favoriteOverlay?.promptTemplate ?? "",
     coverImageUrl: videoWorkspace.coverImageUrlByMode?.[mode.id]?.trim() || favoriteOverlay?.coverImageUrl || "",
     refSlotHints: favoriteOverlay?.refSlotHints ?? [],
-    description: favoriteOverlay?.description,
+    tags: videoWorkspace.promptTagsByMode?.[mode.id] ?? favoriteOverlay?.tags ?? [],
+    description: videoWorkspace.promptDescriptionsByMode?.[mode.id] ?? favoriteOverlay?.description,
     isFavorite: Boolean(favoriteOverlay?.isFavorite),
   };
 }
@@ -215,9 +217,6 @@ export default function VideoPage() {
   const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
   const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
-  const [promptPreviewPreset, setPromptPreviewPreset] = useState<SitePromptPreset | null>(null);
-  const [presetLibraryError, setPresetLibraryError] = useState("");
-  const [favoriteSavingById, setFavoriteSavingById] = useState<Record<string, boolean>>({});
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
 
@@ -309,10 +308,6 @@ export default function VideoPage() {
   }, [promptPreviewOpen]);
 
   useEffect(() => {
-    if (!promptPreviewOpen) setPromptPreviewPreset(null);
-  }, [promptPreviewOpen]);
-
-  useEffect(() => {
     if (!presetLibraryOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -321,21 +316,24 @@ export default function VideoPage() {
     };
   }, [presetLibraryOpen]);
 
-  useEffect(() => {
-    if (!workspaceReady) return;
+  const loadVideoPromptPresets = useCallback(() => {
     void fetchSitePromptPresets("video")
       .then((presets) => {
         setPromptPresets(presets);
-        setPresetLibraryError("");
       })
       .catch((e) => {
         const message = e instanceof Error ? e.message : "无法加载提示词预设";
-        setPresetLibraryError(message);
+        setError(message);
       });
-  }, [workspaceReady]);
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    loadVideoPromptPresets();
+  }, [loadVideoPromptPresets, workspaceReady]);
 
   async function copyPromptToClipboard() {
-    const text = promptPreviewPreset?.promptTemplate || buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs) || "";
+    const text = buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs) || "";
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -354,44 +352,15 @@ export default function VideoPage() {
     window.setTimeout(() => setPromptCopied(false), 1500);
   }
 
-  function selectPromptPreset(presetId: string) {
-    const mode = allModes.find((item) => item.id === presetId);
+  function selectPromptPreset(preset: SitePromptPreset) {
+    if (preset.kind !== "video") return;
+    const mode = allModes.find((item) => item.id === preset.id);
     if (!mode) {
-      setPresetLibraryError("这个预设还没有同步到视频工作台，请刷新后再试。");
+      setError("这个预设还没有同步到视频工作台，请刷新后再试。");
       return;
     }
     setError("");
     setSelectedPresetId(mode.id);
-  }
-
-  async function togglePromptPresetFavorite(preset: SitePromptPreset) {
-    const nextFavorite = !preset.isFavorite;
-    setFavoriteSavingById((prev) => ({ ...prev, [preset.id]: true }));
-    setPromptPresets((prev) => {
-      if (prev.some((item) => item.id === preset.id)) {
-        return prev.map((item) => (item.id === preset.id ? { ...item, isFavorite: nextFavorite } : item));
-      }
-      return [{ ...preset, isFavorite: nextFavorite }, ...prev];
-    });
-    try {
-      await setSitePromptPresetFavorite(preset.id, nextFavorite);
-      const refreshed = await fetchSitePromptPresets("video");
-      setPromptPresets(refreshed);
-      setPresetLibraryError("");
-    } catch (e) {
-      setPromptPresets((prev) =>
-        prev
-          .map((item) => (item.id === preset.id ? { ...item, isFavorite: preset.isFavorite } : item))
-          .filter((item) => item.id !== preset.id || promptPresetById.has(item.id)),
-      );
-      setPresetLibraryError(e instanceof Error ? e.message : "收藏更新失败");
-    } finally {
-      setFavoriteSavingById((prev) => {
-        const next = { ...prev };
-        delete next[preset.id];
-        return next;
-      });
-    }
   }
 
   const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
@@ -1079,10 +1048,10 @@ export default function VideoPage() {
                 <header className={styles.promptPreviewHead}>
                   <div>
                     <p className={styles.promptPreviewEyebrow}>
-                      {promptPreviewPreset ? "预设提示词" : "当前模式提示词"}
+                      当前模式提示词
                     </p>
                     <h2 className={styles.promptPreviewTitle}>
-                      {promptPreviewPreset?.title ?? allModes.find((m) => m.id === selectedPresetId)?.label ?? selectedPresetId}
+                      {allModes.find((m) => m.id === selectedPresetId)?.label ?? selectedPresetId}
                     </h2>
                   </div>
                   <button
@@ -1095,7 +1064,7 @@ export default function VideoPage() {
                   </button>
                 </header>
                 <pre className={styles.promptPreviewText}>
-                  {promptPreviewPreset?.promptTemplate || buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs) || "（当前提示词为空）"}
+                  {buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs) || "（当前提示词为空）"}
                 </pre>
                 <footer className={styles.promptPreviewActions}>
                   <button
@@ -1112,115 +1081,16 @@ export default function VideoPage() {
           )
         : null}
 
-      {portalMounted && presetLibraryOpen
-        ? createPortal(
-            <div className={styles.presetLibraryRoot} role="dialog" aria-modal="true" aria-label="提示词预设">
-              <button
-                type="button"
-                className={styles.presetLibraryBackdrop}
-                onClick={() => setPresetLibraryOpen(false)}
-                aria-label="关闭提示词预设窗口"
-              />
-              <section className={styles.presetLibraryPanel}>
-                <header className={styles.presetLibraryHead}>
-                  <div>
-                    <p className={styles.presetLibraryEyebrow}>生视频</p>
-                    <h2 className={styles.presetLibraryTitle}>提示词预设</h2>
-                  </div>
-                  <div className={styles.presetLibraryHeadActions}>
-                    <button
-                      type="button"
-                      className={styles.presetLibraryClose}
-                      onClick={() => setPresetLibraryOpen(false)}
-                      aria-label="关闭"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </header>
-                {presetLibraryError ? <div className={styles.presetLibraryError}>{presetLibraryError}</div> : null}
-                <div className={styles.presetLibraryGrid}>
-                  {displayedPromptPresets.length === 0 ? (
-                    <div className={styles.presetLibraryEmpty}>暂无提示词预设</div>
-                  ) : (
-                    displayedPromptPresets.map((preset) => {
-                      const active = selectedPresetId === preset.id;
-                      const coverUrl = preset.coverImageUrl.trim();
-                      const hasDescription = Boolean(preset.description?.trim());
-                      return (
-                        <article
-                          key={preset.id}
-                          className={[styles.presetCard, active ? styles.presetCardActive : ""].filter(Boolean).join(" ")}
-                        >
-                          <button
-                            type="button"
-                            className={styles.presetCardSelect}
-                            onClick={() => selectPromptPreset(preset.id)}
-                            aria-label={`选择 ${preset.title}`}
-                          >
-                            <span className={styles.presetCardCover}>
-                              <span className={styles.presetCardOverlay}>
-                                <span className={styles.presetCardOverlayTop}>
-                                  <span className={styles.presetCardTitle}>{preset.title}</span>
-                                  {hasDescription ? (
-                                    <span className={styles.presetCardDesc}>{preset.description!.trim()}</span>
-                                  ) : null}
-                                </span>
-                              </span>
-                              {coverUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={coverUrl} alt="" />
-                              ) : (
-                                <span>{preset.title}</span>
-                              )}
-                            </span>
-                          </button>
-                          <div className={styles.presetMetaActions}>
-                            <button
-                              type="button"
-                              className={[
-                                styles.presetMetaButton,
-                                styles.presetViewButton,
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              onClick={() => {
-                                setPromptPreviewPreset(preset);
-                                setPromptPreviewOpen(true);
-                              }}
-                              aria-label="查看提示词"
-                              title="查看提示词"
-                            >
-                              查看提示词
-                            </button>
-                            <button
-                              type="button"
-                              className={[
-                                styles.presetMetaButton,
-                                styles.presetFavoriteButton,
-                                preset.isFavorite ? styles.presetFavoriteActive : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              onClick={() => void togglePromptPresetFavorite(preset)}
-                              disabled={Boolean(favoriteSavingById[preset.id])}
-                              aria-pressed={Boolean(preset.isFavorite)}
-                              aria-label={preset.isFavorite ? "取消收藏" : "收藏"}
-                              title={preset.isFavorite ? "取消收藏" : "收藏"}
-                            >
-                              {preset.isFavorite ? "已收藏" : "收藏"}
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })
-                  )}
-                </div>
-              </section>
-            </div>,
-            document.body,
-          )
-        : null}
+      <PromptPresetLibraryDialog
+        open={portalMounted && presetLibraryOpen}
+        onClose={() => setPresetLibraryOpen(false)}
+        activePresetId={selectedPresetId}
+        allowedApplyKinds={["video"]}
+        onApplyPreset={selectPromptPreset}
+        onFavoriteChange={(preset) => {
+          if (preset.kind === "video") loadVideoPromptPresets();
+        }}
+      />
     </main>
   );
 }

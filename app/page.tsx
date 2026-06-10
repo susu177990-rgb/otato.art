@@ -186,6 +186,25 @@ function ModeHomeInner() {
             <p className={shellStyles.tileMeta}>模式化生视频 · 记录</p>
           </button>
 
+          <button type="button" onClick={() => router.push("/prompt")} className={shellStyles.tile}>
+            <span className={shellStyles.tileIcon}>
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.5 5.25h15M4.5 9.75h9.75M4.5 14.25h15M4.5 18.75h8.25"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m17.25 8.25.63 1.617 1.62.633-1.62.633-.63 1.617-.63-1.617L15 10.5l1.62-.633.63-1.617Z"
+                />
+              </svg>
+            </span>
+            <p className={shellStyles.tileTitle}>提示词预设</p>
+            <p className={shellStyles.tileMeta}>搜索 · 收藏 · 一键复制</p>
+          </button>
+
           <button type="button" onClick={() => router.push("/canvas")} className={shellStyles.tile}>
             <span className={shellStyles.tileIcon}>
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

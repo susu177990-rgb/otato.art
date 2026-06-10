@@ -69,6 +69,7 @@
 - Canvas generation nodes: image, video, and text-generation nodes on the infinite canvas reuse the same operation-bar language as the standalone workspace pages.
 - Canvas media nodes: custom linework controls are required for audio playback; native browser audio controls are not acceptable because they break the project visual system across browsers.
 - Canvas grid: the infinite-canvas grid is a functional world-space reference; decorative page grids belong only to the homepage and must not appear on unrelated routes.
+- Prompt preset card: all prompt preset cards must use the shared prompt-preset card component rather than route-local copies. The card uses a left 16:9 cover that displays the whole image, a right metadata column for kind, secondary tags, title, description, and model chips, plus a bottom action bar. On `/prompt` the action bar contains only `收藏 / 已收藏`; inside workspace preset dialogs it is split evenly between `查看提示词` and `收藏 / 已收藏`. Card body click applies/selects the preset; copying prompt text belongs only in the detail or preview dialog. Secondary tags, model chips, selected state, and favorite state must remain visually consistent across `/prompt`, image, video, chat, and canvas.
 
 ## Accessibility
 

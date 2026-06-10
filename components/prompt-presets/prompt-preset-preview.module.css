@@ -1,0 +1,107 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 10070;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px))
+    max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.78);
+  cursor: default;
+}
+
+.panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(760px, calc(100vw - 36px));
+  max-height: min(78vh, 720px);
+  flex-direction: column;
+  border: 3px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  color: #050505;
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 3px solid #050505;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #5f5f5a;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.close,
+.copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.close {
+  width: 34px;
+  height: 34px;
+  border-radius: 15px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.body {
+  min-height: 0;
+  margin: 0;
+  padding: 18px 20px;
+  overflow: auto;
+  color: #050505;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 20px 18px;
+}
+
+.copy {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+
+.close:hover,
+.copy:hover {
+  background: #050505;
+  color: #ffffff;
+}

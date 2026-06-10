@@ -234,3 +234,127 @@
 .toolJson:hover {
   background: #f3f3ef;
 }
+
+.presetLibraryRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px))
+    max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+}
+
+.presetLibraryBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.78);
+  cursor: default;
+}
+
+.presetLibraryPanel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(1180px, calc(100vw - 36px));
+  max-height: min(86vh, 860px);
+  flex-direction: column;
+  border: 3px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  color: #050505;
+  overflow: hidden;
+}
+
+.presetLibraryHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 3px solid #050505;
+}
+
+.presetLibraryEyebrow {
+  margin: 0 0 5px;
+  color: #5f5f5a;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.presetLibraryTitle {
+  margin: 0;
+  color: #050505;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.presetLibraryHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.presetLibraryClear,
+.presetLibraryClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #050505;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.presetLibraryClear {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 15px;
+}
+
+.presetLibraryClose {
+  width: 34px;
+  height: 34px;
+  border-radius: 15px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.presetLibraryClear:hover,
+.presetLibraryClose:hover {
+  background: #050505;
+  color: #ffffff;
+}
+
+.presetLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.presetLibraryEmpty {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed #050505;
+  border-radius: 24px;
+  color: #5f5f5a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+@media (max-width: 720px) {
+  .presetLibraryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

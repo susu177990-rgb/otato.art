@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { ChatPromptPresetRail } from "@/components/chat/ChatPromptPresetRail";
 import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
+import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { SkillFormPanel } from "@/components/skill-form/SkillFormPanel";
 import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/completion";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
@@ -190,6 +191,7 @@ export function ChatWorkspace() {
   const [conversation, setConversation] = useState<ChatConversation | null>(null);
   const [skillPacks, setSkillPacks] = useState<SkillPackRecord[]>([]);
   const [chatPromptPresets, setChatPromptPresets] = useState<SitePromptPreset[]>([]);
+  const [promptPresetLibraryOpen, setPromptPresetLibraryOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -217,6 +219,10 @@ export function ChatWorkspace() {
     setSkillPacks(packs);
   }, []);
 
+  const loadChatPromptPresets = useCallback(async () => {
+    setChatPromptPresets(await fetchSitePromptPresets("chat"));
+  }, []);
+
   const loadLists = useCallback(async () => {
     const [convs, packsRes, promptPresets] = await Promise.all([
       fetchChatConversations(),
@@ -241,12 +247,10 @@ export function ChatWorkspace() {
   useEffect(() => {
     if (!workspaceReady) return;
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void Promise.all([loadSkillPacks(), fetchSitePromptPresets("chat").then(setChatPromptPresets)]).catch(() => {});
-      }
+      if (document.visibilityState === "visible") void Promise.all([loadSkillPacks(), loadChatPromptPresets()]).catch(() => {});
     };
     const onFocus = () => {
-      void Promise.all([loadSkillPacks(), fetchSitePromptPresets("chat").then(setChatPromptPresets)]).catch(() => {});
+      void Promise.all([loadSkillPacks(), loadChatPromptPresets()]).catch(() => {});
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
@@ -254,7 +258,7 @@ export function ChatWorkspace() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
     };
-  }, [workspaceReady, loadSkillPacks]);
+  }, [workspaceReady, loadSkillPacks, loadChatPromptPresets]);
 
   useEffect(() => {
     setInputText("");
@@ -684,11 +688,11 @@ export function ChatWorkspace() {
         />
       ) : (
         <ChatPromptPresetRail
-          presets={chatPromptPresets}
-          selectedPresetId={selectedChatPresetId}
+          selectedPresetTitle={selectedPromptPreset?.title ?? null}
           switchDisabled={isSavingSkill}
-          onSelectPreset={(id) =>
-            void selectChatPromptPreset(id).catch((e) =>
+          onOpenLibrary={() => setPromptPresetLibraryOpen(true)}
+          onClearPreset={() =>
+            void selectChatPromptPreset(null).catch((e) =>
               setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
             )
           }
@@ -766,6 +770,26 @@ export function ChatWorkspace() {
         }}
         onCommitRename={() => void commitRename()}
         onDelete={(id) => void handleDeleteConv(id)}
+      />
+
+      <PromptPresetLibraryDialog
+        open={promptPresetLibraryOpen}
+        onClose={() => setPromptPresetLibraryOpen(false)}
+        activePresetId={selectedChatPresetId}
+        allowedApplyKinds={["chat"]}
+        onApplyPreset={(preset) => {
+          if (preset.kind !== "chat") return;
+          void selectChatPromptPreset(preset.id)
+            .then(() => setPromptPresetLibraryOpen(false))
+            .catch((e) => setError(e instanceof Error ? e.message : "保存对话提示词预设失败"));
+        }}
+        clearAction={{
+          label: "不使用预设",
+          onClick: () => selectChatPromptPreset(null),
+        }}
+        onFavoriteChange={(preset) => {
+          if (preset.kind === "chat") void loadChatPromptPresets().catch(() => {});
+        }}
       />
     </div>
   );

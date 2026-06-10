@@ -121,10 +121,20 @@
   min-height: 0;
 }
 
+@supports (width: 1cqh) {
+  .resultImageStack {
+    width: min(100%, calc(100cqh * var(--result-aspect-ratio, 4 / 3)));
+    height: auto;
+    aspect-ratio: var(--result-aspect-ratio, auto);
+  }
+}
+
 .resultPreviewHit {
   display: block;
   box-sizing: border-box;
   flex: 0 1 auto;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   max-width: 100%;
@@ -147,8 +157,8 @@
 
 .resultPreviewHit .resultImage {
   display: block;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -2099,6 +2109,20 @@
   color: #ffffff;
 }
 
+/* Shared prompt preset cards own their height and internal structure. */
+.presetLibraryGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-auto-rows: auto !important;
+  gap: 12px !important;
+  padding: 14px !important;
+}
+
+@media (max-width: 720px) {
+  .presetLibraryGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 /* Final production rail pass: rails are layout only; items own the outline. */
 .modePanel,
 .historyPanel {
@@ -2253,6 +2277,12 @@
 .resultPreviewHit .resultImage,
 .imagePreviewImg {
   display: block;
+}
+
+.resultPreviewHit .resultImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .imagePreviewImg {
