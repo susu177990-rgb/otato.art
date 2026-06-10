@@ -1213,7 +1213,7 @@
 .historyItem img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   background: #09090b;
 }
 
@@ -2188,17 +2188,19 @@
 .modePanelImage .modeColumn,
 .historyColumn {
   --history-thumb: 96px;
+  --rail-card-width: 128px;
+  --rail-card-height: 72px;
   --history-gap: 14px;
   --history-visible: 5;
   --mode-visible: 5;
-  width: 96px;
-  max-width: 96px;
+  width: var(--rail-card-width);
+  max-width: var(--rail-card-width);
 }
 
 .modePanelImage .modeList,
 .historyList {
   gap: 14px !important;
-  width: 96px !important;
+  width: var(--rail-card-width) !important;
   align-items: center;
 }
 
@@ -2209,7 +2211,7 @@
 
 .modePanelImage .modeScroll,
 .historyScroll {
-  width: 96px !important;
+  width: var(--rail-card-width) !important;
   max-height: var(--rail-window-height) !important;
   padding: 0 !important;
   justify-content: safe center !important;
@@ -2219,12 +2221,13 @@
 .emptyRail,
 .emptyHistory,
 .historyItem {
-  width: 96px !important;
-  height: 96px !important;
-  min-width: 96px !important;
-  min-height: 96px !important;
+  width: var(--rail-card-width) !important;
+  height: var(--rail-card-height) !important;
+  min-width: var(--rail-card-width) !important;
+  min-height: var(--rail-card-height) !important;
+  aspect-ratio: 16 / 9;
   border: 4px solid #050505 !important;
-  border-radius: 28px !important;
+  border-radius: 18px !important;
   background: #ffffff !important;
   color: #050505 !important;
   box-shadow: none !important;
