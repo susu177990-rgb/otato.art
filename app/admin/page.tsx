@@ -568,7 +568,12 @@ function ChatPromptsPanel({
                 </div>
               </header>
               <div className={styles.promptModeEditBody}>
-                <div className={styles.chatPromptColumn}>
+                <div className={styles.promptModeMainColumn}>
+                  <PromptTagPicker
+                    kind="chat"
+                    value={tagValue}
+                    onChange={(next) => void setChatPromptTags(preset, next, isEditing)}
+                  />
                   <label className={shellStyles.field}>
                     <span className={shellStyles.fieldLabel}>提示词内容</span>
                     <textarea
@@ -597,19 +602,12 @@ function ChatPromptsPanel({
                       }}
                     />
                   </label>
-                </div>
-                <div className={styles.chatPromptColumn}>
-                  <PromptTagPicker
-                    kind="chat"
-                    value={tagValue}
-                    onChange={(next) => void setChatPromptTags(preset, next, isEditing)}
-                  />
                   <label className={shellStyles.field}>
                     <span className={shellStyles.fieldLabel}>使用说明 (可选)</span>
                     <textarea
                       className={[
                         shellStyles.textarea,
-                        styles.promptModeTextarea,
+                        styles.promptDescriptionTextarea,
                         styles.noResize,
                         !isEditing ? styles.promptModeTextareaReadOnly : "",
                       ]
@@ -1964,7 +1962,7 @@ function VideoPromptsPanel({
           <div>
             <h2 className={shellStyles.cardTitle}>生视频提示词预设库</h2>
             <p className={shellStyles.cardSubtitle}>
-              生视频页用这里的预设。<code className={shellStyles.mono}>{"{{…}}"}</code> 会生成对应输入框，右侧可上传封面。
+              生视频页用这里的预设。<code className={shellStyles.mono}>{"{{…}}"}</code> 会生成对应输入框，右侧可上传 GIF 动图封面。
             </p>
           </div>
         </div>
@@ -2096,7 +2094,7 @@ function VideoPromptsPanel({
                             <img src={coverUrl} alt={`${mode.label} 封面`} className={styles.promptModeCoverImage} />
                             <input
                               type="file"
-                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              accept="image/gif"
                               className={styles.promptModeCoverFileInput}
                               disabled={coverBusy}
                               onChange={(e) => {
@@ -2128,11 +2126,11 @@ function VideoPromptsPanel({
                       </>
                     ) : isEditing ? (
                       <label className={styles.promptModeCoverUploadLabel}>
-                        <span className={styles.promptModeCoverLabel}>上传封面</span>
-                        <span className={styles.promptModeCoverHint}>原比例缩略 · 自动转 WebP · 最大 5MB</span>
+                        <span className={styles.promptModeCoverLabel}>上传 GIF 封面</span>
+                        <span className={styles.promptModeCoverHint}>支持 GIF 动图 · 原文件上传 · 最大 5MB</span>
                         <input
                           type="file"
-                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          accept="image/gif"
                           className={styles.promptModeCoverFileInput}
                           disabled={coverBusy}
                           onChange={(e) => {

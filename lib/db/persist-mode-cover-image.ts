@@ -8,9 +8,18 @@ export function sanitizeModeCoverModeId(modeId: string): string {
   return modeId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120);
 }
 
-export function modeCoverStoragePath(modeId: string): string {
+type ModeCoverUploadOptions = {
+  contentType?: string;
+  extension?: string;
+};
+
+function sanitizeModeCoverExtension(extension: string): string {
+  return extension.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || "webp";
+}
+
+export function modeCoverStoragePath(modeId: string, extension = "webp"): string {
   const nonce = Math.random().toString(36).slice(2, 7);
-  return `${MODE_COVER_STORAGE_PREFIX}/${sanitizeModeCoverModeId(modeId)}_${nonce}.webp`;
+  return `${MODE_COVER_STORAGE_PREFIX}/${sanitizeModeCoverModeId(modeId)}_${nonce}.${sanitizeModeCoverExtension(extension)}`;
 }
 
 export function storagePathFromPublicUrl(url: string, bucket = GENERATED_IMAGES_BUCKET): string | null {
@@ -49,18 +58,19 @@ export async function deleteModeCoverObject(
 export async function uploadModeCoverObject(
   supabase: SupabaseClient,
   modeId: string,
-  webpBytes: Uint8Array,
+  imageBytes: Uint8Array,
   previousUrl?: string,
+  options: ModeCoverUploadOptions = {},
 ): Promise<string> {
-  if (!webpBytes.byteLength) throw new Error("封面图为空");
+  if (!imageBytes.byteLength) throw new Error("封面图为空");
 
   if (previousUrl) {
     await deleteModeCoverObject(supabase, previousUrl);
   }
 
-  const path = modeCoverStoragePath(modeId);
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, webpBytes, {
-    contentType: MODE_COVER_OUTPUT_MIME,
+  const path = modeCoverStoragePath(modeId, options.extension);
+  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, imageBytes, {
+    contentType: options.contentType ?? MODE_COVER_OUTPUT_MIME,
     upsert: true,
   });
   if (error) throw new Error(`上传封面图失败: ${error.message}`);

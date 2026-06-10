@@ -53,6 +53,7 @@ export function PromptPresetCard({
   const rawCoverAspect = naturalAspect && Number.isFinite(naturalAspect) && naturalAspect > 0 ? naturalAspect : 16 / 9;
   const coverAspect = Math.min(2.15, Math.max(0.75, rawCoverAspect));
   const desc = description?.trim() || "无描述";
+  const isChat = kind === "chat";
 
   return (
     <article
@@ -66,47 +67,59 @@ export function PromptPresetCard({
     >
       <button
         type="button"
-        className={styles.main}
+        className={[styles.main, isChat ? styles.mainChat : ""].filter(Boolean).join(" ")}
         onClick={onSelect}
         disabled={selectDisabled}
         aria-label={selectLabel ?? `选择 ${title}`}
       >
-        <span
-          className={styles.cover}
-          style={{ "--preset-cover-aspect": coverAspect } as CSSProperties}
-        >
-          {coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={coverUrl}
-              alt=""
-              onLoad={(event) => {
-                const img = event.currentTarget;
-                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                  setNaturalAspect(img.naturalWidth / img.naturalHeight);
-                }
-              }}
-            />
-          ) : (
-            <span className={styles.coverFallback}>{title}</span>
-          )}
-          <span className={styles.coverTopChips} aria-label="预设分类">
-            <span className={styles.coverChip}>{KIND_LABELS[kind]}</span>
-            {normalizedTags.slice(0, 4).map((tag) => (
-              <span key={tag} className={styles.coverChip}>
-                {tag}
-              </span>
-            ))}
+        {isChat ? null : (
+          <span
+            className={styles.cover}
+            style={{ "--preset-cover-aspect": coverAspect } as CSSProperties}
+          >
+            {coverUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={coverUrl}
+                alt=""
+                onLoad={(event) => {
+                  const img = event.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    setNaturalAspect(img.naturalWidth / img.naturalHeight);
+                  }
+                }}
+              />
+            ) : (
+              <span className={styles.coverFallback}>{title}</span>
+            )}
+            <span className={styles.coverTopChips} aria-label="预设分类">
+              <span className={styles.coverChip}>{KIND_LABELS[kind]}</span>
+              {normalizedTags.slice(0, 4).map((tag) => (
+                <span key={tag} className={styles.coverChip}>
+                  {tag}
+                </span>
+              ))}
+            </span>
+            <span className={styles.coverModelChips} aria-label="适配模型">
+              {labels.map((label) => (
+                <span key={label} className={styles.coverModelChip}>
+                  {label}
+                </span>
+              ))}
+            </span>
           </span>
-          <span className={styles.coverModelChips} aria-label="适配模型">
-            {labels.map((label) => (
-              <span key={label} className={styles.coverModelChip}>
-                {label}
-              </span>
-            ))}
-          </span>
-        </span>
-        <span className={styles.info}>
+        )}
+        <span className={[styles.info, isChat ? styles.infoChat : ""].filter(Boolean).join(" ")}>
+          {isChat ? (
+            <span className={styles.metaChips} aria-label="预设分类">
+              <span className={styles.metaChip}>{KIND_LABELS[kind]}</span>
+              {normalizedTags.slice(0, 4).map((tag) => (
+                <span key={tag} className={styles.metaChip}>
+                  {tag}
+                </span>
+              ))}
+            </span>
+          ) : null}
           <strong className={styles.title}>{title}</strong>
           <span className={styles.description}>{desc}</span>
         </span>
