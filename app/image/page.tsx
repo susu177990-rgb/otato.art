@@ -53,6 +53,16 @@ const RESULT_ASPECT_RATIO_BY_VALUE: Partial<Record<ImageAspectRatio, string>> = 
   "16:9": "16 / 9",
   "21:9": "21 / 9",
 };
+const RESULT_ASPECT_RATIO_NUMBER_BY_VALUE: Partial<Record<ImageAspectRatio, number>> = {
+  "1:1": 1,
+  "2:3": 2 / 3,
+  "3:2": 3 / 2,
+  "3:4": 3 / 4,
+  "4:3": 4 / 3,
+  "9:16": 9 / 16,
+  "16:9": 16 / 9,
+  "21:9": 21 / 9,
+};
 const IMAGE_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-image-generation-runtime-v1";
 const IMAGE_GENERATION_RUNTIME_EVENT = "script-agent-image-generation-runtime-change";
 const IMAGE_REFERENCE_CACHE_STORAGE_KEY = "script-agent-image-reference-cache-v1";
@@ -367,6 +377,9 @@ export default function ImagePage() {
   const [slotInputs, setSlotInputs] = useState<string[]>([""]);
   const [refSlots, setRefSlots] = useState<RefSlot[]>(createEmptyRefSlots);
   const [resultUrl, setResultUrl] = useState("");
+  const [resultNaturalAspectRatio, setResultNaturalAspectRatio] = useState("");
+  const [resultNaturalAspectRatioValue, setResultNaturalAspectRatioValue] = useState(0);
+  const [resultBoxSize, setResultBoxSize] = useState({ width: 0, height: 0 });
   const [previewOpen, setPreviewOpen] = useState(false);
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
   const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
@@ -374,7 +387,23 @@ export default function ImagePage() {
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const resultAspectRatio = RESULT_ASPECT_RATIO_BY_VALUE[aspectRatio];
+  const resultAspectRatio = resultNaturalAspectRatio || RESULT_ASPECT_RATIO_BY_VALUE[aspectRatio];
+  const resultAspectRatioValue = resultNaturalAspectRatioValue || RESULT_ASPECT_RATIO_NUMBER_BY_VALUE[aspectRatio] || 0;
+  const resultImageStackStyle = resultAspectRatio
+    ? ({
+        "--result-aspect-ratio": resultAspectRatio,
+        ...(resultAspectRatioValue > 0 && resultBoxSize.width > 0 && resultBoxSize.height > 0
+          ? (() => {
+              const width = Math.min(resultBoxSize.width, resultBoxSize.height * resultAspectRatioValue);
+              const height = width / resultAspectRatioValue;
+              return {
+                width: `${Math.round(width)}px`,
+                height: `${Math.round(height)}px`,
+              };
+            })()
+          : {}),
+      } as CSSProperties)
+    : undefined;
   const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
     const candidates: AssetMentionCandidate[] = [];
     refSlots.forEach((slot, index) => {
@@ -393,6 +422,7 @@ export default function ImagePage() {
     return candidates;
   }, [refSlots]);
   const historyScrollRef = useRef<HTMLDivElement>(null);
+  const resultClipRef = useRef<HTMLDivElement>(null);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
   /** 用户已手动改过参考图槽时，勿用 localStorage 里的旧 runtime 覆盖 */
@@ -411,6 +441,31 @@ export default function ImagePage() {
 
   useEffect(() => {
     setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setResultNaturalAspectRatio("");
+    setResultNaturalAspectRatioValue(0);
+  }, [resultUrl]);
+
+  useLayoutEffect(() => {
+    const el = resultClipRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setResultBoxSize({
+        width: Math.max(0, rect.width),
+        height: Math.max(0, rect.height),
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
   }, []);
 
   useEffect(() => {
@@ -1000,12 +1055,12 @@ export default function ImagePage() {
         <div className={styles.canvas}>
           <div className={styles.canvasInner}>
             <div className={styles.resultSafeFrame}>
-              <div className={styles.resultClip}>
+              <div className={styles.resultClip} ref={resultClipRef}>
                 {resultUrl ? (
                   <div className={styles.resultMedia}>
                     <div
                       className={styles.resultImageStack}
-                      style={resultAspectRatio ? ({ "--result-aspect-ratio": resultAspectRatio } as CSSProperties) : undefined}
+                      style={resultImageStackStyle}
                     >
                       <button
                         type="button"
@@ -1014,7 +1069,18 @@ export default function ImagePage() {
                         aria-label="全屏预览生成图"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={resultUrl} alt="生成结果" className={styles.resultImage} />
+                        <img
+                          src={resultUrl}
+                          alt="生成结果"
+                          className={styles.resultImage}
+                          onLoad={(event) => {
+                            const { naturalWidth, naturalHeight } = event.currentTarget;
+                            if (naturalWidth > 0 && naturalHeight > 0) {
+                              setResultNaturalAspectRatio(`${naturalWidth} / ${naturalHeight}`);
+                              setResultNaturalAspectRatioValue(naturalWidth / naturalHeight);
+                            }
+                          }}
+                        />
                       </button>
                       <button
                         type="button"
