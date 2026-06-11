@@ -70,4 +70,48 @@ describe("user API settings client snapshots", () => {
 
     expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
   });
+
+  it("keeps admin-added site LLM models visible when a user has older LLM settings", () => {
+    const siteSettings = {
+      ...DEFAULT_SETTINGS,
+      defaultModelId: "admin-new-model",
+      models: {
+        [DEFAULT_SETTINGS.defaultModelId]: {
+          ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+          apiKey: "sk-global-default",
+        },
+        "admin-new-model": {
+          id: "admin-new-model",
+          label: "Admin New Model",
+          modelName: "admin-new-model",
+          enabled: true,
+          apiUrl: "https://example.com/v1/chat/completions",
+          apiKey: "sk-global-new",
+        },
+      },
+      apiUrl: "https://example.com/v1/chat/completions",
+      apiKey: "sk-global-new",
+      model: "admin-new-model",
+    };
+
+    const clientLlm = userApiSettingsStoreTestInternals.clientSiteLlmWithUserKeys(
+      {
+        ...DEFAULT_SETTINGS,
+        models: {
+          [DEFAULT_SETTINGS.defaultModelId]: {
+            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+            label: "Old User Model",
+            apiKey: "enc:v1:user-key",
+          },
+        },
+      },
+      siteSettings,
+    );
+
+    expect(Object.keys(clientLlm.models)).toEqual([DEFAULT_SETTINGS.defaultModelId, "admin-new-model"]);
+    expect(clientLlm.defaultModelId).toBe("admin-new-model");
+    expect(clientLlm.models["admin-new-model"].label).toBe("Admin New Model");
+    expect(clientLlm.models["admin-new-model"].apiKey).toBe("");
+    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
+  });
 });

@@ -117,6 +117,31 @@ function userLlmForClient(row: unknown, fallbackSettings: Settings): Settings {
   };
 }
 
+function clientSiteLlmWithUserKeys(row: unknown, siteSettings: Settings): Settings {
+  const userSettings = normalizeLlmSettings(row ?? {});
+  const rawKeys = rawModelApiKeys(row);
+  const models = Object.fromEntries(
+    Object.entries(siteSettings.models).map(([id, model]) => {
+      const userModel = userSettings.models[id];
+      return [
+        id,
+        {
+          ...model,
+          apiKey: redactApiKeyForClient(rawKeys[id] ?? userModel?.apiKey ?? ""),
+        },
+      ];
+    }),
+  ) as Record<string, LlmModelConfig>;
+  const defaultModel = models[siteSettings.defaultModelId] ?? Object.values(models)[0];
+  return {
+    ...siteSettings,
+    models,
+    apiKey: defaultModel?.apiKey ?? "",
+    apiUrl: defaultModel?.apiUrl ?? siteSettings.apiUrl,
+    model: defaultModel?.modelName ?? siteSettings.model,
+  };
+}
+
 function mergeLlmForSave(incoming: unknown, existing: unknown): Settings {
   const incomingSettings = normalizeLlmSettings(incoming ?? DEFAULT_SETTINGS);
   const existingSettings = existing ? userLlmWithSecrets(existing, DEFAULT_SETTINGS) : null;
@@ -261,6 +286,7 @@ export const userApiSettingsStoreTestInternals = {
   sanitizeVideoSettingsForStorage,
   userWorkspaceDefaultsForClient,
   userLlmForClient,
+  clientSiteLlmWithUserKeys,
   redactImageModels,
   clearImageModelKeys,
   redactVideoModels,
@@ -373,7 +399,7 @@ export async function getUserWorkspaceSnapshot(
       : userLlmForClient(row.llm, siteSnapshot.llm)
     : options.visibility === "server"
       ? siteSnapshot.llm
-      : userLlmForClient(row.llm, siteSnapshot.llm);
+      : clientSiteLlmWithUserKeys(row.llm, siteSnapshot.llm);
   const imageModels =
     options.visibility === "server" ? decryptImageModels(row.image_models) : redactImageModels(row.image_models);
   const videoModels =
