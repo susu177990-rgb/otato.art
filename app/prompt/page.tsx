@@ -233,14 +233,11 @@ function PromptPageInner() {
           <Link href="/" className={shellStyles.navLink}>
             返回首页
           </Link>
-          <Link href="/settings" className={shellStyles.navLink}>
-            API设置
-          </Link>
-        </nav>
-        <div className={shellStyles.topnav}>
           <button type="button" className={[shellStyles.navLink, styles.uploadButton].join(" ")} onClick={() => setUploadOpen(true)}>
             上传提示词
           </button>
+        </nav>
+        <div className={shellStyles.topnav}>
           <span className={styles.statusPill}>{statusText}</span>
         </div>
       </header>
