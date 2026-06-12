@@ -33,6 +33,25 @@ export async function replaceSitePromptPresets(
   return data.presets;
 }
 
+export async function createSitePromptPreset(
+  preset: Pick<SitePromptPreset, "kind" | "title" | "promptTemplate" | "tags" | "description"> & { coverFile?: File | null },
+): Promise<{ preset: SitePromptPreset; presets: SitePromptPreset[] }> {
+  const body = new FormData();
+  body.set("kind", preset.kind);
+  body.set("title", preset.title);
+  body.set("promptTemplate", preset.promptTemplate);
+  body.set("description", preset.description ?? "");
+  body.set("tags", preset.tags.join(","));
+  if (preset.coverFile) body.set("coverFile", preset.coverFile);
+
+  const res = await fetch("/api/site-prompt-presets", {
+    method: "POST",
+    body,
+  });
+  if (!res.ok) throw new Error(await readApiError(res, "无法上传提示词预设"));
+  return (await res.json()) as { preset: SitePromptPreset; presets: SitePromptPreset[] };
+}
+
 export async function setSitePromptPresetFavorite(
   presetId: string,
   isFavorite: boolean,

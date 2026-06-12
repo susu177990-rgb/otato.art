@@ -17,6 +17,10 @@ export type SitePromptPreset = {
   isFavorite?: boolean;
 };
 
+export function newUserPromptPresetId(kind: PromptPresetKind): string {
+  return `user_preset_${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset, sortOrder = 0): Record<string, unknown> {
   const title = preset.title.trim() || preset.id;
   const promptTemplate = preset.promptTemplate ?? "";
@@ -219,13 +223,54 @@ export async function replaceSitePromptPresetsByKind(
     }
   }
 
-  const deleteQuery = supabase.from("site_prompt_presets").delete().eq("preset_type", kind);
+  const deleteQuery = supabase.from("site_prompt_presets").delete().eq("preset_type", kind).not("id", "like", "user_preset_%");
   const { error: deleteError } =
     rows.length === 0
       ? await deleteQuery
       : await deleteQuery.not("id", "in", `(${rows.map((row) => quoteForSupabaseIn(String(row.id))).join(",")})`);
 
   if (deleteError && !isMissingPresetTable(deleteError)) throw deleteError;
+}
+
+export async function upsertSitePromptPreset(
+  supabase: SupabaseClient,
+  kind: PromptPresetKind,
+  preset: SitePromptPreset,
+): Promise<SitePromptPreset> {
+  const { data: firstRows, error: firstError } = await supabase
+    .from("site_prompt_presets")
+    .select("sort_order")
+    .eq("preset_type", kind)
+    .order("sort_order", { ascending: true })
+    .limit(1);
+
+  if (firstError) {
+    if (isMissingPresetTable(firstError)) return preset;
+    throw firstError;
+  }
+
+  const firstSortOrder = Number((firstRows?.[0] as { sort_order?: unknown } | undefined)?.sort_order ?? 0);
+  const sortOrder = Number.isFinite(firstSortOrder) ? firstSortOrder - 1 : -1;
+  const normalizedPreset: SitePromptPreset = {
+    ...preset,
+    kind,
+    title: preset.title.trim() || preset.id,
+    promptTemplate: preset.promptTemplate ?? "",
+    coverImageUrl: preset.coverImageUrl?.trim() || "",
+    refSlotHints: kind === "image" ? (preset.refSlotHints ?? []) : [],
+    tags: normalizePromptTags(preset.tags),
+    description: preset.description?.trim() || undefined,
+  };
+
+  const { error } = await supabase.from("site_prompt_presets").upsert([toPresetRow(kind, normalizedPreset, sortOrder)], {
+    onConflict: "id",
+  });
+  if (error) {
+    if (isMissingPresetTable(error)) return normalizedPreset;
+    throw error;
+  }
+
+  return normalizedPreset;
 }
 
 function imageWorkspaceRows(workspace: ImageWorkspaceSettings): Array<Record<string, unknown>> {
@@ -282,7 +327,11 @@ export async function syncPromptLibraryFromWorkspaces(
     }
   }
 
-  const deleteQuery = supabase.from("site_prompt_presets").delete().in("preset_type", ["image", "video"]);
+  const deleteQuery = supabase
+    .from("site_prompt_presets")
+    .delete()
+    .in("preset_type", ["image", "video"])
+    .not("id", "like", "user_preset_%");
   const { error: deleteError } =
     wantedIds.length === 0
       ? await deleteQuery

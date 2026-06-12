@@ -4,8 +4,13 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { PromptPresetCard } from "@/components/prompt-presets/PromptPresetCard";
-import { fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
-import { PROMPT_TAG_GROUPS, PROMPT_UNCATEGORIZED_TAG, normalizePromptTags } from "@/lib/prompt-tags";
+import { createSitePromptPreset, fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
+import {
+  PROMPT_TAG_GROUPS,
+  PROMPT_UNCATEGORIZED_TAG,
+  normalizePromptTags,
+  togglePromptTag,
+} from "@/lib/prompt-tags";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./prompt-page.module.css";
 
@@ -52,6 +57,15 @@ function promptPresetModelLabels(kind: PromptPresetKind): string[] {
   return ["对话"];
 }
 
+const EMPTY_UPLOAD_FORM = {
+  kind: "image" as PromptPresetKind,
+  title: "",
+  description: "",
+  promptTemplate: "",
+  coverFile: null as File | null,
+  tags: [] as string[],
+};
+
 async function copyTextToClipboard(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
@@ -81,6 +95,10 @@ function PromptPageInner() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [favoriteSavingById, setFavoriteSavingById] = useState<Record<string, boolean>>({});
   const [copiedPresetId, setCopiedPresetId] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadForm, setUploadForm] = useState(EMPTY_UPLOAD_FORM);
+  const [uploadSaving, setUploadSaving] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const loadPresets = useCallback(async () => {
     setLoading(true);
@@ -166,6 +184,42 @@ function PromptPageInner() {
     window.setTimeout(() => setCopiedPresetId((current) => (current === preset.id ? null : current)), 1400);
   }
 
+  async function submitUploadPreset() {
+    setUploadSaving(true);
+    setUploadError("");
+    setError("");
+    setNeedsLogin(false);
+    try {
+      const result = await createSitePromptPreset({
+        kind: uploadForm.kind,
+        title: uploadForm.title,
+        description: uploadForm.description,
+        promptTemplate: uploadForm.promptTemplate,
+        coverFile: uploadForm.coverFile,
+        tags: uploadForm.tags,
+      });
+      const grouped = await Promise.all(
+        PROMPT_KINDS.map((kind) => (kind === uploadForm.kind ? Promise.resolve(result.presets) : fetchSitePromptPresets(kind))),
+      );
+      setPresets(grouped.flat());
+      setFilter(uploadForm.kind);
+      setSecondaryTag(null);
+      setQuery("");
+      setSelectedPresetId(result.preset.id);
+      setUploadOpen(false);
+      setUploadForm(EMPTY_UPLOAD_FORM);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "上传提示词预设失败";
+      setUploadError(message);
+      if (message.includes("请先登录")) {
+        setError(message);
+        setNeedsLogin(true);
+      }
+    } finally {
+      setUploadSaving(false);
+    }
+  }
+
   const statusText = loading
     ? "加载中"
     : `${filteredPresets.length} / ${presets.length} 条预设`;
@@ -184,6 +238,9 @@ function PromptPageInner() {
           </Link>
         </nav>
         <div className={shellStyles.topnav}>
+          <button type="button" className={[shellStyles.navLink, styles.uploadButton].join(" ")} onClick={() => setUploadOpen(true)}>
+            上传提示词
+          </button>
           <span className={styles.statusPill}>{statusText}</span>
         </div>
       </header>
@@ -341,7 +398,236 @@ function PromptPageInner() {
           </aside>
         </div>
       </div>
+      {uploadOpen ? (
+        <UploadPromptPresetDialog
+          form={uploadForm}
+          saving={uploadSaving}
+          error={uploadError}
+          onClose={() => {
+            if (uploadSaving) return;
+            setUploadOpen(false);
+            setUploadError("");
+          }}
+          onChange={setUploadForm}
+          onSubmit={() => void submitUploadPreset()}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function UploadPromptPresetDialog({
+  form,
+  saving,
+  error,
+  onClose,
+  onChange,
+  onSubmit,
+}: {
+  form: typeof EMPTY_UPLOAD_FORM;
+  saving: boolean;
+  error: string;
+  onClose: () => void;
+  onChange: (next: typeof EMPTY_UPLOAD_FORM) => void;
+  onSubmit: () => void;
+}) {
+  const tagValue = normalizePromptTags(form.tags);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
+
+  function setKind(kind: PromptPresetKind) {
+    onChange({
+      ...form,
+      kind,
+      coverFile: kind === "chat" ? null : form.coverFile,
+      tags: [],
+    });
+  }
+
+  return (
+    <div
+      className={styles.uploadDialogRoot}
+      role="dialog"
+      aria-modal="true"
+      aria-label="上传提示词预设"
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className={[shellStyles.card, styles.uploadDialogCard].join(" ")} onPointerDown={(event) => event.stopPropagation()}>
+        <header className={[shellStyles.cardHead, styles.uploadDialogHead].join(" ")}>
+          <div>
+            <p className={styles.eyebrow}>Upload Preset</p>
+            <h2 className={styles.uploadDialogTitle}>上传提示词预设</h2>
+            <p className={styles.uploadDialogSubtitle}>提交后会直接进入全站预设库，所有用户都能在预设库里使用。</p>
+          </div>
+          <button type="button" className={styles.uploadCloseButton} onClick={onClose} disabled={saving} aria-label="关闭">
+            ×
+          </button>
+        </header>
+
+        <article className={[shellStyles.card, styles.uploadPresetCard].join(" ")}>
+          <header className={[shellStyles.cardHead, styles.uploadPresetCardHead].join(" ")}>
+            <label className={styles.promptModeLabelEdit}>
+              <span className={styles.visuallyHidden}>预设名称</span>
+              <input
+                className={[shellStyles.input, shellStyles.inputCompact].join(" ")}
+                value={form.title}
+                onChange={(event) => onChange({ ...form, title: event.target.value })}
+                placeholder="预设标题"
+                aria-label="预设标题"
+              />
+            </label>
+            <div className={styles.uploadPresetActions}>
+              <button type="button" className={shellStyles.buttonSubtle} onClick={onClose} disabled={saving}>
+                取消
+              </button>
+              <button type="button" className={shellStyles.buttonSubtle} onClick={onSubmit} disabled={saving}>
+                {saving ? "上传中…" : "上传"}
+              </button>
+            </div>
+          </header>
+
+          <div className={styles.uploadPresetBody}>
+            <div className={styles.uploadKindModelRow}>
+              <div className={styles.uploadKindField}>
+                <span className={shellStyles.fieldLabel}>预设类型</span>
+                <div className={styles.uploadKindButtons} role="group" aria-label="预设类型">
+                  {PROMPT_KINDS.map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      className={[styles.uploadKindButton, form.kind === kind ? styles.uploadKindButtonActive : ""]
+                        .filter(Boolean)
+                        .join(" ")}
+                      aria-pressed={form.kind === kind}
+                      onClick={() => setKind(kind)}
+                    >
+                      {KIND_LABELS[kind]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {form.kind === "image" ? (
+                <div className={styles.uploadModelField}>
+                  <span className={shellStyles.fieldLabel}>推荐模型</span>
+                  <div className={styles.uploadModelButtons} aria-label="推荐模型">
+                    {promptPresetModelLabels(form.kind).map((label) => (
+                      <span key={label} className={styles.uploadModelButton}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className={styles.promptTagField}>
+              <span className={shellStyles.fieldLabel}>二级标签</span>
+              <div className={styles.promptTagPicker} role="group" aria-label="二级标签">
+                {PROMPT_TAG_GROUPS[form.kind].map((tag) => {
+                  const active = tagValue.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={[styles.promptTagButton, active ? styles.promptTagButtonActive : ""].filter(Boolean).join(" ")}
+                      aria-pressed={active}
+                      onClick={() => onChange({ ...form, tags: togglePromptTag(tagValue, tag) })}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className={shellStyles.field}>
+              <span className={shellStyles.fieldLabel}>卡片描述（可选）</span>
+              <textarea
+                className={[shellStyles.textarea, styles.promptDescriptionTextarea, styles.noResize].join(" ")}
+                value={form.description}
+                onChange={(event) => onChange({ ...form, description: event.target.value })}
+                placeholder="简述这个预设适合什么场景"
+              />
+            </label>
+
+            <div className={[styles.promptUploadPair, form.kind === "chat" ? styles.promptUploadPairSingle : ""].filter(Boolean).join(" ")}>
+              <label className={[shellStyles.field, styles.promptTextField].join(" ")}>
+                <span className={shellStyles.fieldLabel}>提示词内容</span>
+                <textarea
+                  className={[shellStyles.textarea, shellStyles.mono, styles.promptModeTextarea, styles.noResize].join(" ")}
+                  value={form.promptTemplate}
+                  onChange={(event) => onChange({ ...form, promptTemplate: event.target.value })}
+                  spellCheck={false}
+                  placeholder="粘贴完整提示词..."
+                />
+              </label>
+
+              {form.kind === "chat" ? null : (
+                <div className={styles.uploadCoverSlot} aria-label="预设封面">
+                  <span className={shellStyles.fieldLabel}>预设封面（可选）</span>
+                  <div className={[styles.uploadCoverFrame, form.coverFile ? styles.uploadCoverFrameFilled : ""].filter(Boolean).join(" ")}>
+                    <label className={styles.uploadCoverUploadLabel}>
+                      <span className={styles.uploadCoverLabel}>
+                        {form.coverFile ? form.coverFile.name : form.kind === "video" ? "上传 GIF / 图片封面" : "上传图片封面"}
+                      </span>
+                      <span className={styles.uploadCoverHint}>本地上传 · 自动压缩并转 WebP · 最大 5MB</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className={styles.uploadCoverFileInput}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          event.target.value = "";
+                          onChange({ ...form, coverFile: file });
+                        }}
+                      />
+                    </label>
+                    {form.coverFile ? (
+                      <button
+                        type="button"
+                        className={styles.uploadCoverDelete}
+                        aria-label="移除封面"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onChange({ ...form, coverFile: null });
+                        }}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </article>
+
+        {error ? (
+          <div className={styles.messageBox} role="status">
+            <span>{error}</span>
+            {error.includes("请先登录") ? (
+              <Link href="/login?next=/prompt" className={styles.inlineAction}>
+                登录 / 注册
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
