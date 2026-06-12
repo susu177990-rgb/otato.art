@@ -51,17 +51,25 @@ textarea:focus-visible,
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+  margin-block: 6px;
+  margin-inline: 6px;
 }
 ::-webkit-scrollbar-thumb {
   background: #050505;
-  border-radius: 3px;
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  min-height: 24px;
+  min-width: 24px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #2f2f2a;
+  background-clip: content-box;
 }
 
 /* Markdown prose tweaks for dark chat */
