@@ -56,8 +56,18 @@ textarea:focus-visible,
 }
 ::-webkit-scrollbar-track {
   background: transparent;
-  margin-block: 6px;
-  margin-inline: 6px;
+}
+::-webkit-scrollbar-button {
+  display: block;
+  background: transparent;
+}
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:end:increment {
+  height: 6px;
+}
+::-webkit-scrollbar-button:horizontal:start:decrement,
+::-webkit-scrollbar-button:horizontal:end:increment {
+  width: 6px;
 }
 ::-webkit-scrollbar-thumb {
   background: #050505;
@@ -70,6 +80,9 @@ textarea:focus-visible,
 ::-webkit-scrollbar-thumb:hover {
   background: #2f2f2a;
   background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Markdown prose tweaks for dark chat */

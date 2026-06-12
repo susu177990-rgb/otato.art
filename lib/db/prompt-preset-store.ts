@@ -17,7 +17,7 @@ export type SitePromptPreset = {
   isFavorite?: boolean;
 };
 
-function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset): Record<string, unknown> {
+function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset, sortOrder = 0): Record<string, unknown> {
   const title = preset.title.trim() || preset.id;
   const promptTemplate = preset.promptTemplate ?? "";
   const description = preset.description?.trim() || null;
@@ -30,7 +30,7 @@ function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset): Record<s
     summary: description,
     body: promptTemplate,
     tags: normalizePromptTags(preset.tags),
-    sort_order: 0,
+    sort_order: sortOrder,
     preset_type: kind,
     prompt_template: promptTemplate,
     cover_image_url: preset.coverImageUrl?.trim() || null,
@@ -55,6 +55,7 @@ type SitePromptPresetRow = {
   ref_slot_hints: unknown;
   tags: unknown;
   description: string | null;
+  sort_order: number | null;
 };
 
 function isMissingPresetTable(e: unknown): boolean {
@@ -132,7 +133,8 @@ export async function listSitePromptPresetsByKind(
 export async function listSitePromptPresets(supabase: SupabaseClient): Promise<SitePromptPreset[]> {
   const { data, error } = await supabase
     .from("site_prompt_presets")
-    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description")
+    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order")
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -207,7 +209,7 @@ export async function replaceSitePromptPresetsByKind(
   kind: PromptPresetKind,
   presets: SitePromptPreset[],
 ): Promise<void> {
-  const rows = presets.map((preset) => toPresetRow(kind, preset));
+  const rows = presets.map((preset, index) => toPresetRow(kind, preset, index));
 
   if (rows.length > 0) {
     const { error } = await supabase.from("site_prompt_presets").upsert(rows, { onConflict: "id" });
@@ -227,32 +229,40 @@ export async function replaceSitePromptPresetsByKind(
 }
 
 function imageWorkspaceRows(workspace: ImageWorkspaceSettings): Array<Record<string, unknown>> {
-  return workspace.customModes.map((mode) =>
-    toPresetRow("image", {
-      id: mode.id,
-      kind: "image",
-      title: mode.label.trim() || mode.id,
-      promptTemplate: workspace.prompts[mode.id] ?? "",
-      coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
-      refSlotHints: workspace.refSlotHintsByMode[mode.id] ?? [],
-      tags: workspace.promptTagsByMode?.[mode.id] ?? [],
-      description: workspace.promptDescriptionsByMode?.[mode.id],
-    }),
+  return workspace.customModes.map((mode, index) =>
+    toPresetRow(
+      "image",
+      {
+        id: mode.id,
+        kind: "image",
+        title: mode.label.trim() || mode.id,
+        promptTemplate: workspace.prompts[mode.id] ?? "",
+        coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
+        refSlotHints: workspace.refSlotHintsByMode[mode.id] ?? [],
+        tags: workspace.promptTagsByMode?.[mode.id] ?? [],
+        description: workspace.promptDescriptionsByMode?.[mode.id],
+      },
+      index,
+    ),
   );
 }
 
 function videoWorkspaceRows(workspace: VideoWorkspaceSettings): Array<Record<string, unknown>> {
-  return workspace.customModes.map((mode) =>
-    toPresetRow("video", {
-      id: mode.id,
-      kind: "video",
-      title: mode.label.trim() || mode.id,
-      promptTemplate: workspace.prompts[mode.id] ?? "",
-      coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
-      refSlotHints: [],
-      tags: workspace.promptTagsByMode?.[mode.id] ?? [],
-      description: workspace.promptDescriptionsByMode?.[mode.id],
-    }),
+  return workspace.customModes.map((mode, index) =>
+    toPresetRow(
+      "video",
+      {
+        id: mode.id,
+        kind: "video",
+        title: mode.label.trim() || mode.id,
+        promptTemplate: workspace.prompts[mode.id] ?? "",
+        coverImageUrl: workspace.coverImageUrlByMode[mode.id] || "",
+        refSlotHints: [],
+        tags: workspace.promptTagsByMode?.[mode.id] ?? [],
+        description: workspace.promptDescriptionsByMode?.[mode.id],
+      },
+      index,
+    ),
   );
 }
 
