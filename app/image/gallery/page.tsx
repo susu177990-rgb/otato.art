@@ -45,7 +45,7 @@ export default function ImageGalleryPage() {
   }, [selected]);
 
   const visibleRecords = records.filter(
-    (record) => record.status === "success" && Boolean(record.imageUrl),
+    (record) => (record.status === "success" && Boolean(record.imageUrl)) || record.status === "error",
   );
 
   return (
@@ -82,13 +82,17 @@ export default function ImageGalleryPage() {
                 aria-label={`${record.modeName} · ${new Date(record.createdAt).toLocaleString()}`}
               >
                 <span className={styles.tile}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={record.imageUrl}
-                    alt={record.modeName}
-                    className={styles.tileImg}
-                    loading="lazy"
-                  />
+                  {record.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={record.imageUrl}
+                      alt={record.modeName}
+                      className={styles.tileImg}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className={styles.tileFail}>{record.error || "生成失败"}</span>
+                  )}
                   <span className={styles.tileMeta}>
                     <span className={styles.tileMetaName}>{record.modeName}</span>
                     <span className={styles.tileMetaInfo}>

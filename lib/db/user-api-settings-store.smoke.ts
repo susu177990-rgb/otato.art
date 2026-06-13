@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { decryptApiKey } from "@/lib/api-key-crypto";
 import { API_KEY_CONFIGURED_PLACEHOLDER } from "@/lib/api-key-redaction";
 import { DEFAULT_IMAGE_SETTINGS } from "@/lib/image-workspace";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { DEFAULT_VIDEO_SETTINGS } from "@/lib/video-workspace";
 import { userApiSettingsStoreTestInternals } from "@/lib/db/user-api-settings-store";
-
-process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
 
 const savedLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
   {
@@ -20,9 +17,8 @@ const savedLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
   },
   null,
 );
-const encryptedLlmKey = savedLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey;
-assert.notEqual(encryptedLlmKey, "sk-user-1");
-assert.equal(decryptApiKey(encryptedLlmKey), "sk-user-1");
+const storedLlmKey = savedLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey;
+assert.equal(storedLlmKey, "sk-user-1");
 
 const keptLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
   {
@@ -36,7 +32,7 @@ const keptLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
   },
   savedLlm,
 );
-assert.equal(decryptApiKey(keptLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey), "sk-user-1");
+assert.equal(keptLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey, "sk-user-1");
 
 const emptyNewLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
   {
@@ -61,7 +57,7 @@ const savedImage = userApiSettingsStoreTestInternals.sanitizeImageModelsForStora
   },
   null,
 );
-assert.equal(decryptApiKey(savedImage["gpt-image-2"].apiKey), "sk-image-user");
+assert.equal(savedImage["gpt-image-2"].apiKey, "sk-image-user");
 
 const keptImage = userApiSettingsStoreTestInternals.sanitizeImageModelsForStorage(
   {
@@ -72,7 +68,7 @@ const keptImage = userApiSettingsStoreTestInternals.sanitizeImageModelsForStorag
   },
   savedImage,
 );
-assert.equal(decryptApiKey(keptImage["gpt-image-2"].apiKey), "sk-image-user");
+assert.equal(keptImage["gpt-image-2"].apiKey, "sk-image-user");
 
 const emptyNewVideo = userApiSettingsStoreTestInternals.sanitizeVideoModelsForStorage(
   {

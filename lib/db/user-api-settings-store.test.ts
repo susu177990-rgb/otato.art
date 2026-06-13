@@ -48,29 +48,23 @@ describe("user API settings client snapshots", () => {
     expect(clientSnapshot.videoWorkspace.models["seedance-2.0"].apiKey).toBe("");
   });
 
-  it("shows the saved placeholder only for user-owned LLM keys", () => {
-    const clientLlm = userApiSettingsStoreTestInternals.userLlmForClient(
+  it("shows saved user-owned LLM keys to the owner", () => {
+    const savedLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
       {
         ...DEFAULT_SETTINGS,
         models: {
           [DEFAULT_SETTINGS.defaultModelId]: {
             ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
-            apiKey: "enc:v1:user-key",
+            apiKey: "sk-user-llm",
           },
         },
       },
-      {
-        ...DEFAULT_SETTINGS,
-        models: {
-          [DEFAULT_SETTINGS.defaultModelId]: {
-            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
-            apiKey: "sk-global-llm",
-          },
-        },
-      },
+      null,
     );
+    const clientLlm = userApiSettingsStoreTestInternals.userLlmForClient(savedLlm, DEFAULT_SETTINGS);
 
-    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
+    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("sk-user-llm");
+    expect(savedLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("sk-user-llm");
   });
 
   it("keeps admin-added site LLM models visible when a user has older LLM settings", () => {
@@ -96,17 +90,22 @@ describe("user API settings client snapshots", () => {
       model: "admin-new-model",
     };
 
-    const clientLlm = userApiSettingsStoreTestInternals.clientSiteLlmWithUserKeys(
+    const savedLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
       {
         ...DEFAULT_SETTINGS,
         models: {
           [DEFAULT_SETTINGS.defaultModelId]: {
             ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
             label: "Old User Model",
-            apiKey: "enc:v1:user-key",
+            apiKey: "sk-user-default",
           },
         },
       },
+      null,
+    );
+
+    const clientLlm = userApiSettingsStoreTestInternals.clientSiteLlmWithUserKeys(
+      savedLlm,
       siteSettings,
     );
 
@@ -114,7 +113,7 @@ describe("user API settings client snapshots", () => {
     expect(clientLlm.defaultModelId).toBe("admin-new-model");
     expect(clientLlm.models["admin-new-model"].label).toBe("Admin New Model");
     expect(clientLlm.models["admin-new-model"].apiKey).toBe("");
-    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
+    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("sk-user-default");
   });
 
   it("keeps a saved custom user LLM model visible when the LLM mode is user", () => {
@@ -142,7 +141,7 @@ describe("user API settings client snapshots", () => {
     expect(clientLlm.defaultModelId).toBe("custom-user-model");
     expect(clientLlm.models["custom-user-model"].label).toBe("Custom User Model");
     expect(clientLlm.models["custom-user-model"].apiUrl).toBe("https://user.example.com/v1/chat/completions");
-    expect(clientLlm.models["custom-user-model"].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
+    expect(clientLlm.models["custom-user-model"].apiKey).toBe("sk-user-custom");
   });
 
   it("can overwrite an API key that was encrypted with an old environment key", async () => {
@@ -172,12 +171,11 @@ describe("user API settings client snapshots", () => {
       existing,
     );
 
-    const { decryptApiKey } = await import("@/lib/api-key-crypto");
-    expect(decryptApiKey(saved.models[DEFAULT_SETTINGS.defaultModelId].apiKey)).toBe("sk-new-user-key");
+    expect(saved.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("sk-new-user-key");
     process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
   });
 
-  it("shows a readable error when preserving an API key encrypted with an old environment key", async () => {
+  it("treats an undecryptable legacy API key as empty instead of throwing", async () => {
     const { encryptApiKey } = await import("@/lib/api-key-crypto");
     process.env.API_SETTINGS_ENCRYPTION_KEY = "old-encryption-key";
     const existing = {
@@ -191,20 +189,111 @@ describe("user API settings client snapshots", () => {
     };
 
     process.env.API_SETTINGS_ENCRYPTION_KEY = "new-encryption-key";
-    expect(() =>
-      userApiSettingsStoreTestInternals.mergeLlmForSave(
-        {
-          ...DEFAULT_SETTINGS,
-          models: {
-            [DEFAULT_SETTINGS.defaultModelId]: {
-              ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
-              apiKey: API_KEY_CONFIGURED_PLACEHOLDER,
-            },
+    const saved = userApiSettingsStoreTestInternals.mergeLlmForSave(
+      {
+        ...DEFAULT_SETTINGS,
+        models: {
+          [DEFAULT_SETTINGS.defaultModelId]: {
+            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+            apiKey: API_KEY_CONFIGURED_PLACEHOLDER,
           },
         },
-        existing,
-      ),
-    ).toThrow("请重新输入新的 API Key 后再保存");
+      },
+      existing,
+    );
+
+    const clientLlm = userApiSettingsStoreTestInternals.userLlmForClient(saved, DEFAULT_SETTINGS);
+    expect(saved.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("");
+    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("");
     process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
+  });
+
+  it("can read a decryptable legacy encrypted API key", async () => {
+    const { encryptApiKey } = await import("@/lib/api-key-crypto");
+    const existing = {
+      ...DEFAULT_SETTINGS,
+      models: {
+        [DEFAULT_SETTINGS.defaultModelId]: {
+          ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+          apiKey: encryptApiKey("sk-legacy-user-key"),
+        },
+      },
+    };
+
+    const clientLlm = userApiSettingsStoreTestInternals.userLlmForClient(existing, DEFAULT_SETTINGS);
+
+    expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("sk-legacy-user-key");
+  });
+
+  it("clears an existing LLM API key when the submitted key is empty", () => {
+    const existing = userApiSettingsStoreTestInternals.mergeLlmForSave(
+      {
+        ...DEFAULT_SETTINGS,
+        models: {
+          [DEFAULT_SETTINGS.defaultModelId]: {
+            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+            apiKey: "sk-existing-user-key",
+          },
+        },
+      },
+      null,
+    );
+
+    const saved = userApiSettingsStoreTestInternals.mergeLlmForSave(
+      {
+        ...DEFAULT_SETTINGS,
+        models: {
+          [DEFAULT_SETTINGS.defaultModelId]: {
+            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+            apiKey: "",
+          },
+        },
+      },
+      existing,
+    );
+
+    expect(saved.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe("");
+  });
+
+  it("clears existing image and video API keys when the submitted key is empty", () => {
+    const savedImage = userApiSettingsStoreTestInternals.sanitizeImageModelsForStorage(
+      {
+        "gpt-image-2": {
+          ...DEFAULT_IMAGE_SETTINGS.models["gpt-image-2"],
+          apiKey: "sk-image-user",
+        },
+      },
+      null,
+    );
+    const clearedImage = userApiSettingsStoreTestInternals.sanitizeImageModelsForStorage(
+      {
+        "gpt-image-2": {
+          ...DEFAULT_IMAGE_SETTINGS.models["gpt-image-2"],
+          apiKey: "",
+        },
+      },
+      savedImage,
+    );
+    expect(clearedImage["gpt-image-2"].apiKey).toBe("");
+
+    const savedVideo = userApiSettingsStoreTestInternals.sanitizeVideoModelsForStorage(
+      {
+        "seedance-2.0": {
+          ...DEFAULT_VIDEO_SETTINGS.models["seedance-2.0"],
+          apiKey: "sk-video-user",
+        },
+      },
+      null,
+    );
+    const clearedVideo = userApiSettingsStoreTestInternals.sanitizeVideoModelsForStorage(
+      {
+        "seedance-2.0": {
+          ...DEFAULT_VIDEO_SETTINGS.models["seedance-2.0"],
+          apiKey: "",
+        },
+      },
+      savedVideo,
+    );
+    expect(clearedVideo["seedance-2.0"].apiKey).toBe("");
   });
 });

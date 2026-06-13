@@ -112,6 +112,7 @@ export interface ImageGalleryRecord {
 
 export interface ImageGalleryReferenceImage {
   slotIndex: number;
+  /** data: URL for local/runtime snapshots, or a stable http(s) URL after server persistence. */
   dataUrl: string;
   name?: string;
   type?: string;

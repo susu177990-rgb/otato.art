@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { API_KEY_MASK_PLACEHOLDER, isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
 import { normalizeLlmSettings } from "@/lib/llm-models";
 import { normalizeModel } from "@/lib/model-presets";
 import type { Settings } from "@/lib/types";
@@ -10,6 +9,7 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
 import {
   DEFAULT_IMAGE_SETTINGS,
   IMAGE_MODEL_ORDER,
+  type ImageModelId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
 import {
@@ -17,23 +17,34 @@ import {
   VIDEO_MODE_LABELS,
   VIDEO_MODEL_ORDER,
   getVideoModelDefinition,
+  type VideoModelId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { saveWorkspaceSnapshot } from "@/lib/workspace-api";
+import { saveWorkspaceSnapshot, testWorkspaceApiConnection } from "@/lib/workspace-api";
+import type { PersonalApiModule, PersonalApiTestResult } from "@/lib/personal-api-test";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./settings-page.module.css";
 
 type Tab = "llmApi" | "imageApi" | "videoApi";
+type TestResults = Record<string, PersonalApiTestResult>;
 
 const settingsCardClass = [shellStyles.card, styles.floatCard].join(" ");
 
-function apiKeyInputValue(value: string): string {
-  return isApiKeyConfiguredPlaceholder(value) ? "" : value;
+function tabModule(tab: Tab): PersonalApiModule {
+  if (tab === "imageApi") return "image";
+  if (tab === "videoApi") return "video";
+  return "llm";
 }
 
-function apiKeyPlaceholder(value: string, fallback = "sk-..."): string {
-  return isApiKeyConfiguredPlaceholder(value) ? API_KEY_MASK_PLACEHOLDER : fallback;
+function moduleLabel(module: PersonalApiModule): string {
+  if (module === "image") return "图片";
+  if (module === "video") return "视频";
+  return "LLM";
+}
+
+function resultKey(module: PersonalApiModule, modelId: string): string {
+  return `${module}:${modelId}`;
 }
 
 function nextLlmModelId(models: Settings["models"]): string {
@@ -60,6 +71,8 @@ function SettingsPageInner() {
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
   const [videoSettings, setVideoSettings] = useState<VideoWorkspaceSettings>(DEFAULT_VIDEO_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
+  const [testingKey, setTestingKey] = useState("");
+  const [testResults, setTestResults] = useState<TestResults>({});
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -85,7 +98,7 @@ function SettingsPageInner() {
         apiUsageMode: nextApiUsageMode,
       });
       await refreshWorkspace();
-      setSavedMessage("已保存个人设置");
+      setSavedMessage(`已保存个人${moduleLabel(tabModule(tab))}设置，并切换为个人配置`);
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "保存失败");
     }
@@ -112,22 +125,35 @@ function SettingsPageInner() {
     });
   }
 
-  function addImageModel() {
-    setSavedMessage("新建图片模型待配置");
-    window.setTimeout(() => setSavedMessage(""), 1400);
-  }
-
-  function addVideoModel() {
-    setSavedMessage("新建视频模型待配置");
-    window.setTimeout(() => setSavedMessage(""), 1400);
+  async function runConnectionTest(module: PersonalApiModule, modelId: string) {
+    const key = resultKey(module, modelId);
+    setTestingKey(key);
+    try {
+      const result = await testWorkspaceApiConnection({ module, modelId });
+      setTestResults((current) => ({ ...current, [key]: result }));
+    } catch (error) {
+      setTestResults((current) => ({
+        ...current,
+        [key]: {
+          ok: false,
+          code: "TEST_CONNECTION_FAILED",
+          module,
+          modelId,
+          stage: "upstream_submit",
+          message: error instanceof Error ? error.message : "测试连接失败",
+        },
+      }));
+    } finally {
+      setTestingKey("");
+    }
   }
 
   const createAction =
     tab === "llmApi"
       ? { label: "新建模型", onClick: addLlmModel }
-      : tab === "imageApi"
-        ? { label: "新建图片模型", onClick: addImageModel }
-        : { label: "新建视频模型", onClick: addVideoModel };
+      : null;
+  const currentModule = tabModule(tab);
+  const currentMode = apiUsageMode[currentModule];
 
   return (
     <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
@@ -152,22 +178,35 @@ function SettingsPageInner() {
       <div className={styles.settingsBody}>
         <div className={styles.settingsWorkspace}>
           <section className={styles.settingsContent}>
+            <div className={[settingsCardClass, styles.apiModeNotice].join(" ")}>
+              <span>{moduleLabel(currentModule)}当前使用：{currentMode === "user" ? "个人配置" : "公共配置"}</span>
+              <span>保存本页后会自动切换为个人配置；测试连接只测试已保存的个人配置。</span>
+            </div>
             {tab === "llmApi" ? (
               <LlmApiPanel
                 value={llmSettings}
                 onChange={setLlmSettings}
+                onTest={(modelId) => void runConnectionTest("llm", modelId)}
+                testingKey={testingKey}
+                testResults={testResults}
               />
             ) : null}
             {tab === "imageApi" ? (
               <ImageApiPanel
                 value={imageSettings}
                 onChange={setImageSettings}
+                onTest={(modelId) => void runConnectionTest("image", modelId)}
+                testingKey={testingKey}
+                testResults={testResults}
               />
             ) : null}
             {tab === "videoApi" ? (
               <VideoApiPanel
                 value={videoSettings}
                 onChange={setVideoSettings}
+                onTest={(modelId) => void runConnectionTest("video", modelId)}
+                testingKey={testingKey}
+                testResults={testResults}
               />
             ) : null}
           </section>
@@ -188,9 +227,15 @@ export default function SettingsPage() {
 function LlmApiPanel({
   value,
   onChange,
+  onTest,
+  testingKey,
+  testResults,
 }: {
   value: Settings;
   onChange: (next: Settings) => void;
+  onTest: (modelId: string) => void;
+  testingKey: string;
+  testResults: TestResults;
 }) {
   const modelList = Object.values(value.models);
 
@@ -205,6 +250,9 @@ function LlmApiPanel({
               )}
             </div>
             <div className={styles.llmModelCardTopRight}>
+              <button type="button" className={styles.setDefaultBtn} onClick={() => onTest(model.id)} disabled={testingKey === resultKey("llm", model.id)}>
+                {testingKey === resultKey("llm", model.id) ? "测试中" : "测试连接"}
+              </button>
               <label className={styles.toggleSwitch} title={model.enabled ? "已启用" : "已停用"}>
                 <input type="checkbox" className={styles.toggleSwitchInput} checked={model.enabled} onChange={(e) => onChange({ ...value, models: { ...value.models, [model.id]: { ...model, enabled: e.target.checked } } })} />
                 <span className={styles.toggleSwitchSlider} />
@@ -224,6 +272,7 @@ function LlmApiPanel({
               <Field label="模型 ID" mono value={model.modelName} onChange={(modelName) => onChange({ ...value, models: { ...value.models, [model.id]: { ...model, modelName: normalizeModel(modelName) } } })} />
             </div>
           </div>
+          <ApiTestResultView result={testResults[resultKey("llm", model.id)]} />
         </div>
       ))}
     </section>
@@ -233,9 +282,15 @@ function LlmApiPanel({
 function ImageApiPanel({
   value,
   onChange,
+  onTest,
+  testingKey,
+  testResults,
 }: {
   value: ImageWorkspaceSettings;
   onChange: (next: ImageWorkspaceSettings) => void;
+  onTest: (modelId: ImageModelId) => void;
+  testingKey: string;
+  testResults: TestResults;
 }) {
   return (
     <section className={[styles.panel, styles.apiCardGrid].join(" ")}>
@@ -248,6 +303,11 @@ function ImageApiPanel({
                 <h2 className={shellStyles.cardTitle} style={{ fontSize: 15 }}>{model.label}</h2>
                 <span style={{ marginLeft: 12, fontSize: 12, color: "var(--settings-muted)" }}>{model.provider === "gpt-image" ? "GPT Image 请求格式" : "Nano Banana 请求格式"}</span>
               </div>
+              <div className={styles.llmModelCardTopRight}>
+                <button type="button" className={styles.setDefaultBtn} onClick={() => onTest(id)} disabled={testingKey === resultKey("image", id)}>
+                  {testingKey === resultKey("image", id) ? "测试中" : "测试连接"}
+                </button>
+              </div>
             </div>
             <div className={styles.llmModelCardFieldsCompact}>
               <div className={styles.llmModelCardRow}>
@@ -259,6 +319,7 @@ function ImageApiPanel({
                 <Field label="模型名" mono value={model.modelName} onChange={(modelName) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], modelName } } })} />
               </div>
             </div>
+            <ApiTestResultView result={testResults[resultKey("image", id)]} />
           </div>
         );
       })}
@@ -269,9 +330,15 @@ function ImageApiPanel({
 function VideoApiPanel({
   value,
   onChange,
+  onTest,
+  testingKey,
+  testResults,
 }: {
   value: VideoWorkspaceSettings;
   onChange: (next: VideoWorkspaceSettings) => void;
+  onTest: (modelId: VideoModelId) => void;
+  testingKey: string;
+  testResults: TestResults;
 }) {
   return (
     <section className={[styles.panel, styles.apiCardGrid, styles.modelApiGrid].join(" ")}>
@@ -286,6 +353,9 @@ function VideoApiPanel({
                 <span style={{ marginLeft: 12, fontSize: 12, color: "var(--settings-muted)" }}>{definition.provider} · {definition.capabilities.supportedModes.map((modeId) => VIDEO_MODE_LABELS[modeId]).join(" / ")}</span>
               </div>
               <div className={styles.llmModelCardTopRight}>
+                <button type="button" className={styles.setDefaultBtn} onClick={() => onTest(id)} disabled={testingKey === resultKey("video", id)}>
+                  {testingKey === resultKey("video", id) ? "测试中" : "测试连接"}
+                </button>
                 <label className={styles.toggleSwitch} title={model.enabled ? "已启用" : "已停用"}>
                   <input type="checkbox" className={styles.toggleSwitchInput} checked={model.enabled} onChange={(e) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], enabled: e.target.checked } } })} />
                   <span className={styles.toggleSwitchSlider} />
@@ -295,13 +365,14 @@ function VideoApiPanel({
             <div className={styles.llmModelCardFieldsCompact}>
               <div className={styles.llmModelCardRow}>
                 <Field label="Base URL" mono value={model.baseUrl} onChange={(baseUrl) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], baseUrl } } })} placeholder="留空，后续填写" />
-                <ApiKeyField value={model.apiKey} onChange={(apiKey) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiKey } } })} fallback="留空，后续填写" />
+                <ApiKeyField value={model.apiKey} onChange={(apiKey) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiKey } } })} />
               </div>
               <div className={styles.llmModelCardRow}>
                 <Field label="显示名" value={model.label} onChange={(label) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], label } } })} />
                 <Field label="API Model Name" mono value={model.apiModelName} onChange={(apiModelName) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiModelName } } })} />
               </div>
             </div>
+            <ApiTestResultView result={testResults[resultKey("video", id)]} />
           </div>
         );
       })}
@@ -318,11 +389,21 @@ function Field({ label, value, onChange, placeholder, mono }: { label: string; v
   );
 }
 
-function ApiKeyField({ value, onChange, fallback }: { value: string; onChange: (value: string) => void; fallback?: string }) {
+function ApiKeyField({ value, onChange, fallback = "sk-..." }: { value: string; onChange: (value: string) => void; fallback?: string }) {
   return (
     <label className={shellStyles.field}>
       <span className={shellStyles.fieldLabel}>API Key</span>
-      <input type="password" className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")} value={apiKeyInputValue(value)} placeholder={apiKeyPlaceholder(value, fallback)} onChange={(e) => onChange(e.target.value)} autoComplete="off" />
+      <input type="password" className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")} value={value} placeholder={fallback} onChange={(e) => onChange(e.target.value)} autoComplete="off" />
     </label>
+  );
+}
+
+function ApiTestResultView({ result }: { result?: PersonalApiTestResult }) {
+  if (!result) return null;
+  return (
+    <div className={[styles.apiTestResult, result.ok ? styles.apiTestResultOk : styles.apiTestResultError].join(" ")}>
+      <span>{result.message}</span>
+      <code>{[result.code, result.stage, result.safeEndpoint].filter(Boolean).join(" · ")}</code>
+    </div>
   );
 }

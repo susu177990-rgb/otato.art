@@ -3,7 +3,18 @@ import { isStoredGeneratedImageUrl } from "@/lib/db/persist-generated-image";
 
 /** 写入 Supabase JSONB 前：去掉参考图内联；去掉未上传的 data: / 超长 URL（像素应在 Storage） */
 export function sanitizeGalleryRecordForStorage(record: ImageGalleryRecord): ImageGalleryRecord {
-  const next: ImageGalleryRecord = { ...record, referenceImages: undefined };
+  const referenceImages = record.referenceImages
+    ?.map((image) => {
+      const url = image.dataUrl?.trim();
+      if (!url || url.startsWith("data:") || url.length > 8192) return null;
+      if (!/^https?:\/\//i.test(url)) return null;
+      return { ...image, dataUrl: url };
+    })
+    .filter((image): image is NonNullable<typeof image> => image != null);
+  const next: ImageGalleryRecord = {
+    ...record,
+    referenceImages: referenceImages && referenceImages.length > 0 ? referenceImages : undefined,
+  };
   const url = next.imageUrl?.trim();
   if (!url) {
     delete next.imageUrl;

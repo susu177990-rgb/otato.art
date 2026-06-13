@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { decryptApiKey, encryptApiKey } from "@/lib/api-key-crypto";
-import { API_KEY_CONFIGURED_PLACEHOLDER, redactApiKeyForClient } from "@/lib/api-key-redaction";
+import { decryptApiKey } from "@/lib/api-key-crypto";
+import { API_KEY_CONFIGURED_PLACEHOLDER } from "@/lib/api-key-redaction";
 import {
   DEFAULT_API_USAGE_MODE,
   type ApiUsageMode,
@@ -62,6 +62,7 @@ function videoPreferences(raw: unknown): Pick<ReturnType<typeof mergeVideoSettin
 
 function userLlmWithSecrets(row: unknown, fallbackSettings: Settings): Settings {
   const settings = normalizeLlmSettings(row ?? fallbackSettings);
+  const rawKeys = rawModelApiKeys(row);
   const models = Object.fromEntries(
     Object.entries(settings.models).map(([id, model]) => [
       id,
@@ -69,7 +70,7 @@ function userLlmWithSecrets(row: unknown, fallbackSettings: Settings): Settings 
         ...model,
         apiUrl: model.apiUrl || fallbackSettings.models[id]?.apiUrl || fallbackSettings.apiUrl,
         modelName: model.modelName || fallbackSettings.models[id]?.modelName || fallbackSettings.model,
-        apiKey: decryptApiKey(model.apiKey) || fallbackSettings.models[id]?.apiKey || fallbackSettings.apiKey,
+        apiKey: readStoredApiKey(rawKeys[id] ?? model.apiKey) || fallbackSettings.models[id]?.apiKey || fallbackSettings.apiKey,
       },
     ]),
   ) as Record<string, LlmModelConfig>;
@@ -93,27 +94,34 @@ function rawModelApiKeys(row: unknown): Record<string, string> {
   );
 }
 
-function encryptedModelApiKey(row: unknown, modelId: string): string {
+function storedModelApiKey(row: unknown, modelId: string): string {
   if (!isObject(row) || !isObject(row.models)) return "";
   const model = row.models[modelId];
   return isObject(model) ? text(model.apiKey) : "";
 }
 
-function encryptedApiKeyFromRecord(row: unknown, modelId: string): string {
+function storedApiKeyFromRecord(row: unknown, modelId: string): string {
   if (!isObject(row)) return "";
   const model = row[modelId];
   return isObject(model) ? text(model.apiKey) : "";
 }
 
-function decryptExistingApiKey(value: string, label: string): string {
+function readStoredApiKey(value: string): string {
   if (!value) return "";
   try {
     return decryptApiKey(value);
   } catch {
-    throw new Error(
-      `${label} 已保存的 API Key 无法用当前 API_SETTINGS_ENCRYPTION_KEY 解密。请重新输入新的 API Key 后再保存。`,
-    );
+    return "";
   }
+}
+
+function resolveApiKeyForSave(value: string, existingStored: string): string {
+  if (value === API_KEY_CONFIGURED_PLACEHOLDER || !value.trim()) {
+    return value === API_KEY_CONFIGURED_PLACEHOLDER
+      ? readStoredApiKey(existingStored)
+      : "";
+  }
+  return value;
 }
 
 function userLlmForClient(row: unknown, fallbackSettings: Settings): Settings {
@@ -126,7 +134,7 @@ function userLlmForClient(row: unknown, fallbackSettings: Settings): Settings {
         ...model,
         apiUrl: model.apiUrl || fallbackSettings.models[id]?.apiUrl || fallbackSettings.apiUrl,
         modelName: model.modelName || fallbackSettings.models[id]?.modelName || fallbackSettings.model,
-        apiKey: redactApiKeyForClient(rawKeys[id] ?? ""),
+        apiKey: readStoredApiKey(rawKeys[id] ?? ""),
       },
     ]),
   ) as Record<string, LlmModelConfig>;
@@ -150,7 +158,7 @@ function clientSiteLlmWithUserKeys(row: unknown, siteSettings: Settings): Settin
         id,
         {
           ...model,
-          apiKey: redactApiKeyForClient(rawKeys[id] ?? userModel?.apiKey ?? ""),
+          apiKey: readStoredApiKey(rawKeys[id] ?? userModel?.apiKey ?? ""),
         },
       ];
     }),
@@ -169,14 +177,15 @@ function mergeLlmForSave(incoming: unknown, existing: unknown): Settings {
   const incomingSettings = normalizeLlmSettings(incoming ?? DEFAULT_SETTINGS);
   const models = Object.fromEntries(
     Object.entries(incomingSettings.models).map(([id, model]) => {
-      const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? decryptExistingApiKey(encryptedModelApiKey(existing, id), `LLM 模型「${model.label || id}」`)
-        : model.apiKey;
+      const nextKey = resolveApiKeyForSave(
+        model.apiKey,
+        storedModelApiKey(existing, id),
+      );
       return [
         id,
         {
           ...model,
-          apiKey: encryptApiKey(nextKey),
+          apiKey: nextKey,
         },
       ];
     }),
@@ -196,14 +205,15 @@ function sanitizeImageModelsForStorage(incoming: unknown, existing: unknown): Re
   return Object.fromEntries(
     Object.entries(incomingSettings.models).map(([id, model]) => {
       const modelId = id as ImageModelId;
-      const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? decryptExistingApiKey(encryptedApiKeyFromRecord(existing, modelId), `图片模型「${model.label || modelId}」`)
-        : model.apiKey;
+      const nextKey = resolveApiKeyForSave(
+        model.apiKey,
+        storedApiKeyFromRecord(existing, modelId),
+      );
       return [
         modelId,
         {
           ...model,
-          apiKey: encryptApiKey(nextKey),
+          apiKey: nextKey,
         },
       ];
     }),
@@ -229,14 +239,14 @@ function decryptImageModels(raw: unknown): Record<string, unknown> {
         id,
         {
           ...model,
-          apiKey: decryptApiKey(text(model.apiKey)),
+          apiKey: readStoredApiKey(text(model.apiKey)),
         },
       ];
     }),
   );
 }
 
-function redactImageModels(raw: unknown): Record<string, unknown> {
+function clientImageModels(raw: unknown): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(isObject(raw) ? raw : {}).filter(([id]) => !id.startsWith("__")).map(([id, value]) => {
       const model = isObject(value) ? value : {};
@@ -244,7 +254,7 @@ function redactImageModels(raw: unknown): Record<string, unknown> {
         id,
         {
           ...model,
-          apiKey: redactApiKeyForClient(text(model.apiKey)),
+          apiKey: readStoredApiKey(text(model.apiKey)),
         },
       ];
     }),
@@ -271,14 +281,15 @@ function sanitizeVideoModelsForStorage(incoming: unknown, existing: unknown): Re
   return Object.fromEntries(
     VIDEO_MODEL_ORDER.map((id) => {
       const model = incomingSettings.models[id];
-      const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? decryptExistingApiKey(encryptedApiKeyFromRecord(existing, id), `视频模型「${model.label || id}」`)
-        : model.apiKey;
+      const nextKey = resolveApiKeyForSave(
+        model.apiKey,
+        storedApiKeyFromRecord(existing, id),
+      );
       return [
         id,
         {
           ...model,
-          apiKey: encryptApiKey(nextKey),
+          apiKey: nextKey,
         },
       ];
     }),
@@ -304,9 +315,9 @@ export const userApiSettingsStoreTestInternals = {
   userWorkspaceDefaultsForClient,
   userLlmForClient,
   clientSiteLlmWithUserKeys,
-  redactImageModels,
+  clientImageModels,
   clearImageModelKeys,
-  redactVideoModels,
+  clientVideoModels,
   clearVideoModelKeys,
 };
 
@@ -319,14 +330,14 @@ function decryptVideoModels(raw: unknown): Record<string, unknown> {
         id,
         {
           ...model,
-          apiKey: decryptApiKey(text(model.apiKey)),
+          apiKey: readStoredApiKey(text(model.apiKey)),
         },
       ];
     }),
   );
 }
 
-function redactVideoModels(raw: unknown): Record<string, unknown> {
+function clientVideoModels(raw: unknown): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(isObject(raw) ? raw : {}).filter(([id]) => !id.startsWith("__")).map(([id, value]) => {
       const model = isObject(value) ? value : {};
@@ -334,7 +345,7 @@ function redactVideoModels(raw: unknown): Record<string, unknown> {
         id,
         {
           ...model,
-          apiKey: redactApiKeyForClient(text(model.apiKey)),
+          apiKey: readStoredApiKey(text(model.apiKey)),
         },
       ];
     }),
@@ -418,9 +429,9 @@ export async function getUserWorkspaceSnapshot(
       ? siteSnapshot.llm
       : clientSiteLlmWithUserKeys(row.llm, siteSnapshot.llm);
   const imageModels =
-    options.visibility === "server" ? decryptImageModels(row.image_models) : redactImageModels(row.image_models);
+    options.visibility === "server" ? decryptImageModels(row.image_models) : clientImageModels(row.image_models);
   const videoModels =
-    options.visibility === "server" ? decryptVideoModels(row.video_models) : redactVideoModels(row.video_models);
+    options.visibility === "server" ? decryptVideoModels(row.video_models) : clientVideoModels(row.video_models);
 
   return {
     llm,

@@ -174,6 +174,28 @@ function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   return new File([bytes], name || "reference.png", { type: mime });
 }
 
+async function referenceImageToFile(image: ImageGalleryReferenceImage): Promise<{ file: File; previewUrl: string } | null> {
+  if (!image.dataUrl) return null;
+  const type = image.type || image.dataUrl.match(/^data:([^;]+);base64,/)?.[1] || "image/png";
+  const name = image.name || `reference-${image.slotIndex + 1}.png`;
+  if (image.dataUrl.startsWith("data:")) {
+    return {
+      file: dataUrlToFile(image.dataUrl, name, type),
+      previewUrl: image.dataUrl,
+    };
+  }
+  if (/^https?:\/\//i.test(image.dataUrl)) {
+    const res = await fetch(image.dataUrl);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return {
+      file: new File([blob], name, { type: blob.type || type }),
+      previewUrl: image.dataUrl,
+    };
+  }
+  return null;
+}
+
 async function snapshotReferenceImages(slots: RefSlot[]): Promise<ImageGalleryReferenceImage[]> {
   const entries = await Promise.all(
     slots.map(async (slot, slotIndex): Promise<ImageGalleryReferenceImage | null> => {
@@ -728,18 +750,23 @@ export default function ImagePage() {
     });
   }
 
-  const restoreReferenceImages = useCallback((referenceImages: ImageGalleryReferenceImage[] | undefined) => {
+  const restoreReferenceImages = useCallback(async (referenceImages: ImageGalleryReferenceImage[] | undefined) => {
     if (!referenceImages) return;
+    const restored = await Promise.all(
+      referenceImages.map(async (image) => {
+        if (image.slotIndex < 0 || image.slotIndex >= IMAGE_REF_SLOT_COUNT) return null;
+        const file = await referenceImageToFile(image).catch(() => null);
+        return file ? { slotIndex: image.slotIndex, ...file } : null;
+      }),
+    );
     setRefSlots((prev) => {
       for (const slot of prev) revokeRefPreview(slot);
       const next = createEmptyRefSlots();
-      for (const image of referenceImages) {
-        if (image.slotIndex < 0 || image.slotIndex >= next.length || !image.dataUrl) continue;
-        const type = image.type || image.dataUrl.match(/^data:([^;]+);base64,/)?.[1] || "image/png";
-        const file = dataUrlToFile(image.dataUrl, image.name || `reference-${image.slotIndex + 1}.png`, type);
+      for (const image of restored) {
+        if (!image) continue;
         next[image.slotIndex] = {
-          file,
-          previewUrl: image.dataUrl,
+          file: image.file,
+          previewUrl: image.previewUrl,
         };
       }
       return next;
@@ -748,7 +775,7 @@ export default function ImagePage() {
 
   function restoreReferenceImagesFromRecord(record: ImageGalleryRecord) {
     refSlotsUserEditedRef.current = false;
-    restoreReferenceImages(record.referenceImages);
+    void restoreReferenceImages(record.referenceImages);
   }
 
   const applyGenerationRuntimeState = useCallback(
@@ -764,7 +791,7 @@ export default function ImagePage() {
       const n = composerSlotCountForTemplate(tpl, state.modeId);
       setSlotInputs(normalizeSlotInputsToLength(state.slotInputs, n));
       if (shouldRestoreRefs) {
-        restoreReferenceImages(state.referenceImages);
+        void restoreReferenceImages(state.referenceImages);
       }
       setIsGenerating(state.status === "running");
       if (state.status === "success") {
