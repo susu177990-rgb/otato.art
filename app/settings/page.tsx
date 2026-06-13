@@ -51,6 +51,7 @@ function SettingsPageInner() {
     settings: loadedLlm,
     imageWorkspace: loadedImage,
     videoWorkspace: loadedVideo,
+    apiUsageMode,
     workspaceReady,
     refreshWorkspace,
   } = useApiSettings();
@@ -69,12 +70,19 @@ function SettingsPageInner() {
 
   async function saveAll() {
     const normalizedLlm = normalizeLlmSettings(llmSettings);
+    const nextApiUsageMode = {
+      ...apiUsageMode,
+      ...(tab === "llmApi" ? { llm: "user" as const } : {}),
+      ...(tab === "imageApi" ? { image: "user" as const } : {}),
+      ...(tab === "videoApi" ? { video: "user" as const } : {}),
+    };
     setLlmSettings(normalizedLlm);
     try {
       await saveWorkspaceSnapshot({
         llm: normalizedLlm,
         imageWorkspace: imageSettings,
         videoWorkspace: videoSettings,
+        apiUsageMode: nextApiUsageMode,
       });
       await refreshWorkspace();
       setSavedMessage("已保存个人设置");

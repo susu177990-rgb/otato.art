@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS } from "@/lib/types";
 import { DEFAULT_VIDEO_SETTINGS } from "@/lib/video-workspace";
 import { userApiSettingsStoreTestInternals } from "@/lib/db/user-api-settings-store";
 
+process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
+
 describe("user API settings client snapshots", () => {
   it("does not present global API keys as user-saved keys", () => {
     const globalSnapshot = {
@@ -113,5 +115,33 @@ describe("user API settings client snapshots", () => {
     expect(clientLlm.models["admin-new-model"].label).toBe("Admin New Model");
     expect(clientLlm.models["admin-new-model"].apiKey).toBe("");
     expect(clientLlm.models[DEFAULT_SETTINGS.defaultModelId].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
+  });
+
+  it("keeps a saved custom user LLM model visible when the LLM mode is user", () => {
+    const savedLlm = userApiSettingsStoreTestInternals.mergeLlmForSave(
+      {
+        ...DEFAULT_SETTINGS,
+        defaultModelId: "custom-user-model",
+        models: {
+          ...DEFAULT_SETTINGS.models,
+          "custom-user-model": {
+            id: "custom-user-model",
+            label: "Custom User Model",
+            modelName: "custom-user-model",
+            enabled: true,
+            apiUrl: "https://user.example.com/v1/chat/completions",
+            apiKey: "sk-user-custom",
+          },
+        },
+      },
+      null,
+    );
+
+    const clientLlm = userApiSettingsStoreTestInternals.userLlmForClient(savedLlm, DEFAULT_SETTINGS);
+
+    expect(clientLlm.defaultModelId).toBe("custom-user-model");
+    expect(clientLlm.models["custom-user-model"].label).toBe("Custom User Model");
+    expect(clientLlm.models["custom-user-model"].apiUrl).toBe("https://user.example.com/v1/chat/completions");
+    expect(clientLlm.models["custom-user-model"].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
   });
 });
