@@ -9,7 +9,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   overflow: hidden;
   padding: 12px 24px 16px;
 }
@@ -123,6 +123,7 @@
   margin: 8px auto 0;
   display: flex;
   flex-wrap: wrap;
+  align-self: start;
   gap: 7px;
 }
 
