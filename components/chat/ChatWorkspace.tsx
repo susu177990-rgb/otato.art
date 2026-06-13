@@ -38,6 +38,8 @@ import type { ImageModelId } from "@/lib/image-workspace";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-workspace.module.css";
 
+const OPEN_CHAT_PROMPT_PRESETS_EVENT = "otato:open-chat-prompt-presets";
+
 type ParsedToolMedia = {
   text: string;
   mediaUrl: string;
@@ -360,6 +362,10 @@ export function ChatWorkspace() {
     () => chatPromptPresets.find((preset) => preset.id === selectedChatPresetId) ?? null,
     [chatPromptPresets, selectedChatPresetId],
   );
+  const favoriteChatPromptPresets = useMemo(
+    () => chatPromptPresets.filter((preset) => preset.isFavorite),
+    [chatPromptPresets],
+  );
   const isSkillMode = chatMode === "skill";
   const isFormMode = Boolean(isSkillMode && selectedPack && skillPackHasFormInterface(selectedPack));
 
@@ -376,6 +382,14 @@ export function ChatWorkspace() {
     setSkillRunResult(null);
     setError(null);
   }, [selectedSkillPackId, selectedChatPresetId, chatMode, activeId]);
+
+  useEffect(() => {
+    function openPromptPresetLibrary() {
+      setPromptPresetLibraryOpen(true);
+    }
+    window.addEventListener(OPEN_CHAT_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
+    return () => window.removeEventListener(OPEN_CHAT_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
+  }, []);
 
   const handleSkillFormSubmit = async (payload: unknown) => {
     if (!selectedPack?.inputSchema || isRunningSkillForm) return;
@@ -688,11 +702,11 @@ export function ChatWorkspace() {
         />
       ) : (
         <ChatPromptPresetRail
-          selectedPresetTitle={selectedPromptPreset?.title ?? null}
+          favoritePresets={favoriteChatPromptPresets}
+          selectedPresetId={selectedChatPresetId}
           switchDisabled={isSavingSkill}
-          onOpenLibrary={() => setPromptPresetLibraryOpen(true)}
-          onClearPreset={() =>
-            void selectChatPromptPreset(null).catch((e) =>
+          onSelectPreset={(presetId) =>
+            void selectChatPromptPreset(presetId).catch((e) =>
               setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
             )
           }
@@ -753,6 +767,39 @@ export function ChatWorkspace() {
               setError(e instanceof Error ? e.message : "切换对话模式失败"),
             )
           }
+          extraActions={
+            chatMode === "prompt" ? (
+              <button
+                type="button"
+                className={[styles.presetModeToggle, selectedChatPresetId ? styles.presetModeToggleActive : ""]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-pressed={Boolean(selectedChatPresetId)}
+                title={selectedChatPresetId ? "不使用对话提示词预设" : "启用对话提示词预设"}
+                onClick={() => {
+                  if (selectedChatPresetId) {
+                    void selectChatPromptPreset(null).catch((e) =>
+                      setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
+                    );
+                    return;
+                  }
+                  const nextPreset = favoriteChatPromptPresets[0];
+                  if (nextPreset) {
+                    void selectChatPromptPreset(nextPreset.id).catch((e) =>
+                      setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
+                    );
+                    return;
+                  }
+                  setPromptPresetLibraryOpen(true);
+                }}
+              >
+                <span className={styles.presetSwitchTrack} aria-hidden>
+                  <span className={styles.presetSwitchThumb} />
+                </span>
+                <span>预设</span>
+              </button>
+            ) : null
+          }
         />
       ) : null}
 
@@ -782,10 +829,6 @@ export function ChatWorkspace() {
           void selectChatPromptPreset(preset.id)
             .then(() => setPromptPresetLibraryOpen(false))
             .catch((e) => setError(e instanceof Error ? e.message : "保存对话提示词预设失败"));
-        }}
-        clearAction={{
-          label: "不使用预设",
-          onClick: () => selectChatPromptPreset(null),
         }}
         onFavoriteChange={(preset) => {
           if (preset.kind === "chat") void loadChatPromptPresets().catch(() => {});

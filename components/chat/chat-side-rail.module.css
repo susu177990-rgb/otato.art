@@ -1,32 +1,20 @@
-/* 对话页左右轨道：锁死 120px（须在 TSX 挂 rail* 类；勿用 :global(.modeX) 匹配 image 模块哈希类名） */
+/* 对话页左右轨道复用 /image rail 的位置和滚动窗口；这里只保留文本卡尺寸差异。 */
 
 .railColumn {
-  --chat-rail-card-width: 112px;
+  --chat-rail-card-width: 104px;
+  --chat-rail-card-height: 44px;
+  --mode-visible: 7;
+  --mode-gap: 10px;
+  --mode-row-height: var(--chat-rail-card-height);
+  --history-visible: 7;
+  --history-gap: 10px;
+  --history-thumb: var(--chat-rail-card-height);
   width: var(--chat-rail-card-width) !important;
-  min-width: var(--chat-rail-card-width) !important;
   max-width: var(--chat-rail-card-width) !important;
-  min-height: min(340px, calc(100vh - 250px));
-  /* 勿 hidden：会裁掉 modeRailFrame::before/after 上下小箭头（top/bottom: ±15px） */
-  overflow: visible;
-}
-
-.presetPanel {
-  left: 48px !important;
-}
-
-.sessionPanel {
-  right: 84px !important;
+  min-height: 0;
 }
 
 .railRail,
-.railRailFrame {
-  overflow: visible;
-}
-
-.railRail {
-  flex: 1 1 auto;
-}
-
 .railRailFrame {
   width: 100%;
 }
@@ -40,27 +28,36 @@
   box-sizing: border-box;
 }
 
-.railScrollWrap,
 .railScroll {
-  overflow-x: visible !important;
+  max-height: var(--rail-window-height) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding: 0 !important;
+  justify-content: safe center !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.railScrollWrap,
-.railScroll,
+.railScroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .railList {
-  height: 100%;
-}
-
-.railScroll {
-  justify-content: center !important;
-  padding: 14px 6px !important;
+  gap: var(--mode-gap) !important;
+  align-items: center !important;
 }
 
 .railCard {
   box-sizing: border-box;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
+  width: var(--chat-rail-card-width) !important;
+  max-width: var(--chat-rail-card-width) !important;
+  min-width: var(--chat-rail-card-width) !important;
+  height: var(--chat-rail-card-height) !important;
+  min-height: var(--chat-rail-card-height) !important;
+  aspect-ratio: auto !important;
   padding-left: 10px;
   padding-right: 10px;
   background: rgba(255, 255, 255, 0.07) !important;
@@ -119,22 +116,6 @@
 .railInput {
   border: 2px solid #050505 !important;
   border-radius: 15px !important;
-}
-
-.presetPanel .railCard,
-.sessionPanel .railCard {
-  width: 104px !important;
-  max-width: 104px !important;
-  min-width: 104px !important;
-}
-
-.presetPanel .railScrollWrap,
-.presetPanel .railScroll,
-.presetPanel .railList,
-.sessionPanel .railScrollWrap,
-.sessionPanel .railScroll,
-.sessionPanel .railList {
-  overflow: visible !important;
 }
 
 .railCardActive {
