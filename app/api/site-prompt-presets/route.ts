@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { canManageSiteSettings } from "@/lib/auth/site-admin";
 import { formatDbError } from "@/lib/db/format-db-error";
 import {
+  createPromptPresetSubmission,
+  deleteSitePromptPreset,
   listSitePromptPresetsByKindForUser,
-  newUserPromptPresetId,
+  newPromptPresetSubmissionId,
   replaceSitePromptPresetsByKind,
-  upsertSitePromptPreset,
   type PromptPresetKind,
   type SitePromptPreset,
 } from "@/lib/db/prompt-preset-store";
@@ -145,7 +146,7 @@ export async function POST(req: Request) {
     if (!promptTemplate) return NextResponse.json({ error: "请填写提示词内容" }, { status: 400 });
 
     const writeClient = maybeCreateSupabaseAdminClient() ?? supabase;
-    const id = newUserPromptPresetId(kind);
+    const id = newPromptPresetSubmissionId(kind);
     const coverImageUrl = payload.coverFile ? await uploadPromptPresetCover(writeClient, id, payload.coverFile) : "";
 
     const preset: SitePromptPreset = {
@@ -159,11 +160,37 @@ export async function POST(req: Request) {
       description: payload.description || undefined,
     };
 
-    const savedPreset = await upsertSitePromptPreset(writeClient, kind, preset);
-    const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
-    return NextResponse.json({ preset: { ...savedPreset, isFavorite: false }, presets });
+    const submission = await createPromptPresetSubmission(supabase, kind, preset, {
+      userId: user.id,
+      email: user.email,
+    });
+    return NextResponse.json({ submission });
   } catch (e) {
     console.error("[site-prompt-presets POST]", e);
+    return NextResponse.json({ error: formatDbError(e) }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    if (!(await canManageSiteSettings(supabase))) {
+      return NextResponse.json({ error: "当前账号无权修改全站预设库" }, { status: 403 });
+    }
+
+    const body = (await req.json()) as { presetId?: unknown };
+    const presetId = typeof body.presetId === "string" ? body.presetId.trim() : "";
+    if (!presetId) return NextResponse.json({ error: "presetId 不能为空" }, { status: 400 });
+
+    const writeClient = maybeCreateSupabaseAdminClient() ?? supabase;
+    await deleteSitePromptPreset(writeClient, presetId);
+    return NextResponse.json({ presetId });
+  } catch (e) {
+    console.error("[site-prompt-presets DELETE]", e);
     return NextResponse.json({ error: formatDbError(e) }, { status: 500 });
   }
 }

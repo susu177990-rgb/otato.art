@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPromptPresetSubmission,
   replaceSitePromptPresetsByKind,
   syncPromptLibraryFromWorkspaces,
   upsertSitePromptPreset,
@@ -71,10 +72,7 @@ describe("prompt preset ordering", () => {
       ["old-preset", 1],
     ]);
     expect(deletedKinds).toEqual(["chat"]);
-    expect(deleteNotFilters).toEqual([
-      ["id", "like", "user_preset_%"],
-      ["id", "in", '("new-preset","old-preset")'],
-    ]);
+    expect(deleteNotFilters).toEqual([["id", "in", '("new-preset","old-preset")']]);
   });
 
   it("upserts one user preset at the front without deleting existing presets", async () => {
@@ -212,5 +210,70 @@ describe("prompt preset ordering", () => {
       ["id", "like", "user_preset_%"],
       ["id", "in", '("custom-image","custom-video")'],
     ]);
+  });
+
+  it("creates user uploads as pending submissions instead of public presets", async () => {
+    let insertedRow: Record<string, unknown> | null = null;
+
+    const supabase = {
+      from(table: string) {
+        if (table !== "site_prompt_preset_submissions") throw new Error(`unexpected table ${table}`);
+        return {
+          insert(row: Record<string, unknown>) {
+            insertedRow = row;
+            return {
+              select() {
+                return {
+                  async single() {
+                    return {
+                      data: {
+                        ...row,
+                        created_at: "2026-06-13T00:00:00.000Z",
+                      },
+                      error: null,
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const submission = await createPromptPresetSubmission(
+      supabase as never,
+      "image",
+      {
+        id: "submission_image_1",
+        kind: "image",
+        title: " 投稿预设 ",
+        promptTemplate: "make image",
+        coverImageUrl: "https://example.com/cover.webp",
+        refSlotHints: ["参考图"],
+        tags: ["编辑", "编辑"],
+        description: " 用户说明 ",
+      },
+      { userId: "user-1", email: "USER@EXAMPLE.COM" },
+    );
+
+    expect(insertedRow).toMatchObject({
+      id: "submission_image_1",
+      preset_type: "image",
+      title: "投稿预设",
+      prompt_template: "make image",
+      status: "pending",
+      submitter_user_id: "user-1",
+      submitter_email: "user@example.com",
+      published_preset_id: null,
+    });
+    expect(submission).toMatchObject({
+      id: "submission_image_1",
+      kind: "image",
+      title: "投稿预设",
+      status: "pending",
+      submitterUserId: "user-1",
+      submitterEmail: "user@example.com",
+    });
   });
 });

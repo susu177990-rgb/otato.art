@@ -41,12 +41,18 @@ import {
   type VideoPromptModeId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
-import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
-import { fetchSitePromptPresets, replaceSitePromptPresets } from "@/lib/prompt-preset-api-client";
+import type { PromptPresetSubmission, SitePromptPreset } from "@/lib/db/prompt-preset-store";
+import {
+  deleteSitePromptPreset,
+  fetchPromptPresetSubmissions,
+  fetchSitePromptPresets,
+  replaceSitePromptPresets,
+  reviewPromptPresetSubmission,
+} from "@/lib/prompt-preset-api-client";
 import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
 type SettingsCategory = "api" | "prompts";
-type Tab = "llmApi" | "imageApi" | "videoApi" | "imagePrompts" | "videoPrompts" | "chatPrompts" | "skillPacks";
+type Tab = "llmApi" | "imageApi" | "videoApi" | "imagePrompts" | "videoPrompts" | "chatPrompts" | "promptSubmissions" | "skillPacks";
 
 const CATEGORY_DEFS: ReadonlyArray<{ id: SettingsCategory; label: string; defaultTab: Tab }> = [
   { id: "api", label: "网站内部API", defaultTab: "llmApi" },
@@ -63,6 +69,7 @@ const SUBPAGE_DEFS: Record<SettingsCategory, ReadonlyArray<{ id: Tab; label: str
     { id: "imagePrompts", label: "生图提示词预设" },
     { id: "videoPrompts", label: "生视频提示词预设" },
     { id: "chatPrompts", label: "对话提示词预设" },
+    { id: "promptSubmissions", label: "投稿审核" },
     { id: "skillPacks", label: "Skill设置" },
   ],
 };
@@ -105,6 +112,7 @@ function tabFromSearchParam(raw: string | null): Tab | null {
     raw === "imageApi" ||
     raw === "imagePrompts" ||
     raw === "chatPrompts" ||
+    raw === "promptSubmissions" ||
     raw === "videoApi" ||
     raw === "videoPrompts" ||
     raw === "skillPacks"
@@ -115,7 +123,7 @@ function tabFromSearchParam(raw: string | null): Tab | null {
 }
 
 function categoryForTab(tab: Tab): SettingsCategory {
-  if (tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "skillPacks") return "prompts";
+  if (tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "promptSubmissions" || tab === "skillPacks") return "prompts";
   return "api";
 }
 
@@ -129,6 +137,8 @@ function AdminPageInner() {
   const [adminState, setAdminState] = useState<"loading" | "ready" | "forbidden">("loading");
   const [savedMessage, setSavedMessage] = useState("");
   const [chatPromptPresets, setChatPromptPresets] = useState<SitePromptPreset[]>([]);
+  const [promptSubmissions, setPromptSubmissions] = useState<PromptPresetSubmission[]>([]);
+  const [promptSubmissionMessage, setPromptSubmissionMessage] = useState("");
   const imagePromptsPersistMergeRef = useRef<(() => ImageWorkspaceSettings) | null>(null);
   const videoPromptsPersistMergeRef = useRef<(() => VideoWorkspaceSettings) | null>(null);
 
@@ -177,7 +187,14 @@ function AdminPageInner() {
     void fetchSitePromptPresets("chat")
       .then(setChatPromptPresets)
       .catch(() => {});
+    void fetchPromptPresetSubmissions("pending")
+      .then(setPromptSubmissions)
+      .catch(() => {});
   }, [adminState]);
+
+  async function refreshPromptSubmissions() {
+    setPromptSubmissions(await fetchPromptPresetSubmissions("pending"));
+  }
 
   async function persistWorkspace(llm: Settings, image: ImageWorkspaceSettings, video: VideoWorkspaceSettings) {
     const normalizedLlm = normalizeLlmSettings(llm);
@@ -208,6 +225,22 @@ function AdminPageInner() {
       setSavedMessage(message || "保存失败");
     }
     window.setTimeout(() => setSavedMessage(""), 1400);
+  }
+
+  async function reviewPromptSubmission(submissionId: string, action: "approve" | "reject") {
+    setPromptSubmissionMessage("");
+    try {
+      await reviewPromptPresetSubmission(submissionId, action);
+      await refreshPromptSubmissions();
+      if (action === "approve") {
+        await refreshAdminWorkspace();
+        setChatPromptPresets(await fetchSitePromptPresets("chat"));
+      }
+      setPromptSubmissionMessage(action === "approve" ? "已通过并发布到全站预设库" : "已拒绝投稿");
+    } catch (error) {
+      setPromptSubmissionMessage(error instanceof Error ? error.message : "审核操作失败");
+    }
+    window.setTimeout(() => setPromptSubmissionMessage(""), 1800);
   }
 
   function addLlmModel() {
@@ -395,6 +428,15 @@ function AdminPageInner() {
               <ChatPromptsPanel value={chatPromptPresets} onChange={setChatPromptPresets} />
             ) : null}
 
+            {tab === "promptSubmissions" ? (
+              <PromptSubmissionsPanel
+                submissions={promptSubmissions}
+                message={promptSubmissionMessage}
+                onRefresh={refreshPromptSubmissions}
+                onReview={reviewPromptSubmission}
+              />
+            ) : null}
+
             {tab === "videoApi" ? (
               <VideoApiPanel value={videoSettings} onChange={setVideoSettings} />
             ) : null}
@@ -411,6 +453,14 @@ type PromptPresetRow = SitePromptPreset & { isCustom: true };
 
 function newChatPromptPresetId(): string {
   return `chat_preset_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function isAdminEditableImagePromptId(id: string): boolean {
+  return id.startsWith("custom_") || id.startsWith("user_preset_image_");
+}
+
+function isAdminEditableVideoPromptId(id: string): boolean {
+  return id.startsWith("custom_video_") || id.startsWith("user_preset_video_");
 }
 
 function PromptTagPicker({
@@ -443,6 +493,156 @@ function PromptTagPicker({
         })}
       </div>
     </div>
+  );
+}
+
+const PROMPT_KIND_LABELS: Record<PromptPresetSubmission["kind"], string> = {
+  image: "生图",
+  video: "生视频",
+  chat: "对话",
+};
+
+function formatSubmissionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function PromptSubmissionsPanel({
+  submissions,
+  message,
+  onRefresh,
+  onReview,
+}: {
+  submissions: PromptPresetSubmission[];
+  message: string;
+  onRefresh: () => Promise<void>;
+  onReview: (submissionId: string, action: "approve" | "reject") => Promise<void>;
+}) {
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  async function review(submissionId: string, action: "approve" | "reject") {
+    setSavingId(submissionId);
+    try {
+      await onReview(submissionId, action);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <section className={styles.panel}>
+      <div className={settingsCardClass}>
+        <div className={shellStyles.cardHead}>
+          <div>
+            <h2 className={shellStyles.cardTitle}>投稿审核</h2>
+            <p className={shellStyles.cardSubtitle}>
+              普通用户提交的提示词会先进入这里。通过后才会发布到全站预设库；拒绝不会影响现有预设。
+            </p>
+          </div>
+          <div className={styles.promptModeCardActions}>
+            {message ? <span className={styles.savedHint}>{message}</span> : null}
+            <button type="button" className={shellStyles.buttonSubtle} onClick={() => void onRefresh()}>
+              刷新
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {submissions.length === 0 ? (
+        <div className={shellStyles.empty}>暂无待审核投稿。</div>
+      ) : (
+        <div className={styles.promptModeGrid}>
+          {submissions.map((submission) => {
+            const saving = savingId === submission.id;
+            return (
+              <article
+                key={submission.id}
+                className={[
+                  settingsCardClass,
+                  styles.promptModeCard,
+                  submission.coverImageUrl ? styles.promptMediaCard : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <header className={[shellStyles.cardHead, styles.promptModeCardHead].join(" ")}>
+                  <div>
+                    <h3 className={styles.promptModeCardTitle}>{submission.title}</h3>
+                    <p className={shellStyles.cardSubtitle}>
+                      {PROMPT_KIND_LABELS[submission.kind]} · {submission.submitterEmail || submission.submitterUserId} · {formatSubmissionDate(submission.createdAt)}
+                    </p>
+                  </div>
+                  <div className={styles.promptModeCardActions}>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      disabled={saving}
+                      onClick={() => void review(submission.id, "reject")}
+                    >
+                      拒绝
+                    </button>
+                    <button
+                      type="button"
+                      className={shellStyles.buttonSubtle}
+                      disabled={saving}
+                      onClick={() => void review(submission.id, "approve")}
+                    >
+                      {saving ? "处理中…" : "通过发布"}
+                    </button>
+                  </div>
+                </header>
+
+                <div className={styles.promptModeEditBody}>
+                  {submission.coverImageUrl ? (
+                    <div className={styles.promptModeCoverSlot} aria-label="投稿封面">
+                      <div className={[styles.promptModeCoverFrame, styles.promptModeCoverFrameFilled, styles.promptModeCoverFrameReadOnly].join(" ")}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={submission.coverImageUrl} alt="" className={styles.promptModeCoverImage} />
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className={styles.promptModeMainColumn}>
+                    <PromptTagPicker kind={submission.kind} value={submission.tags} onChange={() => {}} />
+                    {submission.description ? (
+                      <label className={shellStyles.field}>
+                        <span className={shellStyles.fieldLabel}>投稿说明</span>
+                        <textarea
+                          className={[shellStyles.textarea, styles.promptDescriptionTextarea, styles.noResize, styles.promptModeTextareaReadOnly].join(" ")}
+                          value={submission.description}
+                          readOnly
+                        />
+                      </label>
+                    ) : null}
+                    <label className={shellStyles.field}>
+                      <span className={shellStyles.fieldLabel}>提示词内容</span>
+                      <textarea
+                        className={[
+                          shellStyles.textarea,
+                          shellStyles.mono,
+                          styles.promptModeTextarea,
+                          styles.noResize,
+                          styles.promptModeTextareaReadOnly,
+                        ].join(" ")}
+                        value={submission.promptTemplate}
+                        readOnly
+                        spellCheck={false}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -905,7 +1105,7 @@ function ImagePromptsPanel({
           draftPromptDescriptions[id] ?? value.promptDescriptionsByMode?.[id] ?? "",
         ),
       };
-      if (id.startsWith("custom_")) {
+      if (isAdminEditableImagePromptId(id)) {
         const labelRaw =
           draftLabels[id] ?? value.customModes?.find((m) => m.id === id)?.label ?? id;
         const label = String(labelRaw).trim() || id;
@@ -997,7 +1197,7 @@ function ImagePromptsPanel({
       copy[modeId] = value.prompts[modeId] ?? "";
       return copy;
     });
-    if (modeId.startsWith("custom_")) {
+    if (isAdminEditableImagePromptId(modeId)) {
       setDraftLabels((prev) => ({
         ...prev,
         [modeId]: value.customModes?.find((m) => m.id === modeId)?.label ?? "",
@@ -1023,34 +1223,44 @@ function ImagePromptsPanel({
   }
 
   function handleDeleteCustomMode(modeId: string) {
-    if (!modeId.startsWith("custom_")) return;
+    if (!isAdminEditableImagePromptId(modeId)) return;
     void (async () => {
-      let coverImageUrlByMode: Record<string, string>;
-      try {
-        coverImageUrlByMode = await removeStoredModeCover(modeId);
-      } catch (e) {
-        window.alert(e instanceof Error ? e.message : "删除封面失败");
-        return;
+      if (modeId.startsWith("user_preset_image_")) {
+        try {
+          await deleteSitePromptPreset(modeId);
+          await onRefreshWorkspace?.();
+        } catch (e) {
+          window.alert(e instanceof Error ? e.message : "删除预设失败");
+          return;
+        }
+      } else {
+        let coverImageUrlByMode: Record<string, string>;
+        try {
+          coverImageUrlByMode = await removeStoredModeCover(modeId);
+        } catch (e) {
+          window.alert(e instanceof Error ? e.message : "删除封面失败");
+          return;
+        }
+        const restPrompts = { ...value.prompts };
+        delete restPrompts[modeId];
+        const restPromptProviders = { ...value.promptModelProvidersByMode };
+        delete restPromptProviders[modeId];
+        const restPromptTags = { ...value.promptTagsByMode };
+        delete restPromptTags[modeId];
+        const restPromptDescriptions = { ...value.promptDescriptionsByMode };
+        delete restPromptDescriptions[modeId];
+        const next: ImageWorkspaceSettings = {
+          ...value,
+          customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
+          prompts: restPrompts,
+          promptModelProvidersByMode: restPromptProviders,
+          promptTagsByMode: restPromptTags,
+          promptDescriptionsByMode: restPromptDescriptions,
+          coverImageUrlByMode,
+        };
+        onChange(next);
+        void onPersistImage(next);
       }
-      const restPrompts = { ...value.prompts };
-      delete restPrompts[modeId];
-      const restPromptProviders = { ...value.promptModelProvidersByMode };
-      delete restPromptProviders[modeId];
-      const restPromptTags = { ...value.promptTagsByMode };
-      delete restPromptTags[modeId];
-      const restPromptDescriptions = { ...value.promptDescriptionsByMode };
-      delete restPromptDescriptions[modeId];
-      const next: ImageWorkspaceSettings = {
-        ...value,
-        customModes: (value.customModes ?? []).filter((m) => m.id !== modeId),
-        prompts: restPrompts,
-        promptModelProvidersByMode: restPromptProviders,
-        promptTagsByMode: restPromptTags,
-        promptDescriptionsByMode: restPromptDescriptions,
-        coverImageUrlByMode,
-      };
-      onChange(next);
-      void onPersistImage(next);
       setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
       setDraftPrompts((prev) => {
         const copy = { ...prev };
@@ -1756,7 +1966,7 @@ function VideoPromptsPanel({
           draftPromptDescriptions[id] ?? value.promptDescriptionsByMode?.[id] ?? "",
         ),
       };
-      if (id.startsWith("custom_video_")) {
+      if (isAdminEditableVideoPromptId(id)) {
         const labelRaw = draftLabels[id] ?? value.customModes?.find((mode) => mode.id === id)?.label ?? id;
         const label = String(labelRaw).trim() || id;
         merged = {
@@ -1828,7 +2038,7 @@ function VideoPromptsPanel({
       copy[modeId] = value.prompts[modeId] ?? "";
       return copy;
     });
-    if (modeId.startsWith("custom_video_")) {
+    if (isAdminEditableVideoPromptId(modeId)) {
       setDraftLabels((prev) => ({
         ...prev,
         [modeId]: value.customModes?.find((mode) => mode.id === modeId)?.label ?? "",
@@ -1850,31 +2060,41 @@ function VideoPromptsPanel({
   }
 
   function handleDeleteCustomMode(modeId: string) {
-    if (!modeId.startsWith("custom_video_")) return;
+    if (!isAdminEditableVideoPromptId(modeId)) return;
     void (async () => {
-      let coverImageUrlByMode: Record<string, string>;
-      try {
-        coverImageUrlByMode = await removeStoredModeCover(modeId);
-      } catch (e) {
-        window.alert(e instanceof Error ? e.message : "删除封面失败");
-        return;
+      if (modeId.startsWith("user_preset_video_")) {
+        try {
+          await deleteSitePromptPreset(modeId);
+          await onRefreshWorkspace?.();
+        } catch (e) {
+          window.alert(e instanceof Error ? e.message : "删除预设失败");
+          return;
+        }
+      } else {
+        let coverImageUrlByMode: Record<string, string>;
+        try {
+          coverImageUrlByMode = await removeStoredModeCover(modeId);
+        } catch (e) {
+          window.alert(e instanceof Error ? e.message : "删除封面失败");
+          return;
+        }
+        const restPrompts = { ...value.prompts };
+        delete restPrompts[modeId];
+        const restPromptTags = { ...value.promptTagsByMode };
+        delete restPromptTags[modeId];
+        const restPromptDescriptions = { ...value.promptDescriptionsByMode };
+        delete restPromptDescriptions[modeId];
+        const next: VideoWorkspaceSettings = {
+          ...value,
+          customModes: (value.customModes ?? []).filter((mode) => mode.id !== modeId),
+          prompts: restPrompts,
+          promptTagsByMode: restPromptTags,
+          promptDescriptionsByMode: restPromptDescriptions,
+          coverImageUrlByMode,
+        };
+        onChange(next);
+        void onPersistVideo(next);
       }
-      const restPrompts = { ...value.prompts };
-      delete restPrompts[modeId];
-      const restPromptTags = { ...value.promptTagsByMode };
-      delete restPromptTags[modeId];
-      const restPromptDescriptions = { ...value.promptDescriptionsByMode };
-      delete restPromptDescriptions[modeId];
-      const next: VideoWorkspaceSettings = {
-        ...value,
-        customModes: (value.customModes ?? []).filter((mode) => mode.id !== modeId),
-        prompts: restPrompts,
-        promptTagsByMode: restPromptTags,
-        promptDescriptionsByMode: restPromptDescriptions,
-        coverImageUrlByMode,
-      };
-      onChange(next);
-      void onPersistVideo(next);
       setEditingPromptModeId((cur) => (cur === modeId ? null : cur));
       setDraftPrompts((prev) => {
         const copy = { ...prev };

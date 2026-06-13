@@ -17,8 +17,25 @@ export type SitePromptPreset = {
   isFavorite?: boolean;
 };
 
+export type PromptPresetSubmissionStatus = "pending" | "approved" | "rejected";
+
+export type PromptPresetSubmission = SitePromptPreset & {
+  status: PromptPresetSubmissionStatus;
+  submitterUserId: string;
+  submitterEmail?: string;
+  publishedPresetId?: string;
+  reviewNote?: string;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+};
+
 export function newUserPromptPresetId(kind: PromptPresetKind): string {
   return `user_preset_${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function newPromptPresetSubmissionId(kind: PromptPresetKind): string {
+  return `submission_${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function toPresetRow(kind: PromptPresetKind, preset: SitePromptPreset, sortOrder = 0): Record<string, unknown> {
@@ -62,6 +79,25 @@ type SitePromptPresetRow = {
   sort_order: number | null;
 };
 
+type PromptPresetSubmissionRow = {
+  id: string;
+  preset_type: PromptPresetKind;
+  title: string;
+  prompt_template: string | null;
+  cover_image_url: string | null;
+  ref_slot_hints: unknown;
+  tags: unknown;
+  description: string | null;
+  submitter_user_id: string;
+  submitter_email: string | null;
+  status: PromptPresetSubmissionStatus;
+  published_preset_id: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+  reviewed_at: string | null;
+};
+
 function isMissingPresetTable(e: unknown): boolean {
   const row = e && typeof e === "object" ? (e as { code?: unknown; message?: unknown }) : null;
   const code = typeof row?.code === "string" ? row.code : "";
@@ -97,6 +133,31 @@ function rowToPreset(row: SitePromptPresetRow): SitePromptPreset {
     tags: normalizePromptTags(row.tags),
     description: row.description ?? undefined,
     isFavorite: false,
+  };
+}
+
+function rowToSubmission(row: PromptPresetSubmissionRow): PromptPresetSubmission {
+  const preset = rowToPreset({
+    id: row.id,
+    preset_type: row.preset_type,
+    title: row.title,
+    prompt_template: row.prompt_template,
+    cover_image_url: row.cover_image_url,
+    ref_slot_hints: row.ref_slot_hints,
+    tags: row.tags,
+    description: row.description,
+    sort_order: 0,
+  });
+  return {
+    ...preset,
+    status: row.status,
+    submitterUserId: row.submitter_user_id,
+    submitterEmail: row.submitter_email ?? undefined,
+    publishedPresetId: row.published_preset_id ?? undefined,
+    reviewNote: row.review_note ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    reviewedAt: row.reviewed_at ?? undefined,
   };
 }
 
@@ -223,13 +284,20 @@ export async function replaceSitePromptPresetsByKind(
     }
   }
 
-  const deleteQuery = supabase.from("site_prompt_presets").delete().eq("preset_type", kind).not("id", "like", "user_preset_%");
+  const deleteQuery = supabase.from("site_prompt_presets").delete().eq("preset_type", kind);
   const { error: deleteError } =
     rows.length === 0
       ? await deleteQuery
       : await deleteQuery.not("id", "in", `(${rows.map((row) => quoteForSupabaseIn(String(row.id))).join(",")})`);
 
   if (deleteError && !isMissingPresetTable(deleteError)) throw deleteError;
+}
+
+export async function deleteSitePromptPreset(supabase: SupabaseClient, presetId: string): Promise<void> {
+  const id = presetId.trim();
+  if (!id) return;
+  const { error } = await supabase.from("site_prompt_presets").delete().eq("id", id);
+  if (error && !isMissingPresetTable(error)) throw error;
 }
 
 export async function upsertSitePromptPreset(
@@ -271,6 +339,105 @@ export async function upsertSitePromptPreset(
   }
 
   return normalizedPreset;
+}
+
+export async function createPromptPresetSubmission(
+  supabase: SupabaseClient,
+  kind: PromptPresetKind,
+  preset: SitePromptPreset,
+  submitter: { userId: string; email?: string | null },
+): Promise<PromptPresetSubmission> {
+  const id = preset.id.trim() || newPromptPresetSubmissionId(kind);
+  const now = new Date().toISOString();
+  const row = {
+    id,
+    preset_type: kind,
+    title: preset.title.trim() || id,
+    description: preset.description?.trim() || null,
+    prompt_template: preset.promptTemplate ?? "",
+    cover_image_url: preset.coverImageUrl?.trim() || null,
+    ref_slot_hints: kind === "image" ? (preset.refSlotHints ?? []) : [],
+    tags: normalizePromptTags(preset.tags),
+    submitter_user_id: submitter.userId,
+    submitter_email: submitter.email?.trim().toLowerCase() || null,
+    status: "pending",
+    published_preset_id: null,
+    review_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    updated_at: now,
+  };
+
+  const { data, error } = await supabase
+    .from("site_prompt_preset_submissions")
+    .insert(row)
+    .select(
+      "id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, submitter_user_id, submitter_email, status, published_preset_id, review_note, created_at, updated_at, reviewed_at",
+    )
+    .single();
+
+  if (error) throw error;
+  return rowToSubmission(data as PromptPresetSubmissionRow);
+}
+
+export async function listPromptPresetSubmissions(
+  supabase: SupabaseClient,
+  status: PromptPresetSubmissionStatus | "all" = "pending",
+): Promise<PromptPresetSubmission[]> {
+  let query = supabase
+    .from("site_prompt_preset_submissions")
+    .select(
+      "id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, submitter_user_id, submitter_email, status, published_preset_id, review_note, created_at, updated_at, reviewed_at",
+    )
+    .order("created_at", { ascending: false });
+  if (status !== "all") query = query.eq("status", status);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map((row) => rowToSubmission(row as PromptPresetSubmissionRow));
+}
+
+export async function getPromptPresetSubmission(
+  supabase: SupabaseClient,
+  submissionId: string,
+): Promise<PromptPresetSubmission | null> {
+  const { data, error } = await supabase
+    .from("site_prompt_preset_submissions")
+    .select(
+      "id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, submitter_user_id, submitter_email, status, published_preset_id, review_note, created_at, updated_at, reviewed_at",
+    )
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToSubmission(data as PromptPresetSubmissionRow) : null;
+}
+
+export async function markPromptPresetSubmissionReviewed(
+  supabase: SupabaseClient,
+  submissionId: string,
+  review: {
+    status: "approved" | "rejected";
+    reviewedBy: string;
+    publishedPresetId?: string;
+    reviewNote?: string;
+  },
+): Promise<PromptPresetSubmission> {
+  const { data, error } = await supabase
+    .from("site_prompt_preset_submissions")
+    .update({
+      status: review.status,
+      published_preset_id: review.publishedPresetId ?? null,
+      review_note: review.reviewNote?.trim() || null,
+      reviewed_by: review.reviewedBy,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", submissionId)
+    .select(
+      "id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, submitter_user_id, submitter_email, status, published_preset_id, review_note, created_at, updated_at, reviewed_at",
+    )
+    .single();
+  if (error) throw error;
+  return rowToSubmission(data as PromptPresetSubmissionRow);
 }
 
 function imageWorkspaceRows(workspace: ImageWorkspaceSettings): Array<Record<string, unknown>> {

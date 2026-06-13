@@ -1,4 +1,9 @@
-import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
+import type {
+  PromptPresetKind,
+  PromptPresetSubmission,
+  PromptPresetSubmissionStatus,
+  SitePromptPreset,
+} from "@/lib/db/prompt-preset-store";
 
 export const PROMPT_PRESET_KINDS: PromptPresetKind[] = ["image", "video", "chat"];
 
@@ -33,9 +38,9 @@ export async function replaceSitePromptPresets(
   return data.presets;
 }
 
-export async function createSitePromptPreset(
+export async function submitPromptPresetContribution(
   preset: Pick<SitePromptPreset, "kind" | "title" | "promptTemplate" | "tags" | "description"> & { coverFile?: File | null },
-): Promise<{ preset: SitePromptPreset; presets: SitePromptPreset[] }> {
+): Promise<{ submission: PromptPresetSubmission }> {
   const body = new FormData();
   body.set("kind", preset.kind);
   body.set("title", preset.title);
@@ -48,8 +53,18 @@ export async function createSitePromptPreset(
     method: "POST",
     body,
   });
-  if (!res.ok) throw new Error(await readApiError(res, "无法上传提示词预设"));
-  return (await res.json()) as { preset: SitePromptPreset; presets: SitePromptPreset[] };
+  if (!res.ok) throw new Error(await readApiError(res, "无法提交提示词投稿"));
+  return (await res.json()) as { submission: PromptPresetSubmission };
+}
+
+export async function deleteSitePromptPreset(presetId: string): Promise<{ presetId: string }> {
+  const res = await fetch("/api/site-prompt-presets", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ presetId }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, "无法删除提示词预设"));
+  return (await res.json()) as { presetId: string };
 }
 
 export async function setSitePromptPresetFavorite(
@@ -64,4 +79,27 @@ export async function setSitePromptPresetFavorite(
   if (!res.ok) throw new Error(await readApiError(res, "无法更新收藏"));
   const data = (await res.json()) as { presetId: string; isFavorite: boolean };
   return data;
+}
+
+export async function fetchPromptPresetSubmissions(
+  status: PromptPresetSubmissionStatus | "all" = "pending",
+): Promise<PromptPresetSubmission[]> {
+  const res = await fetch(`/api/admin/prompt-preset-submissions?status=${encodeURIComponent(status)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res, "无法加载投稿审核列表"));
+  const data = (await res.json()) as { submissions: PromptPresetSubmission[] };
+  return data.submissions;
+}
+
+export async function reviewPromptPresetSubmission(
+  submissionId: string,
+  action: "approve" | "reject",
+  reviewNote = "",
+): Promise<{ submission: PromptPresetSubmission; preset?: SitePromptPreset }> {
+  const res = await fetch("/api/admin/prompt-preset-submissions", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ submissionId, action, reviewNote }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, "无法更新投稿审核状态"));
+  return (await res.json()) as { submission: PromptPresetSubmission; preset?: SitePromptPreset };
 }

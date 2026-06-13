@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { PromptPresetCard } from "@/components/prompt-presets/PromptPresetCard";
-import { createSitePromptPreset, fetchSitePromptPresets, setSitePromptPresetFavorite } from "@/lib/prompt-preset-api-client";
+import { fetchSitePromptPresets, setSitePromptPresetFavorite, submitPromptPresetContribution } from "@/lib/prompt-preset-api-client";
 import {
   PROMPT_TAG_GROUPS,
   PROMPT_UNCATEGORIZED_TAG,
@@ -99,6 +99,7 @@ function PromptPageInner() {
   const [uploadForm, setUploadForm] = useState(EMPTY_UPLOAD_FORM);
   const [uploadSaving, setUploadSaving] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
 
   const loadPresets = useCallback(async () => {
     setLoading(true);
@@ -187,10 +188,11 @@ function PromptPageInner() {
   async function submitUploadPreset() {
     setUploadSaving(true);
     setUploadError("");
+    setUploadSuccess("");
     setError("");
     setNeedsLogin(false);
     try {
-      const result = await createSitePromptPreset({
+      await submitPromptPresetContribution({
         kind: uploadForm.kind,
         title: uploadForm.title,
         description: uploadForm.description,
@@ -198,18 +200,14 @@ function PromptPageInner() {
         coverFile: uploadForm.coverFile,
         tags: uploadForm.tags,
       });
-      const grouped = await Promise.all(
-        PROMPT_KINDS.map((kind) => (kind === uploadForm.kind ? Promise.resolve(result.presets) : fetchSitePromptPresets(kind))),
-      );
-      setPresets(grouped.flat());
       setFilter(uploadForm.kind);
       setSecondaryTag(null);
       setQuery("");
-      setSelectedPresetId(result.preset.id);
       setUploadOpen(false);
       setUploadForm(EMPTY_UPLOAD_FORM);
+      setUploadSuccess("投稿已提交，管理员审核通过后会进入全站预设库。");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "上传提示词预设失败";
+      const message = e instanceof Error ? e.message : "提交提示词投稿失败";
       setUploadError(message);
       if (message.includes("请先登录")) {
         setError(message);
@@ -234,7 +232,7 @@ function PromptPageInner() {
             返回首页
           </Link>
           <button type="button" className={[shellStyles.navLink, styles.uploadButton].join(" ")} onClick={() => setUploadOpen(true)}>
-            上传提示词
+            投稿提示词
           </button>
         </nav>
         <div className={shellStyles.topnav}>
@@ -243,6 +241,11 @@ function PromptPageInner() {
       </header>
 
       <div className={styles.promptBody}>
+        {uploadSuccess ? (
+          <div className={styles.messageBox} role="status">
+            <span>{uploadSuccess}</span>
+          </div>
+        ) : null}
         <section className={styles.promptHero}>
           <div>
             <p className={styles.eyebrow}>Prompt Presets</p>
@@ -457,7 +460,7 @@ function UploadPromptPresetDialog({
       className={styles.uploadDialogRoot}
       role="dialog"
       aria-modal="true"
-      aria-label="上传提示词预设"
+      aria-label="投稿提示词预设"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -465,9 +468,9 @@ function UploadPromptPresetDialog({
       <section className={[shellStyles.card, styles.uploadDialogCard].join(" ")} onPointerDown={(event) => event.stopPropagation()}>
         <header className={[shellStyles.cardHead, styles.uploadDialogHead].join(" ")}>
           <div>
-            <p className={styles.eyebrow}>Upload Preset</p>
-            <h2 className={styles.uploadDialogTitle}>上传提示词预设</h2>
-            <p className={styles.uploadDialogSubtitle}>提交后会直接进入全站预设库，所有用户都能在预设库里使用。</p>
+            <p className={styles.eyebrow}>Submit Preset</p>
+            <h2 className={styles.uploadDialogTitle}>投稿提示词预设</h2>
+            <p className={styles.uploadDialogSubtitle}>提交后进入审核队列，通过后才会出现在全站预设库。</p>
           </div>
           <button type="button" className={styles.uploadCloseButton} onClick={onClose} disabled={saving} aria-label="关闭">
             ×
@@ -491,7 +494,7 @@ function UploadPromptPresetDialog({
                 取消
               </button>
               <button type="button" className={shellStyles.buttonSubtle} onClick={onSubmit} disabled={saving}>
-                {saving ? "上传中…" : "上传"}
+                {saving ? "提交中…" : "提交投稿"}
               </button>
             </div>
           </header>

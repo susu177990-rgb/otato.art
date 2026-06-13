@@ -17,13 +17,32 @@ import pg from "pg";
 
 config({ path: path.join(process.cwd(), ".env.local") });
 
-const PROJECT_REF = "bfvilvoiangeilxuxpdh";
+function projectRef(): string {
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (rawUrl) {
+    try {
+      const host = new URL(rawUrl).hostname;
+      const ref = host.endsWith(".supabase.co") ? host.split(".")[0] : "";
+      if (ref) return ref;
+    } catch {
+      /* fall back below */
+    }
+  }
+  return "bfvilvoiangeilxuxpdh";
+}
 
 function migrationsDir(): string {
   return path.join(process.cwd(), "supabase", "migrations");
 }
 
 function listMigrationFiles(): string[] {
+  const only = process.env.SUPABASE_MIGRATION_FILE?.trim();
+  if (only) {
+    if (!only.endsWith(".sql")) throw new Error("SUPABASE_MIGRATION_FILE 必须是 .sql 文件");
+    const filePath = path.join(migrationsDir(), only);
+    if (!fs.existsSync(filePath)) throw new Error(`找不到迁移文件：${only}`);
+    return [only];
+  }
   return fs
     .readdirSync(migrationsDir())
     .filter((f) => f.endsWith(".sql"))
@@ -31,7 +50,7 @@ function listMigrationFiles(): string[] {
 }
 
 async function runViaManagementApi(accessToken: string, sql: string): Promise<void> {
-  const res = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef()}/database/query`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -57,12 +76,13 @@ async function runViaPg(connectionString: string, sql: string): Promise<void> {
 
 function buildPoolerUrl(password: string): string {
   const enc = encodeURIComponent(password);
-  return `postgresql://postgres.${PROJECT_REF}:${enc}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
+  const ref = projectRef();
+  return `postgresql://postgres.${ref}:${enc}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
 }
 
 function buildDirectUrl(password: string): string {
   const enc = encodeURIComponent(password);
-  return `postgresql://postgres:${enc}@db.${PROJECT_REF}.supabase.co:5432/postgres`;
+  return `postgresql://postgres:${enc}@db.${projectRef()}.supabase.co:5432/postgres`;
 }
 
 async function execSql(run: (sql: string) => Promise<void>, file: string): Promise<void> {
@@ -86,7 +106,7 @@ async function main() {
   let run!: (sql: string) => Promise<void>;
 
   if (accessToken) {
-    console.log("使用 SUPABASE_ACCESS_TOKEN（Management API）");
+    console.log(`使用 SUPABASE_ACCESS_TOKEN（Management API），项目 ${projectRef()}`);
     run = (sql) => runViaManagementApi(accessToken, sql);
   } else if (databaseUrl) {
     console.log("使用 DATABASE_URL");
@@ -99,7 +119,7 @@ async function main() {
         const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
         await client.connect();
         await client.end();
-        console.log("使用 SUPABASE_DB_PASSWORD 连接数据库");
+        console.log(`使用 SUPABASE_DB_PASSWORD 连接数据库，项目 ${projectRef()}`);
         run = (sql) => runViaPg(url, sql);
         connected = true;
         break;
@@ -122,7 +142,7 @@ async function main() {
 
 3) 然后执行：npm run db:push
 
-也可安装 CLI 后：npx supabase login && npx supabase link --project-ref ${PROJECT_REF} && npx supabase db push
+也可安装 CLI 后：npx supabase login && npx supabase link --project-ref ${projectRef()} && npx supabase db push
 `);
     process.exit(1);
   }
