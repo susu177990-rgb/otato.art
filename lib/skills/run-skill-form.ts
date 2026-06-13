@@ -6,7 +6,7 @@ import type { ChatApiConfig, ChatMessage, SkillFormRunResult, SkillPackRecord } 
 import { generateImage } from "@/lib/image-generate";
 import { effectiveAgentImageModelId, resolveImageModelSettings } from "@/lib/chat/image-model-catalog";
 import { resolveImageSizeFromUnknownRecord } from "@/lib/chat/image-size-policy";
-import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
@@ -152,7 +152,7 @@ export async function runSkillForm(params: {
     refImages,
   });
 
-  const generatedImageUrl = await persistGeneratedImageToStorage(
+  const generatedImage = await persistGeneratedImageWithThumbnailToStorage(
     supabase,
     userId,
     imageResult.imageUrl,
@@ -170,7 +170,8 @@ export async function runSkillForm(params: {
     userInput: formPayload.story_request?.story_framework ?? "",
     aspectRatio,
     imageSize,
-    imageUrl: generatedImageUrl,
+    imageUrl: generatedImage.imageUrl,
+    thumbnailUrl: generatedImage.thumbnailUrl,
     refImageCount: refImages.length,
     status: "success",
   };
@@ -183,6 +184,6 @@ export async function runSkillForm(params: {
     master_prompt_markdown: resolvedMasterPrompt,
     image_generation_status: "ready",
     confirmation_action: null,
-    generated_image_url: generatedImageUrl,
+    generated_image_url: generatedImage.imageUrl,
   };
 }

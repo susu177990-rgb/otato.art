@@ -4,7 +4,7 @@ import type { CanvasBoard, CanvasNode } from "@/lib/canvas/types";
 import type { ImageAspectRatio, ImageGalleryRecord, ImageModelSettings } from "@/lib/image-workspace";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { generateImage } from "@/lib/image-generate";
-import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import { resolveMentions } from "@/lib/prompt-mention";
 
@@ -137,6 +137,7 @@ function estimateOutputSize(aspectRatio: ImageAspectRatio | undefined): {
 
 function buildGalleryRecord(params: {
   imageUrl: string;
+  thumbnailUrl?: string;
   model: ImageModelSettings;
   sourceNode: CanvasNode;
   prompt: string;
@@ -156,6 +157,7 @@ function buildGalleryRecord(params: {
     imageSize: params.sourceNode.metadata?.imageSize ?? "1K",
     gptImageQuality: params.model.provider === "gpt-image" ? params.sourceNode.metadata?.gptImageQuality : undefined,
     imageUrl: params.imageUrl,
+    thumbnailUrl: params.thumbnailUrl,
     refImageCount: params.refImageCount,
     status: "success",
   };
@@ -186,7 +188,13 @@ export async function executeCanvasImageGeneration(params: {
     refImages,
   });
 
-  const imageUrl = await persistGeneratedImageToStorage(params.supabase, params.userId, result.imageUrl, randomUUID());
+  const storedImage = await persistGeneratedImageWithThumbnailToStorage(
+    params.supabase,
+    params.userId,
+    result.imageUrl,
+    randomUUID(),
+  );
+  const imageUrl = storedImage.imageUrl;
 
   const size = estimateOutputSize(sourceNode.metadata?.aspectRatio);
 
@@ -208,6 +216,7 @@ export async function executeCanvasImageGeneration(params: {
   };
   const galleryRecord = buildGalleryRecord({
     imageUrl,
+    thumbnailUrl: storedImage.thumbnailUrl,
     model,
     sourceNode: nextSourceNode,
     prompt,

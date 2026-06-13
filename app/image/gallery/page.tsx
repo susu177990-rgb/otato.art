@@ -44,9 +44,7 @@ export default function ImageGalleryPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
 
-  const visibleRecords = records.filter(
-    (record) => (record.status === "success" && Boolean(record.imageUrl)) || record.status === "error",
-  );
+  const visibleRecords = records.filter((record) => record.status === "success" && Boolean(record.imageUrl));
 
   return (
     <main className={shellStyles.page}>
@@ -85,7 +83,7 @@ export default function ImageGalleryPage() {
                   {record.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={record.imageUrl}
+                      src={record.thumbnailUrl || record.imageUrl}
                       alt={record.modeName}
                       className={styles.tileImg}
                       loading="lazy"

@@ -100,6 +100,8 @@ export interface ImageGalleryRecord {
   /** 仅 GPT Image 记录可能有值 */
   gptImageQuality?: GptImageQuality;
   imageUrl?: string;
+  /** Lightweight gallery/list preview. Original stays in imageUrl. */
+  thumbnailUrl?: string;
   refImageCount: number;
   /**
    * 生成当时的参考图快照。按槽位保存，便于从右侧历史记录一键恢复输入状态。

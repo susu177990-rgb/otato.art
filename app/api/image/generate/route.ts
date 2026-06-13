@@ -8,7 +8,7 @@ import {
 } from "@/lib/image-generate";
 import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import type { GptImageQuality } from "@/lib/image-workspace";
-import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ImageGenerateFailureResponse = {
@@ -123,9 +123,9 @@ export async function POST(req: NextRequest) {
       refImages: body.refImages,
     });
 
-    let imageUrl: string;
+    let storedImage: { imageUrl: string; thumbnailUrl: string };
     try {
-      imageUrl = await persistGeneratedImageToStorage(
+      storedImage = await persistGeneratedImageWithThumbnailToStorage(
         supabase,
         user.id,
         result.imageUrl,
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return Response.json({ imageUrl, payloadKind: result.payloadKind, traceId });
+    return Response.json({ ...storedImage, payloadKind: result.payloadKind, traceId });
   } catch (error) {
     const failure = toFailureResponse(traceId, error, {
       modelId,

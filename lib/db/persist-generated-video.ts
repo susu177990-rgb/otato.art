@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/db/persist-generated-image";
+import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 
 const FETCH_TIMEOUT_MS = 5 * 60_000;
 
@@ -66,4 +66,3 @@ export async function persistGeneratedVideoToStorage(
   if (!data.publicUrl) throw new Error("无法生成视频公开地址");
   return data.publicUrl;
 }
-

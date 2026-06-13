@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/db/persist-generated-image";
+import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 import { MODE_COVER_OUTPUT_MIME } from "@/lib/image/process-mode-cover";
 
 export const MODE_COVER_STORAGE_PREFIX = "site/mode-covers";

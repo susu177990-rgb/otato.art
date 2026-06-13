@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
-import { mergePrependedGalleryRecords, replaceGalleryRecords } from "@/lib/db/gallery-store";
+import { mergePrependedGalleryRecords, prependGalleryRecord, replaceGalleryRecords } from "@/lib/db/gallery-store";
 
 const storedUrl = "https://example.supabase.co/storage/v1/object/public/generated-images/user-1/image.png";
 
@@ -70,7 +70,7 @@ describe("image gallery storage", () => {
     expect(deleteCalled).toBe(false);
   });
 
-  it("keeps persisted reference URLs and strips inline reference payloads", () => {
+  it("strips all reference images from stored gallery records", () => {
     const sanitized = sanitizeGalleryRecordForStorage({
       ...galleryRecord("with-refs"),
       referenceImages: [
@@ -89,13 +89,57 @@ describe("image gallery storage", () => {
       ],
     });
 
-    expect(sanitized.referenceImages).toEqual([
-      {
-        slotIndex: 1,
-        dataUrl: `${storedUrl}?ref=1`,
-        name: "stored.png",
-        type: "image/png",
+    expect(sanitized.referenceImages).toBeUndefined();
+  });
+
+  it("does not insert failed records into the gallery", async () => {
+    let insertCalled = false;
+    const supabase = {
+      auth: {
+        async getUser() {
+          return { data: { user: { id: "user-1" } } };
+        },
       },
-    ]);
+      rpc() {
+        return { data: 0, error: null };
+      },
+      from(table: string) {
+        if (table !== "image_gallery_records") throw new Error(`unexpected table ${table}`);
+        return {
+          insert() {
+            insertCalled = true;
+            return { error: null };
+          },
+          select() {
+            return {
+              eq() {
+                return {
+                  lt() {
+                    return { data: [], error: null };
+                  },
+                };
+              },
+              order() {
+                return {
+                  limit() {
+                    return { data: [], error: null };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const records = await prependGalleryRecord(supabase as never, {
+      ...galleryRecord("failed"),
+      imageUrl: undefined,
+      status: "error",
+      error: "upstream failed",
+    });
+
+    expect(records).toEqual([]);
+    expect(insertCalled).toBe(false);
   });
 });

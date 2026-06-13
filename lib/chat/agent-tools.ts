@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateImage } from "@/lib/image-generate";
-import { persistGeneratedImageToStorage } from "@/lib/db/persist-generated-image";
+import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import {
   buildImageModelCatalog,
@@ -183,12 +183,13 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
   const imageId = randomUUID();
   let mediaUrl = imageUrl;
   if (ctx.supabase && ctx.userId) {
-    mediaUrl = await persistGeneratedImageToStorage(
+    const storedImage = await persistGeneratedImageWithThumbnailToStorage(
       ctx.supabase,
       ctx.userId,
       imageUrl,
       imageId,
     );
+    mediaUrl = storedImage.imageUrl;
 
     const galleryRecord: ImageGalleryRecord = {
       id: imageId,
@@ -203,6 +204,7 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
       imageSize,
       gptImageQuality,
       imageUrl: mediaUrl,
+      thumbnailUrl: storedImage.thumbnailUrl,
       refImageCount: rawRefs.length,
       status: "success",
     };

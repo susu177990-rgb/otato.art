@@ -1,12 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
-import {
-  isStoredGeneratedImageUrl,
-  persistGeneratedImageToStorage,
-} from "@/lib/db/persist-generated-image";
+import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
+import { GENERATED_IMAGES_BUCKET, isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
 
 const DEFAULT_GALLERY_RECORD_LIMIT = 24;
+const GALLERY_RETENTION_DAYS = 7;
 
 /** 剥离 DB 中不应持久化的内联图（与写入前 sanitize 一致） */
 function withoutInlineGalleryPayload(record: ImageGalleryRecord): ImageGalleryRecord {
@@ -19,43 +18,12 @@ async function persistGalleryRecordImage(
   record: ImageGalleryRecord,
 ): Promise<ImageGalleryRecord> {
   const url = record.imageUrl?.trim();
-  if (!url || isStoredGeneratedImageUrl(url)) return record;
-  const stored = await persistGeneratedImageToStorage(supabase, userId, url, record.id);
-  return { ...record, imageUrl: stored };
-}
-
-async function persistGalleryRecordReferences(
-  supabase: SupabaseClient,
-  userId: string,
-  record: ImageGalleryRecord,
-): Promise<ImageGalleryRecord> {
-  if (!record.referenceImages?.length) return record;
-  const referenceImages = await Promise.all(
-    record.referenceImages.map(async (image) => {
-      const url = image.dataUrl?.trim();
-      if (!url || isStoredGeneratedImageUrl(url)) return image;
-      const stored = await persistGeneratedImageToStorage(
-        supabase,
-        userId,
-        url,
-        `${record.id}_ref_${image.slotIndex}`,
-      );
-      return { ...image, dataUrl: stored };
-    }),
-  );
-  return { ...record, referenceImages };
-}
-
-async function persistGalleryRecordMedia(
-  supabase: SupabaseClient,
-  userId: string,
-  record: ImageGalleryRecord,
-): Promise<ImageGalleryRecord> {
-  return persistGalleryRecordReferences(
-    supabase,
-    userId,
-    await persistGalleryRecordImage(supabase, userId, record),
-  );
+  if (!url) return record;
+  if (isStoredGeneratedImageUrl(url) && record.thumbnailUrl && isStoredGeneratedImageUrl(record.thumbnailUrl)) {
+    return record;
+  }
+  const stored = await persistGeneratedImageWithThumbnailToStorage(supabase, userId, url, record.id);
+  return { ...record, ...stored };
 }
 
 function toGalleryRow(userId: string, record: ImageGalleryRecord) {
@@ -65,6 +33,40 @@ function toGalleryRow(userId: string, record: ImageGalleryRecord) {
     data: sanitizeGalleryRecordForStorage(record),
     created_at: record.createdAt,
   };
+}
+
+function storedGeneratedImagePath(url: string, userId: string): string | null {
+  if (!isStoredGeneratedImageUrl(url)) return null;
+  try {
+    const marker = `/storage/v1/object/public/${GENERATED_IMAGES_BUCKET}/`;
+    const path = decodeURIComponent(new URL(url).pathname.split(marker)[1] || "");
+    if (!path.startsWith(`${userId}/`)) return null;
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+function galleryRecordStoragePaths(
+  rows: Array<{ data: ImageGalleryRecord }>,
+  userId: string,
+): string[] {
+  return rows
+    .flatMap((row) => [
+      storedGeneratedImagePath(row.data?.imageUrl || "", userId),
+      storedGeneratedImagePath(row.data?.thumbnailUrl || "", userId),
+    ])
+    .filter((path): path is string => Boolean(path));
+}
+
+async function removeGalleryStorageObjects(
+  supabase: SupabaseClient,
+  paths: string[],
+): Promise<void> {
+  if (paths.length === 0) return;
+  const uniquePaths = Array.from(new Set(paths));
+  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).remove(uniquePaths);
+  if (error) console.warn("[image/gallery storage cleanup]", error);
 }
 
 function postgrestTextInList(values: string[]): string {
@@ -92,10 +94,42 @@ export async function compactGalleryRecords(supabase: SupabaseClient): Promise<n
   return typeof data === "number" ? data : 0;
 }
 
+export async function cleanupExpiredGalleryRecords(
+  supabase: SupabaseClient,
+  retentionDays = GALLERY_RETENTION_DAYS,
+): Promise<number> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("未登录");
+
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("image_gallery_records")
+    .select("id, data")
+    .eq("user_id", user.id)
+    .lt("created_at", cutoff);
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ id: string; data: ImageGalleryRecord }>;
+  if (rows.length === 0) return 0;
+
+  await removeGalleryStorageObjects(supabase, galleryRecordStoragePaths(rows, user.id));
+
+  const { error: delError } = await supabase
+    .from("image_gallery_records")
+    .delete()
+    .eq("user_id", user.id)
+    .lt("created_at", cutoff);
+  if (delError) throw delError;
+  return rows.length;
+}
+
 export async function listGalleryRecords(
   supabase: SupabaseClient,
   limit = DEFAULT_GALLERY_RECORD_LIMIT,
 ): Promise<ImageGalleryRecord[]> {
+  await cleanupExpiredGalleryRecords(supabase);
   await compactGalleryRecords(supabase);
   const { data, error } = await supabase
     .from("image_gallery_records")
@@ -118,6 +152,15 @@ export async function replaceGalleryRecords(
   if (!user) throw new Error("未登录");
 
   if (records.length === 0) {
+    const { data: oldRows, error: oldError } = await supabase
+      .from("image_gallery_records")
+      .select("data")
+      .eq("user_id", user.id);
+    if (oldError) throw oldError;
+    await removeGalleryStorageObjects(
+      supabase,
+      galleryRecordStoragePaths((oldRows ?? []) as Array<{ data: ImageGalleryRecord }>, user.id),
+    );
     const { error: delError } = await supabase
       .from("image_gallery_records")
       .delete()
@@ -127,7 +170,7 @@ export async function replaceGalleryRecords(
   }
 
   const persisted = await Promise.all(
-    records.map((record) => persistGalleryRecordMedia(supabase, user.id, record)),
+    records.map((record) => persistGalleryRecordImage(supabase, user.id, record)),
   );
   const rows = persisted.map((record) => toGalleryRow(user.id, record));
 
@@ -136,11 +179,23 @@ export async function replaceGalleryRecords(
     .upsert(rows, { onConflict: "id" });
   if (upsertError) throw upsertError;
 
+  const keepIds = persisted.map((record) => record.id);
+  const { data: oldRows, error: oldError } = await supabase
+    .from("image_gallery_records")
+    .select("data")
+    .eq("user_id", user.id)
+    .not("id", "in", postgrestTextInList(keepIds));
+  if (oldError) throw oldError;
+  await removeGalleryStorageObjects(
+    supabase,
+    galleryRecordStoragePaths((oldRows ?? []) as Array<{ data: ImageGalleryRecord }>, user.id),
+  );
+
   const { error: delError } = await supabase
     .from("image_gallery_records")
     .delete()
     .eq("user_id", user.id)
-    .not("id", "in", postgrestTextInList(persisted.map((record) => record.id)));
+    .not("id", "in", postgrestTextInList(keepIds));
   if (delError) throw delError;
 }
 
@@ -153,7 +208,12 @@ export async function prependGalleryRecord(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
-  const persisted = await persistGalleryRecordMedia(supabase, user.id, record);
+  await cleanupExpiredGalleryRecords(supabase);
+  if (record.status !== "success" || !record.imageUrl?.trim()) {
+    return listGalleryRecords(supabase);
+  }
+
+  const persisted = await persistGalleryRecordImage(supabase, user.id, record);
 
   const { error } = await supabase.from("image_gallery_records").insert(toGalleryRow(user.id, persisted));
 
@@ -184,7 +244,7 @@ export async function importGalleryForUser(
   if (records.length === 0) return;
 
   const persisted = await Promise.all(
-    records.map((record) => persistGalleryRecordMedia(supabase, userId, record)),
+    records.map((record) => persistGalleryRecordImage(supabase, userId, record)),
   );
   const rows = persisted.map((record) => toGalleryRow(userId, record));
 

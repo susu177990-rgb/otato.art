@@ -848,6 +848,7 @@ export default function ImagePage() {
     message?: string,
     promptSnapshot?: string,
     referenceImages?: ImageGalleryReferenceImage[],
+    thumbnailUrl?: string,
   ) {
     const resolvedPrompt = promptSnapshot ?? finalPrompt;
     const record: ImageGalleryRecord = {
@@ -865,11 +866,13 @@ export default function ImagePage() {
       imageSize,
       gptImageQuality: selectedModel.provider === "gpt-image" ? settings.gptImageQuality : undefined,
       imageUrl,
+      thumbnailUrl,
       refImageCount: referenceImages?.length ?? filledRefFileCount,
       referenceImages,
       status,
       error: message,
     };
+    if (status !== "success" || !imageUrl?.trim()) return record;
     saveReferenceImagesForRecord(record.id, referenceImages ?? []);
     if (imageUrl?.trim()) saveImageResultForRecord(record.id, imageUrl);
     try {
@@ -877,7 +880,7 @@ export default function ImagePage() {
       if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
     } catch (e) {
       console.warn("[image] gallery save failed", e);
-      if (mountedRef.current) setRecords((prev) => [record, ...prev]);
+      if (mountedRef.current) setRecords((prev) => [record, ...prev].slice(0, 24));
     }
     return record;
   }
@@ -969,9 +972,13 @@ export default function ImagePage() {
         method: "POST",
         body: fd,
       });
-      const data = (await res.json().catch(() => ({}))) as ImageGenerateFailurePayload & { imageUrl?: string };
+      const data = (await res.json().catch(() => ({}))) as ImageGenerateFailurePayload & {
+        imageUrl?: string;
+        thumbnailUrl?: string;
+      };
       if (!res.ok) throw new Error(formatImageGenerateFailure(data));
       const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl.trim() : "";
+      const thumbnailUrl = typeof data.thumbnailUrl === "string" ? data.thumbnailUrl.trim() : "";
       if (!imageUrl) throw new Error(formatImageGenerateFailure(data, "服务器未返回图片地址"));
       if (runtimeState) {
         writeGenerationRuntimeState({
@@ -984,7 +991,7 @@ export default function ImagePage() {
       }
       if (mountedRef.current) setResultUrl(imageUrl);
       try {
-        void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages);
+        void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages, thumbnailUrl || undefined);
       } catch (persistErr) {
         console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
       }
@@ -1194,7 +1201,7 @@ export default function ImagePage() {
                             className={styles.historyItem}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={record.imageUrl!} alt={record.modeName} />
+                            <img src={record.thumbnailUrl || record.imageUrl || ""} alt={record.modeName} />
                             <span className={styles.historyMeta}>
                               {record.aspectRatio} · {record.imageSize}
                               {record.gptImageQuality

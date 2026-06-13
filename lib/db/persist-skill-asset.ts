@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/db/persist-generated-image";
+import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 
 function extFromMime(mime: string): string {
   const m = mime.toLowerCase().split(";")[0]?.trim() || "image/png";

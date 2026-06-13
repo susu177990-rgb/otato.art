@@ -1,19 +1,11 @@
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
-import { isStoredGeneratedImageUrl } from "@/lib/db/persist-generated-image";
+import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
 
-/** 写入 Supabase JSONB 前：去掉参考图内联；去掉未上传的 data: / 超长 URL（像素应在 Storage） */
+/** 写入 Supabase JSONB 前：参考图不进云端；去掉未上传的 data: / 超长 URL。 */
 export function sanitizeGalleryRecordForStorage(record: ImageGalleryRecord): ImageGalleryRecord {
-  const referenceImages = record.referenceImages
-    ?.map((image) => {
-      const url = image.dataUrl?.trim();
-      if (!url || url.startsWith("data:") || url.length > 8192) return null;
-      if (!/^https?:\/\//i.test(url)) return null;
-      return { ...image, dataUrl: url };
-    })
-    .filter((image): image is NonNullable<typeof image> => image != null);
   const next: ImageGalleryRecord = {
     ...record,
-    referenceImages: referenceImages && referenceImages.length > 0 ? referenceImages : undefined,
+    referenceImages: undefined,
   };
   const url = next.imageUrl?.trim();
   if (!url) {
@@ -23,6 +15,12 @@ export function sanitizeGalleryRecordForStorage(record: ImageGalleryRecord): Ima
   if (isStoredGeneratedImageUrl(url)) return next;
   if (url.startsWith("data:") || url.length > 8192) {
     delete next.imageUrl;
+  }
+  const thumbnailUrl = next.thumbnailUrl?.trim();
+  if (!thumbnailUrl) {
+    delete next.thumbnailUrl;
+  } else if (thumbnailUrl.startsWith("data:") || thumbnailUrl.length > 8192) {
+    delete next.thumbnailUrl;
   }
   return next;
 }
