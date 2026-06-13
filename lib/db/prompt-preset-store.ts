@@ -498,7 +498,7 @@ export async function syncPromptLibraryFromWorkspaces(
     .from("site_prompt_presets")
     .delete()
     .in("preset_type", ["image", "video"])
-    .not("id", "like", "user_preset_%");
+    .like("id", "custom_%");
   const { error: deleteError } =
     wantedIds.length === 0
       ? await deleteQuery

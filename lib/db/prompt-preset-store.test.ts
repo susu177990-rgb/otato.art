@@ -155,6 +155,7 @@ describe("prompt preset ordering", () => {
 
   it("preserves user-uploaded image/video presets when syncing workspace presets", async () => {
     const deleteFilters: Array<[string, unknown]> = [];
+    const deleteLikeFilters: Array<[string, string]> = [];
     const deleteNotFilters: Array<[string, string, string]> = [];
 
     const supabase = {
@@ -169,8 +170,8 @@ describe("prompt preset ordering", () => {
               in(column: string, value: unknown) {
                 deleteFilters.push([column, value]);
                 return {
-                  not(column2: string, operator2: string, value2: string) {
-                    deleteNotFilters.push([column2, operator2, value2]);
+                  like(column2: string, value2: string) {
+                    deleteLikeFilters.push([column2, value2]);
                     return {
                       async not(column3: string, operator3: string, value3: string) {
                         deleteNotFilters.push([column3, operator3, value3]);
@@ -206,10 +207,8 @@ describe("prompt preset ordering", () => {
     );
 
     expect(deleteFilters).toEqual([["preset_type", ["image", "video"]]]);
-    expect(deleteNotFilters).toEqual([
-      ["id", "like", "user_preset_%"],
-      ["id", "in", '("custom-image","custom-video")'],
-    ]);
+    expect(deleteLikeFilters).toEqual([["id", "custom_%"]]);
+    expect(deleteNotFilters).toEqual([["id", "in", '("custom-image","custom-video")']]);
   });
 
   it("creates user uploads as pending submissions instead of public presets", async () => {

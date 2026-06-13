@@ -61,8 +61,8 @@ export async function getWorkspaceSnapshot(supabase: SupabaseClient): Promise<Wo
   let presets = await listSitePromptPresets(supabase);
 
   // Auto-heal: detect if there is a drift between workspace custom modes and the site_prompt_presets table
-  const imagePresets = presets.filter((preset) => preset.kind === "image");
-  const videoPresets = presets.filter((preset) => preset.kind === "video");
+  const imagePresets = presets.filter((preset) => preset.kind === "image" && preset.id.startsWith("custom_"));
+  const videoPresets = presets.filter((preset) => preset.kind === "video" && preset.id.startsWith("custom_video_"));
   const imageCustomModeIds = (imageWorkspace.customModes ?? []).map((m) => m.id);
   const videoCustomModeIds = (videoWorkspace.customModes ?? []).map((m) => m.id);
 
