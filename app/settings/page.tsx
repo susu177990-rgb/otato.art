@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
+import { API_KEY_MASK_PLACEHOLDER, isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
 import { normalizeLlmSettings } from "@/lib/llm-models";
 import { normalizeModel } from "@/lib/model-presets";
 import type { Settings } from "@/lib/types";
@@ -33,7 +33,7 @@ function apiKeyInputValue(value: string): string {
 }
 
 function apiKeyPlaceholder(value: string, fallback = "sk-..."): string {
-  return isApiKeyConfiguredPlaceholder(value) ? "已保存，留空则不修改" : fallback;
+  return isApiKeyConfiguredPlaceholder(value) ? API_KEY_MASK_PLACEHOLDER : fallback;
 }
 
 function nextLlmModelId(models: Settings["models"]): string {

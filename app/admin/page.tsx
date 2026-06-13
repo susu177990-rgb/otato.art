@@ -8,7 +8,7 @@ import shellStyles from "../shared/shell.module.css";
 import styles from "../settings/settings-page.module.css";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
-import { isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
+import { API_KEY_MASK_PLACEHOLDER, isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
 import { normalizeModel } from "@/lib/model-presets";
 import { normalizeLlmSettings } from "@/lib/llm-models";
 import {
@@ -93,7 +93,7 @@ function apiKeyInputValue(value: string): string {
 }
 
 function apiKeyPlaceholder(value: string, fallback = "sk-..."): string {
-  return isApiKeyConfiguredPlaceholder(value) ? "已保存，留空则不修改" : fallback;
+  return isApiKeyConfiguredPlaceholder(value) ? API_KEY_MASK_PLACEHOLDER : fallback;
 }
 
 function nextLlmModelId(models: Settings["models"]): string {
