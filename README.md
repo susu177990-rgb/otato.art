@@ -48,9 +48,28 @@ oTATo Art 是给内容创作者用的 AI 工作台。它不是单独的聊天工
 
 ## 界面预览
 
-![生图工作台](./docs/readme/image-workspace.png)
-
-![无限画布](./docs/readme/canvas.png)
+<table>
+  <tr>
+    <td width="50%">
+      <strong>生图工作台</strong><br>
+      <img src="./docs/readme/image-workspace.png" alt="生图工作台" width="420">
+    </td>
+    <td width="50%">
+      <strong>无限画布</strong><br>
+      <img src="./docs/readme/canvas.png" alt="无限画布" width="420">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>提示词预设</strong><br>
+      <img src="./docs/readme/prompt-presets.png" alt="提示词预设页" width="420">
+    </td>
+    <td width="50%">
+      <strong>对话工作台</strong><br>
+      <img src="./docs/readme/chat-workspace.png" alt="对话工作台" width="420">
+    </td>
+  </tr>
+</table>
 
 ## Installation
 
