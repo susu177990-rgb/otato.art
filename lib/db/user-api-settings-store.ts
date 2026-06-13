@@ -93,6 +93,29 @@ function rawModelApiKeys(row: unknown): Record<string, string> {
   );
 }
 
+function encryptedModelApiKey(row: unknown, modelId: string): string {
+  if (!isObject(row) || !isObject(row.models)) return "";
+  const model = row.models[modelId];
+  return isObject(model) ? text(model.apiKey) : "";
+}
+
+function encryptedApiKeyFromRecord(row: unknown, modelId: string): string {
+  if (!isObject(row)) return "";
+  const model = row[modelId];
+  return isObject(model) ? text(model.apiKey) : "";
+}
+
+function decryptExistingApiKey(value: string, label: string): string {
+  if (!value) return "";
+  try {
+    return decryptApiKey(value);
+  } catch {
+    throw new Error(
+      `${label} 已保存的 API Key 无法用当前 API_SETTINGS_ENCRYPTION_KEY 解密。请重新输入新的 API Key 后再保存。`,
+    );
+  }
+}
+
 function userLlmForClient(row: unknown, fallbackSettings: Settings): Settings {
   const settings = normalizeLlmSettings(row ?? fallbackSettings);
   const rawKeys = rawModelApiKeys(row);
@@ -144,12 +167,10 @@ function clientSiteLlmWithUserKeys(row: unknown, siteSettings: Settings): Settin
 
 function mergeLlmForSave(incoming: unknown, existing: unknown): Settings {
   const incomingSettings = normalizeLlmSettings(incoming ?? DEFAULT_SETTINGS);
-  const existingSettings = existing ? userLlmWithSecrets(existing, DEFAULT_SETTINGS) : null;
   const models = Object.fromEntries(
     Object.entries(incomingSettings.models).map(([id, model]) => {
-      const existingModel = existingSettings?.models[id];
       const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? existingModel?.apiKey ?? ""
+        ? decryptExistingApiKey(encryptedModelApiKey(existing, id), `LLM 模型「${model.label || id}」`)
         : model.apiKey;
       return [
         id,
@@ -172,13 +193,11 @@ function mergeLlmForSave(incoming: unknown, existing: unknown): Settings {
 
 function sanitizeImageModelsForStorage(incoming: unknown, existing: unknown): Record<ImageModelId, ImageModelSettings> {
   const incomingSettings = mergeImageSettings({ models: incoming });
-  const existingSettings = existing ? mergeImageSettings({ models: decryptImageModels(existing) }) : null;
   return Object.fromEntries(
     Object.entries(incomingSettings.models).map(([id, model]) => {
       const modelId = id as ImageModelId;
-      const existingModel = existingSettings?.models[modelId];
       const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? existingModel?.apiKey ?? ""
+        ? decryptExistingApiKey(encryptedApiKeyFromRecord(existing, modelId), `图片模型「${model.label || modelId}」`)
         : model.apiKey;
       return [
         modelId,
@@ -249,13 +268,11 @@ function clearImageModelKeys(raw: unknown): Record<string, unknown> {
 
 function sanitizeVideoModelsForStorage(incoming: unknown, existing: unknown): Record<VideoModelId, VideoModelSettings> {
   const incomingSettings = mergeVideoSettings({ models: incoming });
-  const existingSettings = existing ? mergeVideoSettings({ models: decryptVideoModels(existing) }) : null;
   return Object.fromEntries(
     VIDEO_MODEL_ORDER.map((id) => {
       const model = incomingSettings.models[id];
-      const existingModel = existingSettings?.models[id];
       const nextKey = model.apiKey === API_KEY_CONFIGURED_PLACEHOLDER || !model.apiKey.trim()
-        ? existingModel?.apiKey ?? ""
+        ? decryptExistingApiKey(encryptedApiKeyFromRecord(existing, id), `视频模型「${model.label || id}」`)
         : model.apiKey;
       return [
         id,

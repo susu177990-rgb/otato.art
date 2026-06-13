@@ -144,4 +144,67 @@ describe("user API settings client snapshots", () => {
     expect(clientLlm.models["custom-user-model"].apiUrl).toBe("https://user.example.com/v1/chat/completions");
     expect(clientLlm.models["custom-user-model"].apiKey).toBe(API_KEY_CONFIGURED_PLACEHOLDER);
   });
+
+  it("can overwrite an API key that was encrypted with an old environment key", async () => {
+    const { encryptApiKey } = await import("@/lib/api-key-crypto");
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "old-encryption-key";
+    const existing = {
+      ...DEFAULT_SETTINGS,
+      models: {
+        [DEFAULT_SETTINGS.defaultModelId]: {
+          ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+          apiKey: encryptApiKey("sk-old-user-key"),
+        },
+      },
+    };
+
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "new-encryption-key";
+    const saved = userApiSettingsStoreTestInternals.mergeLlmForSave(
+      {
+        ...DEFAULT_SETTINGS,
+        models: {
+          [DEFAULT_SETTINGS.defaultModelId]: {
+            ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+            apiKey: "sk-new-user-key",
+          },
+        },
+      },
+      existing,
+    );
+
+    const { decryptApiKey } = await import("@/lib/api-key-crypto");
+    expect(decryptApiKey(saved.models[DEFAULT_SETTINGS.defaultModelId].apiKey)).toBe("sk-new-user-key");
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
+  });
+
+  it("shows a readable error when preserving an API key encrypted with an old environment key", async () => {
+    const { encryptApiKey } = await import("@/lib/api-key-crypto");
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "old-encryption-key";
+    const existing = {
+      ...DEFAULT_SETTINGS,
+      models: {
+        [DEFAULT_SETTINGS.defaultModelId]: {
+          ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+          apiKey: encryptApiKey("sk-old-user-key"),
+        },
+      },
+    };
+
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "new-encryption-key";
+    expect(() =>
+      userApiSettingsStoreTestInternals.mergeLlmForSave(
+        {
+          ...DEFAULT_SETTINGS,
+          models: {
+            [DEFAULT_SETTINGS.defaultModelId]: {
+              ...DEFAULT_SETTINGS.models[DEFAULT_SETTINGS.defaultModelId],
+              apiKey: API_KEY_CONFIGURED_PLACEHOLDER,
+            },
+          },
+        },
+        existing,
+      ),
+    ).toThrow("请重新输入新的 API Key 后再保存");
+    process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
+  });
 });

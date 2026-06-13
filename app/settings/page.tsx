@@ -79,9 +79,9 @@ function SettingsPageInner() {
     setLlmSettings(normalizedLlm);
     try {
       await saveWorkspaceSnapshot({
-        llm: normalizedLlm,
-        imageWorkspace: imageSettings,
-        videoWorkspace: videoSettings,
+        ...(tab === "llmApi" ? { llm: normalizedLlm } : {}),
+        ...(tab === "imageApi" ? { imageWorkspace: imageSettings } : {}),
+        ...(tab === "videoApi" ? { videoWorkspace: videoSettings } : {}),
         apiUsageMode: nextApiUsageMode,
       });
       await refreshWorkspace();
