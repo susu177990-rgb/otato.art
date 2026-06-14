@@ -1758,13 +1758,15 @@
   --rail-card-width: 128px;
   --rail-card-height: 72px;
   --rail-shadow-outset: 10px;
+  --rail-scroll-outset: var(--rail-shadow-outset);
   --rail-visible-count: 5;
   --rail-card-window-width: calc(var(--rail-card-width) + var(--rail-shadow-outset));
   --rail-frame-width: calc(var(--rail-card-window-width) + (var(--rail-frame-padding) * 2) + 6px);
   --rail-outer-width: calc(var(--rail-frame-width) + var(--rail-shadow-outset));
   --rail-content-height: calc(
     (var(--rail-card-height) * var(--rail-visible-count)) +
-    (14px * (var(--rail-visible-count) - 1))
+    (14px * (var(--rail-visible-count) - 1)) +
+    var(--rail-scroll-outset)
   );
   --rail-frame-height: calc(var(--rail-content-height) + (var(--rail-frame-padding) * 2) + 6px);
   --rail-outer-height: calc(var(--rail-frame-height) + var(--rail-shadow-outset));
@@ -1875,15 +1877,15 @@
 
 .railFrame:has(.emptyRail:only-child),
 .railFrame:has(.historyItem:only-child) {
-  height: calc(var(--rail-card-height) + (var(--rail-frame-padding) * 2) + 6px) !important;
+  height: calc(var(--rail-card-height) + var(--rail-scroll-outset) + (var(--rail-frame-padding) * 2) + 6px) !important;
 }
 
 .railFrame:has(.emptyRail:only-child) .scrollWrap,
 .railFrame:has(.emptyRail:only-child) .scroll,
 .railFrame:has(.historyItem:only-child) .scrollWrap,
 .railFrame:has(.historyItem:only-child) .scroll {
-  height: var(--rail-card-height) !important;
-  max-height: var(--rail-card-height) !important;
+  height: calc(var(--rail-card-height) + var(--rail-scroll-outset)) !important;
+  max-height: calc(var(--rail-card-height) + var(--rail-scroll-outset)) !important;
 }
 
 .modeItem,

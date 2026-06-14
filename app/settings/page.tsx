@@ -159,7 +159,7 @@ function SettingsPageInner() {
     <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
       <header className={shellStyles.topbar}>
         <nav className={shellStyles.topbarLeft} aria-label="个人设置分类">
-          <Link href="/" className={shellStyles.navLink}>返回首页</Link>
+          <Link href="/projects" className={shellStyles.navLink}>返回项目</Link>
           <button type="button" onClick={() => setTab("llmApi")} className={[shellStyles.navLink, tab === "llmApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>LLM</button>
           <button type="button" onClick={() => setTab("imageApi")} className={[shellStyles.navLink, tab === "imageApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>图片</button>
           <button type="button" onClick={() => setTab("videoApi")} className={[shellStyles.navLink, tab === "videoApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>视频</button>

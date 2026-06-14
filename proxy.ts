@@ -13,6 +13,16 @@ export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const url = request.nextUrl.clone();
 
+  if (pathname === "/") {
+    const projectId = request.nextUrl.searchParams.get("project")?.trim();
+    if (projectId) {
+      url.pathname = `/studio/${encodeURIComponent(projectId)}`;
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
   const studioMatch = pathname.match(/^\/studio\/([^/]+)$/);
   if (studioMatch) {
     url.pathname = `/projects/${studioMatch[1]}/script`;
@@ -38,6 +48,7 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/studio",
     "/studio/:path*",
     "/project/:path*/onboarding",

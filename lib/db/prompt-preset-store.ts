@@ -191,8 +191,19 @@ export async function listSitePromptPresetsByKind(
   supabase: SupabaseClient,
   kind: PromptPresetKind,
 ): Promise<SitePromptPreset[]> {
-  const all = await listSitePromptPresets(supabase);
-  return all.filter((preset) => preset.kind === kind);
+  const { data, error } = await supabase
+    .from("site_prompt_presets")
+    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order")
+    .eq("preset_type", kind)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    if (isMissingPresetTable(error)) return [];
+    throw error;
+  }
+
+  return (data ?? []).map((row) => rowToPreset(row as SitePromptPresetRow));
 }
 
 export async function listSitePromptPresets(supabase: SupabaseClient): Promise<SitePromptPreset[]> {

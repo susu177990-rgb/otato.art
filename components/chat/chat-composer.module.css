@@ -252,10 +252,82 @@
   padding-bottom: 12px;
 }
 
+/* Project workspace composer geometry must match /image and /video exactly. */
+.composer {
+  box-sizing: border-box;
+  height: 146px;
+  min-height: 146px;
+  max-height: 146px;
+  overflow: hidden;
+}
+
+.inputShell {
+  flex: 0 0 88px;
+  height: 88px;
+  min-height: 88px;
+  max-height: 88px;
+}
+
+.attachRow {
+  flex: 0 0 auto;
+  max-height: 44px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 14px 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.attachRow::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.promptInput {
+  min-height: 0 !important;
+  height: 100%;
+  padding: 12px 18px !important;
+  font-size: 13px !important;
+  line-height: 22px !important;
+  resize: none;
+}
+
+.toolbar {
+  box-sizing: border-box;
+  flex: 0 0 52px;
+  height: 52px;
+  max-height: 52px;
+  min-height: 34px !important;
+  gap: 6px !important;
+  padding: 8px 14px 10px !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.toolbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.modelGroup {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.modelSelect {
+  height: 34px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
 .addBtn {
   width: auto;
-  min-width: 36px;
-  height: 36px;
+  min-width: 34px;
+  height: 34px;
   padding: 0;
   border: 0 !important;
   border-radius: 0;

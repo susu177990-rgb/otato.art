@@ -321,8 +321,8 @@ function AdminPageInner() {
     <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
       <header className={shellStyles.topbar}>
         <nav className={shellStyles.topbarLeft} aria-label="全局管理分类">
-          <Link href="/" className={shellStyles.navLink}>
-            返回首页
+          <Link href="/projects" className={shellStyles.navLink}>
+            返回项目
           </Link>
           {CATEGORY_DEFS.map((def) => {
             const active = category === def.id;

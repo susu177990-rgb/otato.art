@@ -81,6 +81,7 @@
   grid-column: 3;
   display: flex;
   justify-content: flex-end;
+  gap: var(--otato-topbar-button-gap, 12px);
 }
 
 .projectTopbarMode,
@@ -122,6 +123,7 @@
 }
 
 .projectTopbarBack:hover,
+.projectTopbarTitle:hover,
 .projectTopbarAction:hover {
   background: var(--otato-yellow-soft, #fff1a8);
   color: #050505;
@@ -131,11 +133,17 @@
 
 .projectTopbarMode:active,
 .projectTopbarModeActive:active,
+.projectTopbarTitle:active,
 .projectTopbarBack:active,
 .projectTopbarAction:active {
   background: var(--otato-yellow, #ffd86b);
   transform: var(--otato-control-press-transform, translate(2px, 2px));
   box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.projectTopbarTitle:focus-visible {
+  outline: 3px solid rgba(255, 77, 61, 0.55);
+  outline-offset: 3px;
 }
 
 .projectTopbarModeActive:hover,
@@ -242,10 +250,54 @@
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 4px 0 4px;
+  flex-wrap: wrap;
+}
+
+.toolbarRight {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.toolbarCreate {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 22px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.toolbarCreate:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.toolbarCreate:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .search {

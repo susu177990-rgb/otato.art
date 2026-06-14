@@ -139,8 +139,8 @@ export default function MePage() {
       <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
-            <Link href="/" className={shellStyles.navLink}>
-              返回首页
+            <Link href="/projects" className={shellStyles.navLink}>
+              返回项目
             </Link>
           </div>
         </div>

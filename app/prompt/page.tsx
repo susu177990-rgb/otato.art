@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { PromptPresetCard } from "@/components/prompt-presets/PromptPresetCard";
-import { fetchSitePromptPresets, setSitePromptPresetFavorite, submitPromptPresetContribution } from "@/lib/prompt-preset-api-client";
+import { fetchAllSitePromptPresets, setSitePromptPresetFavorite, submitPromptPresetContribution } from "@/lib/prompt-preset-api-client";
 import {
   PROMPT_TAG_GROUPS,
   PROMPT_UNCATEGORIZED_TAG,
@@ -106,8 +106,7 @@ function PromptPageInner() {
     setError("");
     setNeedsLogin(false);
     try {
-      const grouped = await Promise.all(PROMPT_KINDS.map((kind) => fetchSitePromptPresets(kind)));
-      const next = grouped.flat();
+      const next = await fetchAllSitePromptPresets();
       setPresets(next);
       setSelectedPresetId((current) => current ?? next[0]?.id ?? null);
     } catch (e) {
@@ -242,10 +241,10 @@ function PromptPageInner() {
         </nav>
 
         <div className={styles.promptTopbarActions}>
-          <span className={styles.promptTopbarStatus}>{statusText}</span>
           <button type="button" className={styles.promptTopbarAction} onClick={() => setUploadOpen(true)}>
             投稿提示词
           </button>
+          <span className={styles.promptTopbarStatus}>{statusText}</span>
         </div>
       </header>
 

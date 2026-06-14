@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import styles from "./home-page.module.css";
 
 const GITHUB_URL = "https://github.com/susu177990-rgb/otato.art";
@@ -416,17 +415,6 @@ function FloatingHeroCard({ className, icon, title, copy }: { className: string;
   );
 }
 
-type HomeSearchParams = Promise<{
-  project?: string | string[];
-}>;
-
-export default async function Home({ searchParams }: { searchParams: HomeSearchParams }) {
-  const params = await searchParams;
-  const projectParam = Array.isArray(params.project) ? params.project[0] : params.project;
-
-  if (projectParam) {
-    redirect(`/studio/${encodeURIComponent(projectParam)}`);
-  }
-
+export default function Home() {
   return <HomeContent />;
 }

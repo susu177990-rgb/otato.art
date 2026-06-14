@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { canManageSiteSettings } from "@/lib/auth/site-admin";
 import { formatDbError } from "@/lib/db/format-db-error";
 import {
   createPromptPresetSubmission,
   deleteSitePromptPreset,
+  listFavoritePromptPresetIds,
+  listSitePromptPresets,
+  listSitePromptPresetsByKind,
   listSitePromptPresetsByKindForUser,
   newPromptPresetSubmissionId,
   replaceSitePromptPresetsByKind,
@@ -20,9 +24,74 @@ import { normalizePromptTags } from "@/lib/prompt-tags";
 import { maybeCreateSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+const PUBLIC_PRESETS_CACHE_TTL_MS = 60_000;
+
+type PublicPresetCacheKey = PromptPresetKind | "all";
+type PublicPresetCacheEntry = {
+  expiresAt: number;
+  presets?: SitePromptPreset[];
+  promise?: Promise<SitePromptPreset[]>;
+};
+
+const publicPresetCache = new Map<PublicPresetCacheKey, PublicPresetCacheEntry>();
+
+function hasSupabaseAuthCookie(req: Request): boolean {
+  return /(?:^|;\s*)sb-[^=]*auth-token(?:\.[0-9]+)?=/.test(req.headers.get("cookie") ?? "");
+}
+
+async function getPublicPresets(readClient: SupabaseClient, kind: PublicPresetCacheKey): Promise<SitePromptPreset[]> {
+  const cached = publicPresetCache.get(kind);
+  const now = Date.now();
+  if (cached?.presets && cached.expiresAt > now) return cached.presets;
+  if (cached?.promise) return cached.promise;
+
+  const promise = kind === "all" ? listSitePromptPresets(readClient) : listSitePromptPresetsByKind(readClient, kind);
+  publicPresetCache.set(kind, { expiresAt: now + PUBLIC_PRESETS_CACHE_TTL_MS, promise });
+
+  try {
+    const presets = await promise;
+    publicPresetCache.set(kind, {
+      expiresAt: Date.now() + PUBLIC_PRESETS_CACHE_TTL_MS,
+      presets,
+    });
+    return presets;
+  } catch (error) {
+    publicPresetCache.delete(kind);
+    throw error;
+  }
+}
+
+function clearPublicPresetCache(): void {
+  publicPresetCache.clear();
+}
+
+function publicPresetsResponse(presets: SitePromptPreset[]): NextResponse {
+  return NextResponse.json(
+    { presets },
+    {
+      headers: {
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      },
+    },
+  );
+}
+
+function privatePresetsResponse(body: { presets: SitePromptPreset[]; debugUserId?: string; debugUserEmail?: string | null }): NextResponse {
+  return NextResponse.json(body, {
+    headers: {
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
+
 function normalizeKind(raw: string | null): PromptPresetKind | null {
   if (raw === "image" || raw === "video" || raw === "chat") return raw;
   return null;
+}
+
+function normalizeKindParam(raw: string | null): PromptPresetKind | "all" | null {
+  if (raw === "all") return "all";
+  return normalizeKind(raw);
 }
 
 async function readCreatePresetPayload(req: Request): Promise<{
@@ -78,16 +147,31 @@ async function uploadPromptPresetCover(supabase: Awaited<ReturnType<typeof creat
 export async function GET(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
+    const kind = normalizeKindParam(new URL(req.url).searchParams.get("kind"));
+    if (!kind) return NextResponse.json({ error: "kind 必须是 all / image / video / chat" }, { status: 400 });
+
+    if (!hasSupabaseAuthCookie(req)) {
+      const readClient = maybeCreateSupabaseAdminClient() ?? supabase;
+      const presets = await getPublicPresets(readClient, kind);
+      return publicPresetsResponse(presets);
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    if (!user) {
+      const readClient = maybeCreateSupabaseAdminClient() ?? supabase;
+      const presets = await getPublicPresets(readClient, kind);
+      return publicPresetsResponse(presets);
+    }
 
-    const kind = normalizeKind(new URL(req.url).searchParams.get("kind"));
-    if (!kind) return NextResponse.json({ error: "kind 必须是 image / video / chat" }, { status: 400 });
-
-    const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
-    return NextResponse.json({
+    const presets =
+      kind === "all"
+        ? await Promise.all([listSitePromptPresets(supabase), listFavoritePromptPresetIds(supabase, user.id)]).then(
+            ([allPresets, favoriteIds]) => allPresets.map((preset) => ({ ...preset, isFavorite: favoriteIds.has(preset.id) })),
+          )
+        : await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
+    return privatePresetsResponse({
       presets,
       debugUserId: process.env.NODE_ENV !== "production" ? user.id : undefined,
       debugUserEmail: process.env.NODE_ENV !== "production" ? user.email ?? null : undefined,
@@ -119,6 +203,7 @@ export async function PUT(req: Request) {
     }
 
     await replaceSitePromptPresetsByKind(supabase, kind, Array.isArray(body.presets) ? body.presets : []);
+    clearPublicPresetCache();
     const presets = await listSitePromptPresetsByKindForUser(supabase, kind, user.id);
     return NextResponse.json({ presets });
   } catch (e) {
@@ -188,6 +273,7 @@ export async function DELETE(req: Request) {
 
     const writeClient = maybeCreateSupabaseAdminClient() ?? supabase;
     await deleteSitePromptPreset(writeClient, presetId);
+    clearPublicPresetCache();
     return NextResponse.json({ presetId });
   } catch (e) {
     console.error("[site-prompt-presets DELETE]", e);

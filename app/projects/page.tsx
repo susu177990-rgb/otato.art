@@ -30,6 +30,8 @@ function ProjectsHubInner() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminChecked, setAdminChecked] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -53,6 +55,24 @@ function ProjectsHubInner() {
   useEffect(() => {
     void fetchProjects();
   }, [fetchProjects]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAdmin() {
+      try {
+        const res = await fetch("/api/admin/me", { cache: "no-store" });
+        if (!cancelled) setIsAdmin(res.ok);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      } finally {
+        if (!cancelled) setAdminChecked(true);
+      }
+    }
+    void checkAdmin();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visible = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
@@ -96,7 +116,11 @@ function ProjectsHubInner() {
           <Link href="/" className={styles.projectTopbarBack}>
             首页
           </Link>
-          <span className={styles.projectTopbarTitle}>项目</span>
+          {adminChecked && isAdmin ? (
+            <Link href="/admin" className={styles.projectTopbarTitle}>
+              Admin
+            </Link>
+          ) : null}
         </div>
 
         <nav className={styles.projectTopbarModes} aria-label="项目入口">
@@ -107,19 +131,24 @@ function ProjectsHubInner() {
         </nav>
 
         <div className={styles.projectTopbarActions}>
-          {needsLogin ? (
-            <Link href="/login?next=/projects" className={styles.projectTopbarAction}>
-              登录
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={openCreateDialog}
-              className={styles.projectTopbarAction}
-            >
-              新建项目
-            </button>
-          )}
+          {loaded ? (
+            <>
+              {needsLogin ? (
+                <Link href="/login?next=/projects" className={styles.projectTopbarAction}>
+                  登录 / 注册
+                </Link>
+              ) : (
+                <>
+                  <Link href="/settings" className={styles.projectTopbarAction}>
+                    API 设置
+                  </Link>
+                  <Link href="/me" className={styles.projectTopbarAction}>
+                    我的
+                  </Link>
+                </>
+              )}
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -140,26 +169,35 @@ function ProjectsHubInner() {
           ) : null}
 
           {!needsLogin ? <div className={styles.toolbar}>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索项目名称…"
-              className={[shellStyles.input, styles.search].join(" ")}
-            />
-            <label className={styles.sortField}>
-              <span className={shellStyles.fieldLabel}>排序</span>
-              <select
-                value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortKey)}
-                className={[shellStyles.select, shellStyles.inputCompact].join(" ")}
-              >
-                <option value="updated">按更新时间</option>
-                <option value="stage">按已验阶段</option>
-                <option value="name">按名称</option>
-              </select>
-            </label>
-            <span className={shellStyles.helpText}>共 {visible.length} 个项目</span>
+            <button
+              type="button"
+              onClick={openCreateDialog}
+              className={styles.toolbarCreate}
+            >
+              新建项目
+            </button>
+            <div className={styles.toolbarRight}>
+              <span className={shellStyles.helpText}>共 {visible.length} 个项目</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索项目名称…"
+                className={[shellStyles.input, styles.search].join(" ")}
+              />
+              <label className={styles.sortField}>
+                <span className={shellStyles.fieldLabel}>排序</span>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as SortKey)}
+                  className={[shellStyles.select, shellStyles.inputCompact].join(" ")}
+                >
+                  <option value="updated">按更新时间</option>
+                  <option value="stage">按已验阶段</option>
+                  <option value="name">按名称</option>
+                </select>
+              </label>
+            </div>
           </div> : null}
 
           {!needsLogin && visible.length > 0 ? (
@@ -246,7 +284,7 @@ function ProjectsHubInner() {
                 ? "加载中…"
                 : query.trim()
                   ? "没有匹配的项目，换个关键词试试。"
-                  : "暂无项目，点击右上「新建项目」开始。"}
+                  : "暂无项目，点击搜索栏左侧「新建项目」开始。"}
             </p>
           ) : null}
         </div>

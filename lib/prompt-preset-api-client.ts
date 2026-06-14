@@ -13,15 +13,17 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
 }
 
 export async function fetchSitePromptPresets(kind: PromptPresetKind): Promise<SitePromptPreset[]> {
-  const res = await fetch(`/api/site-prompt-presets?kind=${encodeURIComponent(kind)}`, { cache: "no-store" });
+  const res = await fetch(`/api/site-prompt-presets?kind=${encodeURIComponent(kind)}`);
   if (!res.ok) throw new Error(await readApiError(res, "无法加载预设库"));
   const data = (await res.json()) as { presets: SitePromptPreset[] };
   return data.presets;
 }
 
 export async function fetchAllSitePromptPresets(): Promise<SitePromptPreset[]> {
-  const grouped = await Promise.all(PROMPT_PRESET_KINDS.map((kind) => fetchSitePromptPresets(kind)));
-  return grouped.flat();
+  const res = await fetch("/api/site-prompt-presets?kind=all");
+  if (!res.ok) throw new Error(await readApiError(res, "无法加载预设库"));
+  const data = (await res.json()) as { presets: SitePromptPreset[] };
+  return data.presets;
 }
 
 export async function replaceSitePromptPresets(

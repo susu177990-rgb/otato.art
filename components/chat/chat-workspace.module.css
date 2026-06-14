@@ -19,6 +19,7 @@
 }
 
 .workspaceComposerWrap {
+  width: 100%;
   max-width: min(1040px, calc(100vw - 430px));
   padding-top: 6px;
 }

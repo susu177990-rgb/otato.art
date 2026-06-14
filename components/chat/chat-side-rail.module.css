@@ -12,9 +12,11 @@
   --history-thumb: var(--chat-rail-card-height);
   --rail-visible-count: 5;
   --rail-window-height: min(536px, calc(100vh - 320px));
+  --rail-scroll-outset: var(--rail-shadow-outset, 10px);
   --rail-content-height: calc(
     (var(--chat-rail-card-height) * var(--rail-visible-count)) +
-    (var(--mode-gap) * (var(--rail-visible-count) - 1))
+    (var(--mode-gap) * (var(--rail-visible-count) - 1)) +
+    var(--rail-scroll-outset)
   );
   --rail-frame-height: calc(var(--rail-content-height) + (var(--rail-frame-padding, 12px) * 2) + 6px);
   --rail-outer-height: calc(var(--rail-frame-height) + var(--rail-shadow-outset, 10px));
