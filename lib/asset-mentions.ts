@@ -1,4 +1,10 @@
-export type AssetMentionType = "slot" | "node" | "gallery-image" | "gallery-video" | "gallery-audio";
+export type AssetMentionType =
+  | "slot"
+  | "node"
+  | "gallery-image"
+  | "gallery-video"
+  | "gallery-audio"
+  | "project-asset";
 
 export type AssetMentionRole =
   | "prompt"
@@ -18,6 +24,7 @@ export type AssetMentionCandidate = {
   description?: string;
   thumbnailUrl?: string;
   url?: string;
+  referenceUrls?: string[];
   text?: string;
   nodeType?: "text" | "image" | "video" | "audio";
 };
@@ -46,7 +53,16 @@ export type AssetMentionResolution = {
 const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
 
 function normalizeType(raw: string): AssetMentionType | null {
-  if (raw === "slot" || raw === "node" || raw === "gallery-image" || raw === "gallery-video" || raw === "gallery-audio") return raw;
+  if (
+    raw === "slot" ||
+    raw === "node" ||
+    raw === "gallery-image" ||
+    raw === "gallery-video" ||
+    raw === "gallery-audio" ||
+    raw === "project-asset"
+  ) {
+    return raw;
+  }
   if (raw === "gallery") return "gallery-image";
   return null;
 }

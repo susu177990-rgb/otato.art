@@ -183,13 +183,16 @@
   border-color: var(--settings-border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--settings-ink);
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .settingsContent button:not(.promptModeCoverDelete):hover:not(:disabled) {
   border-color: var(--settings-border-strong);
   background: rgba(255, 255, 255, 0.075);
   color: var(--settings-ink);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .llmModelCard {
@@ -314,7 +317,7 @@
   height: 34px;
   padding: 0 14px;
   border: 3px solid #050505;
-  border-radius: 15px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
   font-size: 12px;
@@ -391,6 +394,7 @@
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
   transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
 
@@ -677,8 +681,8 @@
 
 .promptModeProviderButton:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
 }
 
 .promptModeProviderButton:active:not(:disabled) {
@@ -909,8 +913,8 @@
 .settingsContent .promptModeCardActions button:hover:not(:disabled),
 .settingsContent .promptModeCardActions button:active:not(:disabled) {
   border-color: #050505;
-  background: #050505 !important;
-  color: #ffffff !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
 }
 
 .settingsContent .promptModeCardActions button:active:not(:disabled) {
@@ -1019,10 +1023,10 @@
 .promptPreviewClose,
 .promptCopyButton {
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
 }
 
 .saveButton {
@@ -1030,7 +1034,7 @@
   border-radius: 15px;
   background: #ffffff;
   color: #050505;
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
 }
 
 .subnavPillActive,
@@ -1095,7 +1099,9 @@
 
 .toggleSwitchSlider {
   border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .toggleSwitchInput:checked + .toggleSwitchSlider {
@@ -1108,7 +1114,7 @@
 .toggleSwitchSlider,
 .promptModeProviderButton {
   height: 34px;
-  border-radius: 15px;
+  border-radius: var(--otato-control-radius, 15px);
 }
 
 .promptModeProviderButtonActive,
@@ -1201,8 +1207,23 @@
 .promptPreviewClose:hover,
 .promptCopyButton:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505 !important;
-  color: #ffffff !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.subnavPill:active,
+.saveButton:active:not(:disabled),
+.setDefaultBtn:active,
+.deleteModelBtn:active,
+.promptModeProviderButton:active:not(:disabled),
+.promptPreviewClose:active,
+.promptCopyButton:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .subnavPillActive:hover,

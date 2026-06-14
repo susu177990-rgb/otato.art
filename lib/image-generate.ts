@@ -12,6 +12,7 @@ type GenerateBody = {
   model?: ImageModelSettings;
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
+  projectId?: string;
   /** gpt-image-* 专用：auto | low | medium | high；缺省时按清晰度档位映射 */
   gptImageQuality?: GptImageQuality;
   refImages?: string[];
@@ -125,6 +126,7 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
       model: meta.model as ImageModelSettings | undefined,
       aspectRatio: meta.aspectRatio as ImageAspectRatio | undefined,
       imageSize: meta.imageSize as ImageSizeTier | undefined,
+      projectId: typeof meta.projectId === "string" ? meta.projectId.trim() : undefined,
       gptImageQuality:
         gq === "auto" || gq === "low" || gq === "medium" || gq === "high" ? (gq as GptImageQuality) : undefined,
       refImages,

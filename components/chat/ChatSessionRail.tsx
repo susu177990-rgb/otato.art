@@ -2,6 +2,7 @@
 
 import type { ChatConversationSummary } from "@/lib/chat/types";
 import imageStyles from "@/app/image/image-page.module.css";
+import type { CSSProperties } from "react";
 import railStyles from "./chat-side-rail.module.css";
 import styles from "./chat-session-rail.module.css";
 
@@ -44,11 +45,13 @@ export function ChatSessionRail({
   onDelete: (id: string) => void;
 }) {
   const items = [{ kind: "new" as const, id: "__new__" }, ...summaries.map((s) => ({ kind: "session" as const, session: s }))];
-  const faded = items.length > 7;
+  const faded = items.length > 5;
+  const visibleCount = Math.min(Math.max(items.length, 1), 5);
+  const railStyle = { "--rail-visible-count": visibleCount } as CSSProperties;
 
   return (
     <aside className={[imageStyles.historyPanel, railStyles.sessionPanel].join(" ")} aria-label="会话">
-      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
+      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")} style={railStyle}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>
             <div

@@ -1,5 +1,244 @@
-/* /projects 列表页：复用 shell.module.css 的 page / topbar / shell / metaPill。
- * 这里只放：搜索栏 + 排序字段 + 卡片网格 + 单卡内嵌样式。 */
+/* /projects 列表页：复用 shell.module.css 的 page / shell / metaPill。
+ * 这里只放：项目统一顶部栏 + 搜索栏 + 排序字段 + 卡片网格 + 单卡内嵌样式。 */
+
+.projectTopbar {
+  position: sticky;
+  top: var(--otato-floating-bar-margin-top, 12px);
+  z-index: 80;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 76px;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  padding: 12px 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
+}
+
+.projectTopbarIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.projectTopbarBack,
+.projectTopbarTitle,
+.projectTopbarMode,
+.projectTopbarModeActive,
+.projectTopbarAction {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--otato-topbar-control-height, 42px);
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.projectTopbarBack,
+.projectTopbarTitle {
+  flex: 0 0 auto;
+  padding: 0 20px;
+}
+
+.projectTopbarTitle {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectTopbarModes {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--otato-topbar-button-gap, 12px);
+  height: var(--otato-topbar-control-height, 42px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  background-clip: border-box;
+  box-shadow: none;
+}
+
+.projectTopbarActions {
+  grid-column: 3;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.projectTopbarMode,
+.projectTopbarModeActive,
+.projectTopbarAction {
+  min-height: var(--otato-topbar-inner-height, 30px);
+  height: var(--otato-topbar-inner-height, 30px);
+  padding: 0 22px;
+}
+
+.projectTopbarAction {
+  min-height: var(--otato-topbar-control-height, 42px);
+  height: var(--otato-topbar-control-height, 42px);
+}
+
+.projectTopbarMode,
+.projectTopbarModeActive {
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.projectTopbarModeActive {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.projectTopbarAction {
+  height: var(--otato-topbar-control-height, 42px);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.projectTopbarMode:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.projectTopbarBack:hover,
+.projectTopbarAction:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.projectTopbarMode:active,
+.projectTopbarModeActive:active,
+.projectTopbarBack:active,
+.projectTopbarAction:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.projectTopbarModeActive:hover,
+.projectTopbarModeActive:active {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+@media (max-width: 920px) {
+  .projectTopbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 10px 14px;
+    overflow-x: auto;
+  }
+
+  .projectTopbarIdentity,
+  .projectTopbarModes,
+  .projectTopbarActions {
+    grid-column: 1;
+  }
+
+  .projectTopbarModes {
+    width: max-content;
+  }
+
+  .projectTopbarActions {
+    justify-content: flex-start;
+  }
+}
+
+.hero {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.hero span {
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  color: #050505;
+}
+
+.hero h1 {
+  margin: 0;
+  color: #050505;
+  font-size: clamp(48px, 9vw, 108px);
+  line-height: 0.9;
+  font-weight: 950;
+  letter-spacing: -0.07em;
+}
+
+.hero p {
+  margin: 0;
+  max-width: 620px;
+  color: #5f5f5a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.loginPanel {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+  margin: 8px 0 22px;
+  padding: 22px;
+  border: 3px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+}
+
+.loginPanel h2 {
+  margin: 0;
+  color: #050505;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.loginPanel p {
+  margin: 0;
+  color: #5f5f5a;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.loginPanel a {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 3px solid #050505;
+  border-radius: 999px;
+  background: #050505;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+  text-decoration: none;
+}
 
 .toolbar {
   display: flex;
@@ -190,7 +429,9 @@
 .searchInput,
 .sortSelect,
 .removeBtn {
-  border-radius: 999px;
+  border-radius: var(--otato-control-radius, 15px);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .removeBtn {
@@ -202,6 +443,13 @@
   border-color: #b42318;
   background: #b42318;
   color: #ffffff;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.removeBtn:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .sortField,

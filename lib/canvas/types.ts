@@ -102,6 +102,7 @@ export type CanvasBoardData = {
 
 export type CanvasBoard = CanvasBoardData & {
   id: string;
+  projectId?: string | null;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -109,6 +110,7 @@ export type CanvasBoard = CanvasBoardData & {
 
 export type CanvasBoardSummary = {
   id: string;
+  projectId?: string | null;
   title: string;
   createdAt: string;
   updatedAt: string;

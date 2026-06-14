@@ -184,7 +184,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   return null;
 }
 
-export function ChatWorkspace() {
+export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   const searchParams = useSearchParams();
   const requestedConversationId = searchParams.get("conversationId");
   const { settings: llmSettings, workspaceReady, imageWorkspace } = useApiSettings();
@@ -227,7 +227,7 @@ export function ChatWorkspace() {
 
   const loadLists = useCallback(async () => {
     const [convs, packsRes, promptPresets] = await Promise.all([
-      fetchChatConversations(),
+      fetchChatConversations(projectId),
       fetchSiteSkillPacks(),
       fetchSitePromptPresets("chat"),
     ]);
@@ -239,7 +239,7 @@ export function ChatWorkspace() {
     } else if (!activeId && convs[0]) {
       setActiveId(convs[0].id);
     }
-  }, [activeId, requestedConversationId]);
+  }, [activeId, projectId, requestedConversationId]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -284,7 +284,7 @@ export function ChatWorkspace() {
     });
     setIsLoadingConversation(true);
 
-    void fetchChatConversation(loadId)
+    void fetchChatConversation(loadId, projectId)
       .then((c) => {
         if (cancelled || activeIdRef.current !== loadId || c.id !== loadId) return;
         setConversation((prev) => {
@@ -306,7 +306,7 @@ export function ChatWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [activeId]);
+  }, [activeId, projectId]);
 
   useEffect(() => {
     if (conversation?.preferredImageModelId) {
@@ -329,7 +329,7 @@ export function ChatWorkspace() {
     if (!conversation || conversation.id !== activeIdRef.current) return;
     const updated = { ...conversation, preferredImageModelId: id, updatedAt: Date.now() };
     setConversation(updated);
-    void saveChatConversation(updated).catch((e) =>
+    void saveChatConversation(updated, projectId).catch((e) =>
       setError(e instanceof Error ? e.message : "保存生图模型选择失败"),
     );
   };
@@ -339,7 +339,7 @@ export function ChatWorkspace() {
     if (!conversation || conversation.id !== activeIdRef.current) return;
     const updated = { ...conversation, preferredLlmModelId: id, updatedAt: Date.now() };
     setConversation(updated);
-    void saveChatConversation(updated).catch((e) =>
+    void saveChatConversation(updated, projectId).catch((e) =>
       setError(e instanceof Error ? e.message : "保存对话模型选择失败"),
     );
   };
@@ -396,7 +396,7 @@ export function ChatWorkspace() {
     setError(null);
     setIsRunningSkillForm(true);
     try {
-      const result = await runSkillFormApi(selectedPack.id, payload, selectedImageModelId);
+      const result = await runSkillFormApi(selectedPack.id, payload, selectedImageModelId, { projectId });
       setLastSkillPayload(payload);
       setSkillRunResult(result);
     } catch (e) {
@@ -417,6 +417,7 @@ export function ChatWorkspace() {
       const result = await runSkillFormApi(selectedPack.id, lastSkillPayload, selectedImageModelId, {
         action: "generate",
         masterPrompt,
+        projectId,
       });
       setSkillRunResult(result);
     } catch (e) {
@@ -434,7 +435,7 @@ export function ChatWorkspace() {
     let conv = conversation?.id === convId ? conversation : null;
 
     if (!convId) {
-      const created = await createChatConversation();
+      const created = await createChatConversation(undefined, projectId);
       convId = created.id;
       conv = created;
       activeIdRef.current = created.id;
@@ -443,7 +444,7 @@ export function ChatWorkspace() {
     }
 
     if (!conv) {
-      conv = await fetchChatConversation(convId);
+      conv = await fetchChatConversation(convId, projectId);
     }
 
     const targetId = convId;
@@ -458,7 +459,7 @@ export function ChatWorkspace() {
     }
 
     try {
-      const saved = await saveChatConversation(updated);
+      const saved = await saveChatConversation(updated, projectId);
       if (activeIdRef.current === saved.id) {
         setConversation(saved);
       }
@@ -478,7 +479,7 @@ export function ChatWorkspace() {
     let conv = conversation?.id === convId ? conversation : null;
 
     if (!convId) {
-      const created = await createChatConversation();
+      const created = await createChatConversation(undefined, projectId);
       convId = created.id;
       conv = created;
       activeIdRef.current = created.id;
@@ -487,7 +488,7 @@ export function ChatWorkspace() {
     }
 
     if (!conv) {
-      conv = await fetchChatConversation(convId);
+      conv = await fetchChatConversation(convId, projectId);
     }
 
     const targetId = convId;
@@ -502,7 +503,7 @@ export function ChatWorkspace() {
     }
 
     try {
-      const saved = await saveChatConversation(updated);
+      const saved = await saveChatConversation(updated, projectId);
       if (activeIdRef.current === saved.id) {
         setConversation(saved);
       }
@@ -522,7 +523,7 @@ export function ChatWorkspace() {
     let conv = conversation?.id === convId ? conversation : null;
 
     if (!convId) {
-      const created = await createChatConversation();
+      const created = await createChatConversation(undefined, projectId);
       convId = created.id;
       conv = created;
       activeIdRef.current = created.id;
@@ -531,7 +532,7 @@ export function ChatWorkspace() {
     }
 
     if (!conv) {
-      conv = await fetchChatConversation(convId);
+      conv = await fetchChatConversation(convId, projectId);
     }
 
     const updated = {
@@ -544,7 +545,7 @@ export function ChatWorkspace() {
     }
 
     try {
-      const saved = await saveChatConversation(updated);
+      const saved = await saveChatConversation(updated, projectId);
       if (activeIdRef.current === saved.id) {
         setConversation(saved);
       }
@@ -557,7 +558,7 @@ export function ChatWorkspace() {
   };
 
   const handleNewChat = async () => {
-    const c = await createChatConversation();
+    const c = await createChatConversation(undefined, projectId);
     activeIdRef.current = c.id;
     setSummaries((prev) => [{ id: c.id, title: c.title, updatedAt: c.updatedAt }, ...prev]);
     setActiveId(c.id);
@@ -567,7 +568,7 @@ export function ChatWorkspace() {
   };
 
   const handleDeleteConv = async (id: string) => {
-    await deleteChatConversationApi(id);
+    await deleteChatConversationApi(id, projectId);
     const next = summaries.filter((s) => s.id !== id);
     setSummaries(next);
     if (activeId === id) {
@@ -579,7 +580,7 @@ export function ChatWorkspace() {
     if (!renamingId || !conversation || renamingId !== conversation.id) return;
     const title = renameDraft.trim() || "新对话";
     const updated = { ...conversation, title, updatedAt: Date.now() };
-    const saved = await saveChatConversation(updated);
+    const saved = await saveChatConversation(updated, projectId);
     setConversation(saved);
     setSummaries((prev) => prev.map((s) => (s.id === saved.id ? { ...s, title: saved.title, updatedAt: saved.updatedAt } : s)));
     setRenamingId(null);
@@ -637,7 +638,7 @@ export function ChatWorkspace() {
       let conv = conversation?.id === convId ? conversation : null;
 
       if (!convId || !conv) {
-        const created = await createChatConversation();
+        const created = await createChatConversation(undefined, projectId);
         convId = created.id;
         conv = { ...created, preferredLlmModelId: selectedLlmModelId };
         activeIdRef.current = created.id;
@@ -656,7 +657,13 @@ export function ChatWorkspace() {
         setActiveId(sendConvId);
       }
 
-      const updated = await sendChatAgentTurn(sendConvId, userMessage, imageModelForTurn, selectedLlmModelId);
+      const updated = await sendChatAgentTurn(
+        sendConvId,
+        userMessage,
+        imageModelForTurn,
+        selectedLlmModelId,
+        projectId,
+      );
 
       if (activeIdRef.current !== sendConvId) {
         setError("回复已生成，但你已切换到其他会话，请切回该会话查看。");
@@ -729,7 +736,17 @@ export function ChatWorkspace() {
           ) : null
         ) : isLoadingConversation && activeId && !threadVisible ? (
           <p className={styles.sending}>加载会话…</p>
-        ) : !threadVisible ? null : !conversation?.messages.length ? (
+        ) : !threadVisible ? (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyGuide}>
+              <p className={styles.emptyEyebrow}>PROJECT CHAT</p>
+              <h2 className={styles.emptyTitle}>开始项目对话</h2>
+              <p className={styles.emptyCopy}>
+                直接在下方输入，系统会自动创建当前项目内的对话；也可以点击右侧“新建”先建立会话。
+              </p>
+            </div>
+          </div>
+        ) : !conversation?.messages.length ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyGuide}>
               <ChatMarkdown markdown={emptyGuideMarkdown} variant="guide" />
@@ -747,6 +764,7 @@ export function ChatWorkspace() {
 
       {!isFormMode ? (
         <ChatComposer
+          className={styles.workspaceComposerWrap}
           inputText={inputText}
           onInputTextChange={setInputText}
           pendingAttachments={pendingAttachments}

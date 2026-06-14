@@ -44,6 +44,12 @@
   overflow: hidden;
 }
 
+.projectCanvasEditorShell {
+  height: calc(100vh - 76px) !important;
+  min-height: 0 !important;
+  background: #ffffff;
+}
+
 .canvasTitleInput {
   width: 220px;
   height: 44px;
@@ -83,8 +89,14 @@
 
 .canvasTopbar {
   position: absolute;
-  inset: 0 18px auto;
-  margin: 12px 0 0;
+  inset: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) auto;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
   pointer-events: none;
 }
 
@@ -690,7 +702,8 @@
   border-radius: 15px;
   background: #ffffff;
   color: #050505;
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .audioPlayButton {
@@ -2339,8 +2352,8 @@
 .boardActions button:hover,
 .contextMenu button:hover {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
 }
 
 .promptPreviewTitle,
@@ -2361,8 +2374,8 @@
 
 .presetLibraryClose:hover,
 .imagePreviewClose:hover {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
 }
 
 /* Final canvas surface cleanup: floating tools use production linework. */
@@ -2421,12 +2434,32 @@
 
 .toolbarTextBtn:hover,
 .toolbarIconBtn:hover:not(:disabled),
-.toolbarBtnActive,
 .nodeHoverToolbar button:hover,
 .multiSelectionToolbar button:hover,
 .quickAddBtn:hover,
 .uploadMenu button:hover,
 .assetDrawer button:hover {
+  border-color: #050505;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.toolbarTextBtn:active,
+.toolbarIconBtn:active:not(:disabled),
+.nodeHoverToolbar button:active,
+.multiSelectionToolbar button:active,
+.quickAddBtn:active,
+.uploadMenu button:active,
+.assetDrawer button:active {
+  background: var(--otato-yellow, #ffd86b) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.toolbarBtnActive {
   border-color: #050505;
   background: #050505 !important;
   color: #ffffff !important;
@@ -2515,14 +2548,18 @@
 .toolbarToggleBtn[aria-pressed="true"]:hover,
 .toolbarToggleBtn[aria-pressed="true"]:focus-visible {
   border-color: #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
   background: #050505 !important;
   color: #ffffff !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
 }
 
 .toolbarToggleBtn[aria-pressed="false"] {
   border-color: #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
   background: #ffffff !important;
   color: #050505 !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
 }
 
 .toolbarDivider,
@@ -2648,6 +2685,8 @@
   background: #ffffff !important;
   color: #050505 !important;
   font-weight: 800;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .nodeHoverToolbar button:hover,
@@ -2659,8 +2698,32 @@
 .assetDrawer button:hover,
 .presetMetaButton:hover:not(:disabled) {
   border-color: #050505 !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.nodeHoverToolbar button:active,
+.multiSelectionToolbar button:active,
+.toolbarTextBtn:active,
+.toolbarIconBtn:active:not(:disabled),
+.quickAddBtn:active,
+.uploadMenu button:active,
+.assetDrawer button:active,
+.presetMetaButton:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.toolbarBtnActive,
+.toolbarBtnActive:hover {
+  border-color: #050505 !important;
   background: #050505 !important;
   color: #ffffff !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
 }
 
 .canvasPresetCard {
@@ -2725,8 +2788,23 @@
   background-color: #ffffff !important;
   background-clip: padding-box;
   color: #050505 !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
   overflow: hidden;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.generatorPill:hover,
+.generatorPill:focus,
+.generatorPill:focus-visible {
+  background-color: var(--otato-yellow-soft, #fff1a8) !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.generatorPill:active {
+  background-color: var(--otato-yellow, #ffd86b) !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
 
 .generatorRunButton,
@@ -2736,10 +2814,21 @@
   height: 34px;
   border: 3px solid #050505 !important;
   border-radius: 15px !important;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   background-clip: padding-box;
   color: #ffffff !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.generatorRunButton:hover:not(:disabled) {
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.generatorRunButton:active:not(:disabled) {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
 
 .generatorRunButton:disabled {
@@ -2799,11 +2888,21 @@
   padding: 0 10px;
   min-height: 28px;
   font-weight: 900;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .textChatTry button:hover {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.textChatTry button:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .textChatRunning,
@@ -3178,8 +3277,8 @@
 }
 
 .presetLibraryClose:hover {
-  background: #050505 !important;
-  color: #ffffff !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
 }
 
 .presetLibraryTabs {

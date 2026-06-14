@@ -34,6 +34,11 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background-color 140ms ease, transform 160ms ease;
+}
+
+.main:active:not(:disabled) {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
 }
 
 .mainChat {
@@ -197,8 +202,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 0 0 auto;
-  gap: 7px;
-  padding: 8px;
+  gap: 10px;
+  padding: 8px 11px 11px 8px;
   border-top: 2px solid #050505;
 }
 
@@ -210,11 +215,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: var(--otato-workbar-control-height, 34px);
   min-width: 0;
   padding: 0 12px;
-  border: 2px solid #050505;
-  border-radius: 13px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
   font: inherit;
@@ -222,12 +227,25 @@
   font-weight: 950;
   line-height: 1;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .main:hover .cover,
 .footerButton:hover:not(:disabled) {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+}
+
+.footerButton:hover:not(:disabled) {
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.footerButton:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .main:disabled {
@@ -245,6 +263,12 @@
 }
 
 .favoriteActive {
+  background: #050505 !important;
+  color: #ffffff !important;
+}
+
+.favoriteActive:hover:not(:disabled),
+.favoriteActive:active:not(:disabled) {
   background: #050505 !important;
   color: #ffffff !important;
 }

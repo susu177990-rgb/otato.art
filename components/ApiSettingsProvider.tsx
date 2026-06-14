@@ -53,18 +53,23 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const isPublicAuthPath =
     pathname === "/" ||
+    pathname === "/studio" ||
     pathname === "/prompt" ||
     pathname === "/login" ||
     pathname === "/reset-password" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/");
 
+  const resetWorkspaceDefaults = useCallback(() => {
+    setSettings(DEFAULT_SETTINGS);
+    setImageWorkspace(DEFAULT_IMAGE_SETTINGS);
+    setVideoWorkspace(DEFAULT_VIDEO_SETTINGS);
+    setApiUsageModeState(DEFAULT_API_USAGE_MODE);
+  }, []);
+
   const refreshWorkspace = useCallback(async () => {
     if (isPublicAuthPath) {
-      setSettings(DEFAULT_SETTINGS);
-      setImageWorkspace(DEFAULT_IMAGE_SETTINGS);
-      setVideoWorkspace(DEFAULT_VIDEO_SETTINGS);
-      setApiUsageModeState(DEFAULT_API_USAGE_MODE);
+      resetWorkspaceDefaults();
       setWorkspaceReady(false);
       return;
     }
@@ -76,11 +81,15 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
       setVideoWorkspace(snapshot.videoWorkspace);
       setApiUsageModeState(snapshot.apiUsageMode ?? DEFAULT_API_USAGE_MODE);
     } catch (e) {
-      console.error("[ApiSettingsProvider] refresh failed", e);
+      const message = e instanceof Error ? e.message : "";
+      resetWorkspaceDefaults();
+      if (!message.includes("请先登录")) {
+        console.error("[ApiSettingsProvider] refresh failed", e);
+      }
     } finally {
       setWorkspaceReady(true);
     }
-  }, [isPublicAuthPath]);
+  }, [isPublicAuthPath, resetWorkspaceDefaults]);
 
   const setApiUsageMode = useCallback(
     async (patch: Partial<Record<keyof ApiUsageMode, ApiUsageSource>>) => {

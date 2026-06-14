@@ -419,6 +419,7 @@
   box-shadow: none;
   overflow: hidden;
   isolation: isolate;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .formWrap :global(fieldset) {
@@ -438,8 +439,39 @@
 .formWrap :global(textarea:focus),
 .formWrap :global(select:focus) {
   border-color: #050505;
-  background: #f3f3ef;
+  background: var(--otato-yellow-soft, #fff1a8);
   outline: none;
+}
+
+.submitBtn,
+.assetRemove,
+.assetActions button,
+.imageLink {
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.submitBtn:hover:not(:disabled),
+.assetRemove:hover:not(:disabled),
+.assetActions button:hover:not(:disabled),
+.imageLink:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.submitBtn:active:not(:disabled),
+.assetRemove:active:not(:disabled),
+.assetActions button:active:not(:disabled),
+.imageLink:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .outputEmpty {

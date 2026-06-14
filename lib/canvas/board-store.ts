@@ -25,9 +25,17 @@ import {
   type VideoModelId,
   type VideoResolution,
 } from "@/lib/video-workspace";
+import {
+  applyProjectScope,
+  normalizePageLimit,
+  type ProjectPage,
+  type ProjectPageOptions,
+  type ProjectScope,
+} from "@/lib/db/project-scope";
 
 type CanvasBoardRow = {
   id: string;
+  project_id?: string | null;
   title: string | null;
   data: unknown;
   created_at: string;
@@ -326,6 +334,7 @@ function rowToBoard(row: CanvasBoardRow): CanvasBoard {
   const data = normalizeBoardData(row.data);
   return {
     id: row.id,
+    projectId: row.project_id ?? null,
     title: row.title?.trim() || "未命名画布",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -337,6 +346,7 @@ function rowToSummary(row: CanvasBoardRow): CanvasBoardSummary {
   const board = rowToBoard(row);
   return {
     id: board.id,
+    projectId: board.projectId ?? null,
     title: board.title,
     createdAt: board.createdAt,
     updatedAt: board.updatedAt,
@@ -347,32 +357,101 @@ function rowToSummary(row: CanvasBoardRow): CanvasBoardSummary {
   };
 }
 
-export async function listCanvasBoards(supabase: SupabaseClient): Promise<CanvasBoardSummary[]> {
-  const { data, error } = await supabase.from("canvas_boards").select("id, title, data, created_at, updated_at").order("updated_at", { ascending: false });
+export async function listCanvasBoards(
+  supabase: SupabaseClient,
+  scope: ProjectScope = {},
+): Promise<CanvasBoardSummary[]> {
+  const query = applyProjectScope(
+    supabase.from("canvas_boards").select("id, project_id, title, data, created_at, updated_at"),
+    scope,
+  );
+  const { data, error } = await query.order("updated_at", { ascending: false });
   if (error) throw error;
   return ((data ?? []) as CanvasBoardRow[]).map(rowToSummary);
 }
 
-export async function getCanvasBoard(supabase: SupabaseClient, id: string): Promise<CanvasBoard | null> {
-  const { data, error } = await supabase.from("canvas_boards").select("id, title, data, created_at, updated_at").eq("id", id).maybeSingle();
+export async function listCanvasBoardsPage(
+  supabase: SupabaseClient,
+  options: ProjectPageOptions = {},
+): Promise<ProjectPage<CanvasBoardSummary>> {
+  const limit = normalizePageLimit(options.limit, 24);
+  let query = applyProjectScope(
+    supabase.from("canvas_boards").select("id, project_id, title, data, created_at, updated_at"),
+    options,
+  );
+  if (options.cursor) {
+    query = query.or(
+      `updated_at.lt.${options.cursor.timestamp},and(updated_at.eq.${options.cursor.timestamp},id.lt.${options.cursor.id})`,
+    );
+  }
+  const { data, error } = await query
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (error) throw error;
+  const rows = (data ?? []) as CanvasBoardRow[];
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  return {
+    items: pageRows.map(rowToSummary),
+    nextCursor: rows.length > limit && last
+      ? { timestamp: last.updated_at, id: last.id }
+      : null,
+  };
+}
+
+export async function getCanvasBoard(
+  supabase: SupabaseClient,
+  id: string,
+  scope: ProjectScope = {},
+): Promise<CanvasBoard | null> {
+  const query = applyProjectScope(
+    supabase.from("canvas_boards").select("id, project_id, title, data, created_at, updated_at").eq("id", id),
+    scope,
+  );
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data ? rowToBoard(data as CanvasBoardRow) : null;
 }
 
-export async function createCanvasBoard(supabase: SupabaseClient, userId: string, id: string, title: string): Promise<CanvasBoard> {
+export async function createCanvasBoard(
+  supabase: SupabaseClient,
+  userId: string,
+  id: string,
+  title: string,
+  scope: ProjectScope = {},
+): Promise<CanvasBoard> {
+  if (scope.projectId) {
+    const existing = await listCanvasBoards(supabase, scope);
+    if (existing[0]) {
+      const board = await getCanvasBoard(supabase, existing[0].id, scope);
+      if (board) return board;
+    }
+  }
   const now = new Date().toISOString();
   const data = emptyCanvasBoardData();
   const { error } = await supabase.from("canvas_boards").insert({
     id,
     user_id: userId,
+    project_id: scope.projectId ?? null,
     title: title.trim() || "未命名画布",
     data,
     created_at: now,
     updated_at: now,
   });
-  if (error) throw error;
+  if (error) {
+    if (scope.projectId && error.code === "23505") {
+      const existing = await listCanvasBoards(supabase, scope);
+      if (existing[0]) {
+        const board = await getCanvasBoard(supabase, existing[0].id, scope);
+        if (board) return board;
+      }
+    }
+    throw error;
+  }
   return {
     id,
+    projectId: scope.projectId ?? null,
     title: title.trim() || "未命名画布",
     createdAt: now,
     updatedAt: now,
@@ -384,6 +463,7 @@ export async function updateCanvasBoard(
   supabase: SupabaseClient,
   id: string,
   updates: { title?: string; data?: CanvasBoardData },
+  scope: ProjectScope = {},
 ): Promise<CanvasBoard | null> {
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof updates.title === "string") patch.title = updates.title.trim() || "未命名画布";
@@ -391,13 +471,29 @@ export async function updateCanvasBoard(
     assertNoInlineMedia(updates.data);
     patch.data = normalizeBoardData(updates.data);
   }
-  const { data, error } = await supabase.from("canvas_boards").update(patch).eq("id", id).select("id, title, data, created_at, updated_at").maybeSingle();
+  const query = applyProjectScope(
+    supabase
+      .from("canvas_boards")
+      .update(patch)
+      .eq("id", id)
+      .select("id, project_id, title, data, created_at, updated_at"),
+    scope,
+  );
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data ? rowToBoard(data as CanvasBoardRow) : null;
 }
 
-export async function deleteCanvasBoard(supabase: SupabaseClient, id: string): Promise<boolean> {
-  const { data, error } = await supabase.from("canvas_boards").delete().eq("id", id).select("id");
+export async function deleteCanvasBoard(
+  supabase: SupabaseClient,
+  id: string,
+  scope: ProjectScope = {},
+): Promise<boolean> {
+  const query = applyProjectScope(
+    supabase.from("canvas_boards").delete().eq("id", id).select("id"),
+    scope,
+  );
+  const { data, error } = await query;
   if (error) throw error;
   return (data?.length ?? 0) > 0;
 }

@@ -5,6 +5,13 @@ import {
   isStoredGeneratedVideoUrl,
   persistGeneratedVideoToStorage,
 } from "@/lib/db/persist-generated-video";
+import {
+  applyProjectScope,
+  normalizePageLimit,
+  type ProjectPage,
+  type ProjectPageOptions,
+  type ProjectScope,
+} from "@/lib/db/project-scope";
 
 const DEFAULT_VIDEO_GALLERY_RECORD_LIMIT = 24;
 
@@ -22,10 +29,15 @@ async function persistVideoRecordMedia(
 export async function listVideoGalleryRecords(
   supabase: SupabaseClient,
   limit = DEFAULT_VIDEO_GALLERY_RECORD_LIMIT,
+  scope: ProjectScope = {},
 ): Promise<VideoGalleryRecord[]> {
-  const { data, error } = await supabase
+  const query = applyProjectScope(
+    supabase
     .from("video_gallery_records")
-    .select("data, created_at")
+      .select("data, created_at"),
+    scope,
+  );
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -34,19 +46,68 @@ export async function listVideoGalleryRecords(
   return (data ?? []).map((row) => sanitizeVideoGalleryRecordForStorage(row.data as VideoGalleryRecord));
 }
 
+export async function listVideoGalleryRecordsPage(
+  supabase: SupabaseClient,
+  options: ProjectPageOptions = {},
+): Promise<ProjectPage<VideoGalleryRecord>> {
+  const limit = normalizePageLimit(options.limit, DEFAULT_VIDEO_GALLERY_RECORD_LIMIT);
+  let query = applyProjectScope(
+    supabase.from("video_gallery_records").select("id, data, created_at"),
+    options,
+  );
+  if (options.cursor) {
+    query = query.or(
+      `created_at.lt.${options.cursor.timestamp},and(created_at.eq.${options.cursor.timestamp},id.lt.${options.cursor.id})`,
+    );
+  }
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (error) throw error;
+  const rows = data ?? [];
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  return {
+    items: pageRows.map((row) => sanitizeVideoGalleryRecordForStorage(row.data as VideoGalleryRecord)),
+    nextCursor: rows.length > limit && last
+      ? { timestamp: last.created_at, id: last.id }
+      : null,
+  };
+}
+
+export async function getVideoGalleryRecord(
+  supabase: SupabaseClient,
+  id: string,
+  scope: ProjectScope = {},
+): Promise<VideoGalleryRecord | null> {
+  const query = applyProjectScope(
+    supabase.from("video_gallery_records").select("data").eq("id", id),
+    scope,
+  );
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data ? sanitizeVideoGalleryRecordForStorage(data.data as VideoGalleryRecord) : null;
+}
+
 export async function replaceVideoGalleryRecords(
   supabase: SupabaseClient,
   records: VideoGalleryRecord[],
+  scope: ProjectScope = {},
 ): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
-  const { error: delError } = await supabase
+  const deleteQuery = applyProjectScope(
+    supabase
     .from("video_gallery_records")
     .delete()
-    .eq("user_id", user.id);
+      .eq("user_id", user.id),
+    scope,
+  );
+  const { error: delError } = await deleteQuery;
   if (delError) throw delError;
 
   if (records.length === 0) return;
@@ -55,6 +116,7 @@ export async function replaceVideoGalleryRecords(
   const rows = persisted.map((record) => ({
     id: record.id,
     user_id: user.id,
+    project_id: scope.projectId ?? null,
     data: sanitizeVideoGalleryRecordForStorage(record),
     created_at: record.createdAt,
   }));
@@ -65,6 +127,7 @@ export async function replaceVideoGalleryRecords(
 export async function prependVideoGalleryRecord(
   supabase: SupabaseClient,
   record: VideoGalleryRecord,
+  scope: ProjectScope = {},
 ): Promise<VideoGalleryRecord[]> {
   const {
     data: { user },
@@ -75,11 +138,12 @@ export async function prependVideoGalleryRecord(
   const { error } = await supabase.from("video_gallery_records").insert({
     id: persisted.id,
     user_id: user.id,
+    project_id: scope.projectId ?? null,
     data: sanitizeVideoGalleryRecordForStorage(persisted),
     created_at: persisted.createdAt,
   });
   if (error) throw error;
-  const existing = await listVideoGalleryRecords(supabase, DEFAULT_VIDEO_GALLERY_RECORD_LIMIT - 1);
+  const existing = await listVideoGalleryRecords(supabase, DEFAULT_VIDEO_GALLERY_RECORD_LIMIT - 1, scope);
   const saved = sanitizeVideoGalleryRecordForStorage(persisted);
   return [saved, ...existing.filter((item) => item.id !== saved.id)];
 }
@@ -87,10 +151,28 @@ export async function prependVideoGalleryRecord(
 export async function importVideoGalleryRecords(
   supabase: SupabaseClient,
   records: VideoGalleryRecord[],
+  scope: ProjectScope = {},
 ): Promise<void> {
   if (records.length === 0) return;
-  const existing = await listVideoGalleryRecords(supabase);
+  const existing = await listVideoGalleryRecords(supabase, DEFAULT_VIDEO_GALLERY_RECORD_LIMIT, scope);
   if (existing.length > 0) return;
-  await replaceVideoGalleryRecords(supabase, records);
+  await replaceVideoGalleryRecords(supabase, records, scope);
 }
 
+export async function deleteVideoGalleryRecord(
+  supabase: SupabaseClient,
+  id: string,
+  scope: ProjectScope = {},
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("未登录");
+  const query = applyProjectScope(
+    supabase.from("video_gallery_records").delete().eq("user_id", user.id).eq("id", id).select("id"),
+    scope,
+  );
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}

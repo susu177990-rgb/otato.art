@@ -1,39 +1,59 @@
 /* 对话页左右轨道复用 /image rail 的位置和滚动窗口；这里只保留文本卡尺寸差异。 */
 
 .railColumn {
-  --chat-rail-card-width: 104px;
-  --chat-rail-card-height: 44px;
-  --mode-visible: 7;
-  --mode-gap: 10px;
+  --chat-rail-card-width: var(--rail-card-width, 128px);
+  --chat-rail-card-height: var(--rail-card-height, 72px);
+  --chat-rail-card-window-width: var(--rail-card-window-width, calc(var(--chat-rail-card-width) + 10px));
+  --mode-visible: 5;
+  --mode-gap: 14px;
   --mode-row-height: var(--chat-rail-card-height);
-  --history-visible: 7;
-  --history-gap: 10px;
+  --history-visible: 5;
+  --history-gap: 14px;
   --history-thumb: var(--chat-rail-card-height);
-  width: var(--chat-rail-card-width) !important;
-  max-width: var(--chat-rail-card-width) !important;
+  --rail-visible-count: 5;
+  --rail-window-height: min(536px, calc(100vh - 320px));
+  --rail-content-height: calc(
+    (var(--chat-rail-card-height) * var(--rail-visible-count)) +
+    (var(--mode-gap) * (var(--rail-visible-count) - 1))
+  );
+  --rail-frame-height: calc(var(--rail-content-height) + (var(--rail-frame-padding, 12px) * 2) + 6px);
+  --rail-outer-height: calc(var(--rail-frame-height) + var(--rail-shadow-outset, 10px));
+  width: var(--rail-outer-width, 164px) !important;
+  max-width: var(--rail-outer-width, 164px) !important;
   min-height: 0;
 }
 
-.railRail,
+.railRail {
+  width: var(--rail-outer-width, 164px) !important;
+  max-width: var(--rail-outer-width, 164px) !important;
+  align-items: center !important;
+  overflow: visible !important;
+}
+
 .railRailFrame {
-  width: 100%;
+  width: var(--rail-frame-width, 158px) !important;
+  max-width: var(--rail-frame-width, 158px) !important;
+  margin-inline: auto !important;
+  overflow: visible !important;
 }
 
 .railScrollWrap,
 .railScroll,
 .railList {
-  width: var(--chat-rail-card-width) !important;
-  max-width: var(--chat-rail-card-width) !important;
+  width: var(--chat-rail-card-window-width) !important;
+  max-width: var(--chat-rail-card-window-width) !important;
   min-width: 0 !important;
   box-sizing: border-box;
 }
 
 .railScroll {
-  max-height: var(--rail-window-height) !important;
+  height: min(var(--rail-content-height, 416px), calc(var(--rail-window-height) - (var(--rail-frame-padding, 12px) * 2))) !important;
+  max-height: min(var(--rail-content-height, 416px), calc(var(--rail-window-height) - (var(--rail-frame-padding, 12px) * 2))) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
   overscroll-behavior: contain;
   padding: 0 !important;
+  align-items: center !important;
   justify-content: safe center !important;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -48,6 +68,8 @@
 .railList {
   gap: var(--mode-gap) !important;
   align-items: center !important;
+  justify-content: safe center !important;
+  min-height: 100% !important;
 }
 
 .railCard {
@@ -60,17 +82,18 @@
   aspect-ratio: auto !important;
   padding-left: 10px;
   padding-right: 10px;
-  background: rgba(255, 255, 255, 0.07) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  color: #f4f4f5 !important;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important;
+  background: #ffffff !important;
+  border: 4px solid #050505 !important;
+  border-radius: 18px !important;
+  color: #050505 !important;
+  box-shadow: none !important;
 }
 
 .railCardActive {
-  background: #fafafa !important;
-  border-color: rgba(0, 0, 0, 0.08) !important;
-  color: #09090b !important;
-  box-shadow: 0 1px 8px rgba(255, 255, 255, 0.14) !important;
+  background: #050505 !important;
+  border-color: #050505 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
 }
 
 .railName {
@@ -101,9 +124,19 @@
   backdrop-filter: none !important;
 }
 
-.rail {
-  border: 4px solid #050505 !important;
-  border-radius: 32px !important;
+.railRailFrame {
+  box-sizing: border-box;
+  width: var(--rail-frame-width, 158px) !important;
+  margin-inline: auto !important;
+  height: min(var(--rail-frame-height, 446px), var(--rail-window-height)) !important;
+  max-height: var(--rail-window-height) !important;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-floating-bar-radius, 24px) !important;
+  background: rgba(250, 247, 239, 0.92) !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
+  backdrop-filter: blur(18px) !important;
+  padding: var(--rail-frame-padding, 12px) !important;
+  overflow: visible !important;
 }
 
 .railRailFrame::before,
@@ -114,13 +147,35 @@
 .railCard,
 .railAction,
 .railInput {
-  border: 2px solid #050505 !important;
-  border-radius: 15px !important;
+  border: 4px solid #050505 !important;
+  border-radius: 18px !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.railCard:hover,
+.railAction:hover {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px)) !important;
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.railCard:active,
+.railAction:active {
+  background: var(--otato-yellow, #ffd86b) !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px)) !important;
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
 
 .railCardActive {
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transform: none !important;
 }
 
 .railCardActive .railName,
@@ -130,4 +185,5 @@
 
 .railName {
   color: #050505 !important;
+  text-align: center !important;
 }

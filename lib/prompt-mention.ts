@@ -6,7 +6,13 @@ import {
   type ParsedAssetMention,
 } from "./asset-mentions";
 
-export type MentionType = "slot" | "node" | "gallery-image" | "gallery-video" | "gallery-audio";
+export type MentionType =
+  | "slot"
+  | "node"
+  | "gallery-image"
+  | "gallery-video"
+  | "gallery-audio"
+  | "project-asset";
 
 export type MentionItem = {
   name: string;
@@ -124,6 +130,25 @@ export function resolveMentions(
       const canvasMention = resolveCanvasNodeMention(mention, canvasNodes);
       if (canvasMention.resolvedTextNodeId) resolvedNodeIds.push(canvasMention.resolvedTextNodeId);
       if (canvasMention.reference) mentionedReferences.push(canvasMention.reference);
+      if (mention.type === "project-asset" && mention.candidate?.url) {
+        mentionedReferences.push({
+          id: mention.id,
+          type: "image",
+          url: mention.candidate.url,
+          label: mention.candidate.label || mention.label,
+          role: mention.role ?? "image_reference",
+        });
+        for (const [index, url] of (mention.candidate.referenceUrls ?? []).entries()) {
+          if (!url.trim()) continue;
+          mentionedReferences.push({
+            id: `${mention.id}:reference:${index + 1}`,
+            type: "image",
+            url,
+            label: `${mention.candidate.label || mention.label} 参考图 ${index + 1}`,
+            role: mention.role ?? "image_reference",
+          });
+        }
+      }
       return canvasMention.replacement;
     },
   });
@@ -131,7 +156,9 @@ export function resolveMentions(
   return {
     cleanedPrompt: resolution.prompt,
     resolvedNodeIds: Array.from(new Set(resolvedNodeIds)),
-    mentionedReferences: Array.from(new Map(mentionedReferences.map((item) => [item.id, item])).values()),
+    mentionedReferences: Array.from(
+      new Map(mentionedReferences.map((item) => [`${item.type}:${item.id}`, item])).values(),
+    ),
     resolution,
   };
 }

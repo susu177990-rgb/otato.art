@@ -226,17 +226,26 @@ function PromptPageInner() {
 
   return (
     <main className={[shellStyles.page, styles.promptPage].join(" ")}>
-      <header className={shellStyles.topbar}>
-        <nav className={shellStyles.topbarLeft} aria-label="提示词预设导航">
-          <Link href="/" className={shellStyles.navLink}>
-            返回首页
+      <header className={styles.promptTopbar}>
+        <div className={styles.promptTopbarIdentity}>
+          <Link href="/projects" className={styles.promptTopbarBack}>
+            项目
           </Link>
-          <button type="button" className={[shellStyles.navLink, styles.uploadButton].join(" ")} onClick={() => setUploadOpen(true)}>
+          <span className={styles.promptTopbarTitle}>预设</span>
+        </div>
+
+        <nav className={styles.promptTopbarModes} aria-label="提示词预设导航">
+          <Link href="/projects" className={styles.promptTopbarMode}>
+            项目列表
+          </Link>
+          <span className={styles.promptTopbarModeActive}>预设社区</span>
+        </nav>
+
+        <div className={styles.promptTopbarActions}>
+          <span className={styles.promptTopbarStatus}>{statusText}</span>
+          <button type="button" className={styles.promptTopbarAction} onClick={() => setUploadOpen(true)}>
             投稿提示词
           </button>
-        </nav>
-        <div className={shellStyles.topnav}>
-          <span className={styles.statusPill}>{statusText}</span>
         </div>
       </header>
 

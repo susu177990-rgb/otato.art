@@ -1,0 +1,146 @@
+.shell {
+  --project-mode-bar-height: calc(76px + var(--otato-floating-bar-margin-top, 12px));
+  display: flow-root;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #faf7ef;
+  color: #050505;
+}
+
+.content {
+  min-height: calc(100vh - var(--project-mode-bar-height));
+}
+
+.workspaceContent {
+  height: calc(100vh - var(--project-mode-bar-height));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.state {
+  display: flex;
+  min-height: calc(100vh - var(--project-mode-bar-height));
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+}
+
+.state span {
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+}
+
+.state h1 {
+  margin: 0;
+  max-width: 720px;
+  font-size: clamp(34px, 7vw, 76px);
+  line-height: 0.94;
+  font-weight: 950;
+  letter-spacing: -0.06em;
+}
+
+.state p {
+  margin: 0;
+  max-width: 520px;
+  color: #5f5f5a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.state a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+  text-decoration: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.state a:hover {
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.state a:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.drawerScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(5, 5, 5, 0.34);
+}
+
+.drawer {
+  display: flex;
+  width: min(1120px, calc(100vw - 28px));
+  max-height: 100vh;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 16px;
+  border-left: 4px solid #050505;
+  background: #faf7ef;
+  box-shadow: -10px 0 0 rgba(5, 5, 5, 0.1);
+}
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 3px solid #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.drawerHead button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.drawerHead button:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.drawerHead button:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}

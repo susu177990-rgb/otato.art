@@ -54,6 +54,7 @@ import { useApiSettings } from "@/components/ApiSettingsProvider";
 import ArtifactPanel from "@/components/ArtifactPanel";
 import StudioStageStrip from "@/components/StudioStageStrip";
 import StudioBibleDrawer, { type BibleDrawerTab } from "@/components/StudioBibleDrawer";
+import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
 import shellStyles from "../../shared/shell.module.css";
 import styles from "./studio-page.module.css";
 
@@ -70,8 +71,11 @@ function normalizeMeta(p: Project): ProjectMeta {
 }
 
 function StudioInner() {
-  const params = useParams<{ id: string }>();
-  const projectId = params.id ?? "";
+  const params = useParams<{ id?: string }>();
+  const routeOptions = useProjectScriptRouteOptions();
+  const projectId = routeOptions?.projectId ?? params.id ?? "";
+  const backHref = routeOptions?.backHref ?? "/projects";
+  const requireOnboarding = routeOptions?.requireOnboarding ?? true;
   const { settings, openSettings } = useApiSettings();
 
   const [mounted, setMounted] = useState(false);
@@ -113,6 +117,7 @@ function StudioInner() {
   const [fullAutoEnabled, setFullAutoEnabled] = useState(false);
   const [fullAutoStage, setFullAutoStage] = useState(0);
   const fullAutoAbortRef = useRef(false);
+  const projectReady = !requireOnboarding || (onboardingStatus ?? "ready") === "ready";
 
   // 顶栏「分集体检」+「导出 ZIP」相关 state（原 ArtifactPanel 内部，已上提）
   const [exportingZip, setExportingZip] = useState(false);
@@ -128,9 +133,9 @@ function StudioInner() {
     if (!initialLoadComplete) return null;
     if (messages.length > 0) return null;
     if (!settings.apiKey) return null;
-    if ((onboardingStatus ?? "ready") !== "ready") return null;
+    if (!projectReady) return null;
     return STUDIO_AUTO_STAGE1_USER_MESSAGE;
-  }, [initialLoadComplete, messages.length, settings.apiKey, onboardingStatus]);
+  }, [initialLoadComplete, messages.length, settings.apiKey, projectReady]);
 
   const projectContext = useMemo(() => {
     const om = projectOriginMode ?? "original";
@@ -1013,7 +1018,7 @@ function StudioInner() {
         <div className={shellStyles.empty}>
           <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <span>{loadError}</span>
-            <Link href="/projects" className={shellStyles.navLink}>
+            <Link href={backHref} className={shellStyles.navLink}>
               返回项目页
             </Link>
           </span>
@@ -1027,7 +1032,7 @@ function StudioInner() {
       <main className={shellStyles.page}>
         <header className={shellStyles.topbar}>
           <div className={shellStyles.topbarLeft}>
-            <Link href="/projects" className={shellStyles.navLink}>
+            <Link href={backHref} className={shellStyles.navLink}>
               返回项目页
             </Link>
           </div>
@@ -1041,7 +1046,7 @@ function StudioInner() {
     );
   }
 
-  const switchDisabled = !projectId || !settings.apiKey || (onboardingStatus != null && onboardingStatus !== "ready");
+  const switchDisabled = !projectId || !settings.apiKey || !projectReady;
   const isAutoError = !fullAutoEnabled && pipelineProgress?.status === "error" && fullAutoStage > 0;
   const autoSwitchClass = fullAutoEnabled
     ? [styles.autoSwitch, styles.autoSwitchActive].join(" ")
@@ -1058,7 +1063,7 @@ function StudioInner() {
     <main className={shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={[shellStyles.topbarLeft, styles.topbarLeftCompact].join(" ")}>
-          <Link href="/projects" className={shellStyles.navLink}>
+          <Link href={backHref} className={shellStyles.navLink}>
             返回
           </Link>
           <div className={styles.titleStack}>
@@ -1188,7 +1193,7 @@ function StudioInner() {
         </nav>
       </header>
 
-      {onboardingStatus && onboardingStatus !== "ready" ? (
+      {requireOnboarding && onboardingStatus && onboardingStatus !== "ready" ? (
         <div className={styles.banner}>
           <div className={styles.bannerInner}>
             立项未完成（{onboardingStatus === "pending_setup" ? "待填写" : "策划中"}）。
@@ -1197,7 +1202,7 @@ function StudioInner() {
         </div>
       ) : null}
 
-      {creativeBrief.trim() && !seriesBible.trim() && (messages.length > 0 || artifacts.length > 0) ? (
+      {requireOnboarding && creativeBrief.trim() && !seriesBible.trim() && (messages.length > 0 || artifacts.length > 0) ? (
         <div className={styles.banner}>
           <div className={styles.bannerInner}>
             检测到已有对话或产物但系列圣经仍为空。请到立项页补生成系列圣经，或在顶栏「系列圣经」抽屉中用 LLM 生成。

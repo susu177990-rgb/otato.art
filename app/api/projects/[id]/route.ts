@@ -6,6 +6,8 @@ import {
   isCreativeDirectionLocked,
   normalizeExistingProjectCreativeDirectionId,
 } from "@/lib/creative-directions";
+import { listProjectAssets } from "@/lib/project-assets/store";
+import { removeProjectAssetMedia } from "@/lib/project-assets/storage";
 import type { Project } from "@/lib/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -75,6 +77,27 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   }
 
   const { id } = await ctx.params;
+  const assets = await listProjectAssets(supabase, id);
+  for (const asset of assets) {
+    try {
+      await removeProjectAssetMedia(supabase, {
+        userId: user.id,
+        projectId: id,
+        assetId: asset.id,
+      });
+    } catch (error) {
+      console.error("[project delete asset storage cleanup]", {
+        projectId: id,
+        assetId: asset.id,
+        error,
+      });
+      return Response.json(
+        { error: "项目素材文件清理失败，项目已保留。请稍后重试。" },
+        { status: 500 },
+      );
+    }
+  }
+
   const ok = await deleteProject(supabase, id);
   if (!ok) {
     return Response.json({ error: "项目不存在" }, { status: 404 });

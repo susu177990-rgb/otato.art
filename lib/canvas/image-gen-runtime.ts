@@ -169,6 +169,7 @@ export async function executeCanvasImageGeneration(params: {
   board: CanvasBoard;
   nodeId: string;
   workspaceSnapshot: WorkspaceSnapshot;
+  projectId?: string | null;
 }): Promise<CanvasImageGenerationResult> {
   const sourceNode = mustBeImageNode(params.board.nodes.find((node) => node.id === params.nodeId));
   const model = resolveImageModel(params.workspaceSnapshot, sourceNode);
@@ -222,7 +223,11 @@ export async function executeCanvasImageGeneration(params: {
     prompt,
     refImageCount: refImages.length,
   });
-  await prependGalleryRecord(params.supabase, galleryRecord);
+  await prependGalleryRecord(
+    params.supabase,
+    galleryRecord,
+    params.projectId === undefined ? {} : { projectId: params.projectId },
+  );
 
   return {
     sourceNode: nextSourceNode,

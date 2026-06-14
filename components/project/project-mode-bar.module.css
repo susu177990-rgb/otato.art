@@ -1,0 +1,190 @@
+.bar {
+  position: sticky;
+  top: var(--otato-floating-bar-margin-top, 12px);
+  z-index: 80;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 76px;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  padding: 12px 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.backLink,
+.projectName,
+.mode,
+.modeActive,
+.presetButton,
+.assetButton {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--otato-topbar-control-height, 42px);
+  min-height: var(--otato-topbar-control-height, 42px);
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  background-clip: padding-box;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  overflow: hidden;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.backLink {
+  flex: 0 0 auto;
+  padding: 0 18px;
+}
+
+.projectName {
+  min-width: 0;
+  max-width: 280px;
+  padding: 0 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.projectName:disabled {
+  cursor: default;
+}
+
+.modes {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--otato-topbar-button-gap, 12px);
+  height: var(--otato-topbar-control-height, 42px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  background-clip: border-box;
+  box-shadow: none;
+}
+
+.actions {
+  grid-column: 3;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+
+.mode,
+.modeActive,
+.presetButton,
+.assetButton {
+  height: var(--otato-topbar-inner-height, 30px);
+  min-height: var(--otato-topbar-inner-height, 30px);
+  padding: 0 22px;
+}
+
+.mode,
+.modeActive {
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.presetButton,
+.assetButton {
+  height: var(--otato-topbar-control-height, 42px);
+  min-height: var(--otato-topbar-control-height, 42px);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.modeActive {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.mode:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.backLink:hover,
+.projectName:hover:not(:disabled),
+.presetButton:hover:not(:disabled),
+.assetButton:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.mode:active,
+.modeActive:active,
+.backLink:active,
+.projectName:active:not(:disabled),
+.presetButton:active:not(:disabled),
+.assetButton:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.modeActive:hover,
+.modeActive:active {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+.presetButton:disabled,
+.assetButton:disabled {
+  background: #eee8dc;
+  color: #8c877d;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+@media (max-width: 920px) {
+  .bar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 10px 14px;
+    overflow-x: auto;
+  }
+
+  .identity,
+  .modes,
+  .actions {
+    grid-column: 1;
+  }
+
+  .modes {
+    width: max-content;
+  }
+
+  .actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+}

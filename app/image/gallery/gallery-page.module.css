@@ -360,14 +360,24 @@
 .modalAction {
   border: 3px solid #050505;
   background: #ffffff;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .masonryItem:hover .tile,
 .tile:hover {
   border-color: #050505;
-  background: #f3f3ef;
-  color: #ffffff;
-  transform: none;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.masonryItem:active .tile,
+.tile:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .masonryItem:hover .tileMeta,
@@ -432,13 +442,26 @@
 
 .modalClose {
   border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.modalClose:hover {
-  background: #050505;
-  color: #ffffff;
+.modalClose:hover,
+.modalAction:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.modalClose:active,
+.modalAction:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .modalImageWrap {

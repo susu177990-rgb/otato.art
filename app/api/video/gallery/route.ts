@@ -7,8 +7,9 @@ import {
   replaceVideoGalleryRecords,
 } from "@/lib/db/video-gallery-store";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
+import { projectIdFromRequest } from "@/lib/db/project-scope";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -17,7 +18,12 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "请先登录" }, { status: 401 });
     }
-    const records = await listVideoGalleryRecords(supabase);
+    const projectId = projectIdFromRequest(req);
+    const records = await listVideoGalleryRecords(
+      supabase,
+      undefined,
+      projectId === undefined ? {} : { projectId },
+    );
     return NextResponse.json({ records });
   } catch (e) {
     console.error("[video/gallery GET]", e);
@@ -39,22 +45,25 @@ export async function POST(req: NextRequest) {
       action?: "prepend" | "replace" | "import";
       record?: VideoGalleryRecord;
       records?: VideoGalleryRecord[];
+      projectId?: string | null;
     };
+    const projectId = projectIdFromRequest(req, body.projectId);
+    const scope = projectId === undefined ? {} : { projectId };
 
     if (body.action === "prepend" && body.record) {
-      const records = await prependVideoGalleryRecord(supabase, body.record);
+      const records = await prependVideoGalleryRecord(supabase, body.record, scope);
       return NextResponse.json({ records });
     }
 
     if (body.action === "replace" && Array.isArray(body.records)) {
-      await replaceVideoGalleryRecords(supabase, body.records);
-      const records = await listVideoGalleryRecords(supabase);
+      await replaceVideoGalleryRecords(supabase, body.records, scope);
+      const records = await listVideoGalleryRecords(supabase, undefined, scope);
       return NextResponse.json({ records });
     }
 
     if (body.action === "import" && Array.isArray(body.records)) {
-      await importVideoGalleryRecords(supabase, body.records);
-      const records = await listVideoGalleryRecords(supabase);
+      await importVideoGalleryRecords(supabase, body.records, scope);
+      const records = await listVideoGalleryRecords(supabase, undefined, scope);
       return NextResponse.json({ records });
     }
 
@@ -64,4 +73,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "write_failed" }, { status: 500 });
   }
 }
-

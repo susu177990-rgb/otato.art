@@ -38,6 +38,7 @@ import {
 } from "@/lib/video-workspace";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
+import { useProjectCanvasRouteOptions } from "@/components/project-canvas/project-canvas-route-context";
 import type { AssetMentionCandidate, AssetMentionRole } from "@/lib/asset-mentions";
 import type { ChatConversation, ChatMessage } from "@/lib/chat/types";
 import type { Settings } from "@/lib/types";
@@ -676,8 +677,15 @@ function nodeTypeColor(type: CanvasNodeType) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CanvasBoardPage() {
-  const params = useParams<{ id: string }>();
-  const boardId = params.id ?? "";
+  const params = useParams<{ id?: string }>();
+  const routeOptions = useProjectCanvasRouteOptions();
+  const boardId = routeOptions?.boardId ?? params.id ?? "";
+  const backHref = routeOptions?.backHref ?? "/canvas";
+  const backLabel = routeOptions?.backLabel ?? "返回画布库";
+  const displayTitle = routeOptions?.displayTitle;
+  const titleEditable = routeOptions?.titleEditable ?? true;
+  const projectId = routeOptions?.projectId;
+  const isProjectCanvas = Boolean(routeOptions);
 
   // DOM refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -923,7 +931,8 @@ export default function CanvasBoardPage() {
     const load = async () => {
       setLoading(true); setLoadError("");
       try {
-        const res = await fetch(`/api/canvas-boards/${boardId}`, { cache: "no-store" });
+        const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+        const res = await fetch(`/api/canvas-boards/${boardId}${query}`, { cache: "no-store" });
         if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(typeof d.error === "string" ? d.error : "画布无法加载"); }
         const board = (await res.json()) as CanvasBoard;
         setTitle(board.title); setNodes(board.nodes); setConnections(board.connections);
@@ -934,7 +943,7 @@ export default function CanvasBoardPage() {
       finally { setLoading(false); }
     };
     if (boardId) void load();
-  }, [boardId, setSnapToGridBoth, setViewportBoth]);
+  }, [boardId, projectId, setSnapToGridBoth, setViewportBoth]);
 
   useEffect(() => {
     let cancelled = false;
@@ -975,16 +984,17 @@ export default function CanvasBoardPage() {
     setSaveStatus("saving");
     saveTimerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/canvas-boards/${boardId}`, {
+        const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+        const res = await fetch(`/api/canvas-boards/${boardId}${query}`, {
           method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, data: { nodes, connections, viewport, snapToGrid } as CanvasBoardData }),
+          body: JSON.stringify({ title, projectId, data: { nodes, connections, viewport, snapToGrid } as CanvasBoardData }),
         });
         if (!res.ok) throw new Error("保存失败");
         setDirty(false); setSaveStatus("saved");
       } catch { setSaveStatus("error"); }
     }, 450);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [boardId, connections, dirty, loadError, loading, nodes, snapToGrid, title, viewport]);
+  }, [boardId, connections, dirty, loadError, loading, nodes, projectId, snapToGrid, title, viewport]);
 
   // ── Global pointer events ───────────────────────────────────────────────────
   useEffect(() => {
@@ -1718,7 +1728,7 @@ export default function CanvasBoardPage() {
       const res = await fetch("/api/canvas/image-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boardId, nodeId }),
+        body: JSON.stringify({ boardId, nodeId, projectId }),
       });
       let rawText = "";
       try {
@@ -1752,7 +1762,7 @@ export default function CanvasBoardPage() {
         lastError: error instanceof Error ? error.message : "无线画布生图失败",
       });
     }
-  }, [boardId, markDirty, updateImageGenNodeSettings]);
+  }, [boardId, markDirty, projectId, updateImageGenNodeSettings]);
 
   const runVideoGenNode = useCallback(async (nodeId: string) => {
     const targetNode = nodesRef.current.find((node) => node.id === nodeId);
@@ -1765,7 +1775,7 @@ export default function CanvasBoardPage() {
       const res = await fetch("/api/canvas/video-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boardId, nodeId }),
+        body: JSON.stringify({ boardId, nodeId, projectId }),
       });
       let rawText = "";
       try {
@@ -1798,7 +1808,7 @@ export default function CanvasBoardPage() {
         lastError: error instanceof Error ? error.message : "无线画布生视频失败",
       });
     }
-  }, [boardId, markDirty, updateVideoGenNodeSettings]);
+  }, [boardId, markDirty, projectId, updateVideoGenNodeSettings]);
 
   const runTextChatNode = useCallback(async (nodeId: string) => {
     const targetNode = nodesRef.current.find((node) => node.id === nodeId);
@@ -2141,22 +2151,27 @@ export default function CanvasBoardPage() {
   if (loading) return <main className={shellStyles.page}><div className={shellStyles.empty}>正在加载画布...</div></main>;
   if (loadError) return (
     <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}><div className={shellStyles.topbarLeft}><Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link></div></header>
+      <header className={shellStyles.topbar}><div className={shellStyles.topbarLeft}><Link href={backHref} className={shellStyles.navLink}>{backLabel}</Link></div></header>
       <div className={shellStyles.empty}>{loadError}</div>
     </main>
   );
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <main className={[shellStyles.page, styles.canvasEditorShell].join(" ")}>
-      <header className={[shellStyles.topbar, styles.canvasTopbar].join(" ")}>
+    <main className={[shellStyles.page, styles.canvasEditorShell, isProjectCanvas ? styles.projectCanvasEditorShell : ""].filter(Boolean).join(" ")}>
+      {!isProjectCanvas ? <header className={[shellStyles.topbar, styles.canvasTopbar].join(" ")}>
         <div className={shellStyles.topbarLeft}>
-          <Link href="/canvas" className={shellStyles.navLink}>返回画布库</Link>
+          <Link href={backHref} className={shellStyles.navLink}>{backLabel}</Link>
           <div className={shellStyles.topbarTagline}>
             <input
               className={styles.canvasTitleInput}
-              value={title}
-              onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+              value={displayTitle ?? title}
+              readOnly={!titleEditable || displayTitle !== undefined}
+              onChange={(e) => {
+                if (!titleEditable || displayTitle !== undefined) return;
+                setTitle(e.target.value);
+                markDirty();
+              }}
               aria-label="画布标题"
             />
           </div>
@@ -2164,7 +2179,7 @@ export default function CanvasBoardPage() {
         <nav className={shellStyles.topnav}>
           <ApiUsageModeSwitchAll />
         </nav>
-      </header>
+      </header> : null}
 
       <section className={styles.canvasPage}>
         <div

@@ -86,17 +86,28 @@
 
 .renameBtn,
 .deleteBtn {
-  border: 1px solid #050505;
-  border-radius: 999px;
+  border: 2px solid #050505;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: #ffffff;
   color: #050505;
+  box-shadow: 2px 2px 0 #050505;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .renameBtn:hover,
 .deleteBtn:hover {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: translateY(-50%) translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #050505;
+}
+
+.renameBtn:active,
+.deleteBtn:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: translateY(-50%) translate(2px, 2px);
+  box-shadow: 1px 1px 0 #050505;
 }
 
 .renameInput {

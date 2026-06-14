@@ -58,6 +58,7 @@
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .promptInput {
@@ -89,6 +90,12 @@
 .toolbarSpacer {
   flex: 1 1 auto;
   min-width: 8px;
+}
+
+.attachmentDock {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .addBtn {
@@ -137,10 +144,16 @@
 }
 
 .attachment,
-.modelSelect,
-.addBtn {
-  border-width: 2px;
+.modelSelect {
+  border-width: 3px;
   border-radius: 15px;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.addBtn {
+  border-width: 0;
+  border-radius: 0;
 }
 
 .addPlus {
@@ -150,12 +163,23 @@
 .modelSelect:hover,
 .addBtn:hover {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+}
+
+.modelSelect:hover {
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.modelSelect:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .addBtn:hover .addPlus {
-  color: #ffffff;
+  color: #050505;
 }
 
 .attachFileName {
@@ -208,9 +232,17 @@
 
 .attachRemove:hover,
 .attachRemove:focus-visible {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
   outline: none;
+}
+
+.attachRemove:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .toolbar {
@@ -221,14 +253,17 @@
 }
 
 .addBtn {
-  width: 36px;
+  width: auto;
+  min-width: 36px;
   height: 36px;
   padding: 0;
   border: 0 !important;
+  border-radius: 0;
   background: transparent !important;
   color: #050505 !important;
   outline: none !important;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms ease, color 140ms ease;
 }
 
 .addBtn:hover,
@@ -245,8 +280,18 @@
   transform: rotate(360deg);
 }
 
+.addBtn:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+}
+
 .addPlus {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1;
   transform-origin: center;
   transition: transform 360ms ease, color 140ms ease;
 }

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { BRAND_NAME, BRAND_PAGE_DESCRIPTION, BRAND_PAGE_TITLE } from "@/lib/branding";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ApiSettingsProvider } from "@/components/ApiSettingsProvider";
-import { WorkspaceLocalMigration } from "@/components/WorkspaceLocalMigration";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,7 +36,6 @@ export default function RootLayout({
     <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="h-full bg-background text-foreground antialiased">
         <ApiSettingsProvider>
-          <WorkspaceLocalMigration />
           {children}
         </ApiSettingsProvider>
       </body>

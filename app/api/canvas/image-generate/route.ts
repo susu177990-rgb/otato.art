@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCanvasBoard } from "@/lib/canvas/board-store";
 import { executeCanvasImageGeneration } from "@/lib/canvas/image-gen-runtime";
 import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
+import { projectIdFromRequest } from "@/lib/db/project-scope";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,14 +15,23 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "请先登录后再生图" }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { boardId?: unknown; nodeId?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      boardId?: unknown;
+      nodeId?: unknown;
+      projectId?: string | null;
+    };
     const boardId = typeof body.boardId === "string" ? body.boardId.trim() : "";
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.trim() : "";
     if (!boardId || !nodeId) {
       return Response.json({ error: "缺少 boardId 或 nodeId" }, { status: 400 });
     }
 
-    const board = await getCanvasBoard(supabase, boardId);
+    const projectId = projectIdFromRequest(req, body.projectId);
+    const board = await getCanvasBoard(
+      supabase,
+      boardId,
+      projectId === undefined ? {} : { projectId },
+    );
     if (!board) {
       return Response.json({ error: "画布不存在" }, { status: 404 });
     }
@@ -34,6 +44,7 @@ export async function POST(req: NextRequest) {
       board,
       nodeId,
       workspaceSnapshot,
+      projectId,
     });
     return Response.json(result);
   } catch (error) {

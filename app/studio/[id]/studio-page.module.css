@@ -32,22 +32,23 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 30px;
-  height: 16px;
-  border-radius: 999px;
-  border: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--otato-control-inner-radius, 10px);
+  border: 2px solid #050505;
   padding: 0;
-  background: rgba(82, 82, 91, 0.7);
+  background: #ffffff;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
   transition: background 200ms ease;
   cursor: pointer;
 }
 
 .autoSwitchActive {
-  background: rgba(16, 185, 129, 0.9);
+  background: #050505;
 }
 
 .autoSwitchError {
-  background: rgba(220, 38, 38, 0.85);
+  background: #b42318;
 }
 
 .autoSwitch:disabled {
@@ -61,14 +62,14 @@
   left: 2px;
   width: 12px;
   height: 12px;
-  border-radius: 999px;
+  border-radius: 6px;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   transition: transform 200ms ease;
 }
 
 .autoSwitchActive span {
-  transform: translateX(14px);
+  transform: translateX(16px);
 }
 
 .autoLabel {
@@ -207,7 +208,9 @@
 
 .autoSwitch {
   border: 2px solid #050505;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: #ffffff;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .autoSwitchActive {

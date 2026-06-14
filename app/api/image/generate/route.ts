@@ -71,6 +71,20 @@ export async function POST(req: NextRequest) {
   const incoming = await parseGenerateRequest(req);
   if (!incoming.ok) return incoming.response;
   const body = incoming.body;
+  const projectId = body.projectId?.trim();
+  if (!projectId) {
+    return Response.json({ error: "缺少 projectId，项目工作台生成必须绑定项目。" }, { status: 400 });
+  }
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (projectError) throw projectError;
+  if (!project) {
+    return Response.json({ error: "项目不存在或无权访问" }, { status: 403 });
+  }
 
   const modelId = body.model?.id;
   if (modelId !== "gpt-image-2" && modelId !== "nano-banana-2" && modelId !== "nano-banana-pro") {

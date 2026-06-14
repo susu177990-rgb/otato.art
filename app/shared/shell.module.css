@@ -15,8 +15,8 @@
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background: #ffffff;
-  color: #050505;
+  background: var(--otato-bg, #faf7ef);
+  color: var(--otato-text, #181818);
 }
 
 /* `.body` 是 flex column 的可滚动子容器，跟 `.page` 配合时由它独占滚动条，
@@ -63,18 +63,18 @@
   position: relative;
   z-index: 40;
   flex-shrink: 0;
-  margin: 12px 18px 0;
-  min-height: 52px;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  min-height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 8px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
+  padding: 10px 14px;
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
 }
 
 .topbarLeft {
@@ -97,9 +97,11 @@
 
 .brandLogo {
   display: block;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px var(--otato-line, #181818);
 }
 
 .brandLogoLink {
@@ -111,10 +113,10 @@
 }
 
 .brandWordmark {
-  color: #050505;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  color: var(--otato-text, #181818);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
   line-height: 1;
   white-space: nowrap;
 }
@@ -134,7 +136,7 @@
   border: 0;
   background: transparent;
   box-shadow: none;
-  color: #5f5f5a;
+  color: var(--otato-muted, #6f6a61);
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -149,7 +151,7 @@
 }
 
 .dockTextLink:hover {
-  color: #050505;
+  color: var(--otato-text, #181818);
 }
 
 .dockTextLink:focus-visible {
@@ -165,44 +167,48 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
-  padding: 0 18px;
-  border: 3px solid #050505;
-  border-radius: 15px;
-  background: #ffffff;
-  color: #050505;
+  min-height: var(--otato-topbar-control-height, 42px);
+  height: auto;
+  padding: 0 22px;
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 900;
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
   backdrop-filter: none;
-  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .navLink:hover:not(:disabled) {
-  border-color: #050505;
-  background: #f3f3ef;
-  color: #050505;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--otato-text, #181818);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .navLinkActive {
-  border-color: #050505 !important;
-  background: #050505 !important;
+  border-color: var(--otato-line, #181818) !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818) !important;
 }
 
 .navLink:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  background: var(--otato-yellow, #ffd86b);
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .navLink:focus-visible {
-  outline: none;
-  outline-offset: 0;
-  box-shadow: none;
+  outline: 3px solid rgba(255, 77, 61, 0.55);
+  outline-offset: 3px;
 }
 
 .navLink:disabled {
@@ -212,14 +218,13 @@
 
 /* 主操作（白底深字）；用于「保存 / 进入 / 确定」 */
 .navLinkPrimary {
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
-  border-color: #050505;
-  box-shadow: none;
+  border-color: var(--otato-line, #181818);
 }
 
 .navLinkPrimary:hover:not(:disabled) {
-  background: #050505;
+  background: #ff6b5d;
   color: #ffffff;
 }
 
@@ -240,34 +245,40 @@
 
 .segmented {
   display: inline-flex;
+  gap: var(--otato-switch-gap, 4px);
   padding: 4px;
-  border: 3px solid #050505;
-  border-radius: 15px;
-  background: #ffffff;
+  border: 2px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
   overflow: hidden;
   background-clip: padding-box;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
 }
 
 .segmentedItem {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: transparent;
   padding: 7px 14px;
-  color: #050505;
+  color: var(--otato-text, #181818);
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
   overflow: hidden;
   background-clip: padding-box;
-  transition: color 140ms ease;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .segmentedItem:hover {
-  color: #050505;
+  color: var(--otato-text, #181818);
+}
+
+.segmentedItem:active:not(:disabled) {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
 }
 
 .segmentedItemActive {
-  background: #050505;
+  background: var(--otato-text, #181818);
   color: #ffffff;
   box-shadow: none;
 }
@@ -279,34 +290,62 @@
 /* 作图页 composer：与旁侧 select /「生成」按钮统一外框高度（须与 .segmented 同时置于同一元素） */
 .segmented.segmentedComposer {
   box-sizing: border-box;
-  height: 34px;
-  /* 34px total height = 3px border + 2px inset + 24px item + 2px inset + 3px border. */
-  padding: 2px;
+  height: var(--otato-workbar-control-height, 34px);
+  gap: var(--otato-workbar-button-gap, 10px);
+  padding: 0;
   align-items: center;
-  border-radius: 15px;
-  overflow: hidden;
-  background-clip: padding-box;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  background-clip: border-box;
+  box-shadow: none;
 }
 
 .segmented.segmentedComposer .segmentedItem {
   box-sizing: border-box;
-  height: 24px;
-  padding: 0 12px;
+  height: var(--otato-workbar-control-height, 34px);
+  padding: 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
   overflow: hidden;
   background-clip: padding-box;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.segmented.segmentedComposer .segmentedItem:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.segmented.segmentedComposer .segmentedItem:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.segmented.segmentedComposer .segmentedItemActive,
+.segmented.segmentedComposer .segmentedItemActive:hover:not(:disabled) {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
 }
 
 /* ---------- Card / Section ---------- */
 
 .card {
-  border: 3px solid #050505;
-  border-radius: 30px;
-  background: #ffffff;
-  box-shadow: none;
+  border: 2px solid var(--otato-line, #181818);
+  border-radius: var(--otato-radius-lg, 32px);
+  background: var(--otato-surface-strong, #ffffff);
+  box-shadow: var(--otato-shadow-md, 5px 5px 0 #181818);
   backdrop-filter: none;
   padding: 18px 20px;
   display: flex;
@@ -329,15 +368,15 @@
 
 .cardTitle {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #050505;
+  font-size: 14px;
+  font-weight: 850;
+  color: var(--otato-text, #181818);
 }
 
 .cardSubtitle {
   margin: 4px 0 0;
   font-size: 11px;
-  color: #5f5f5a;
+  color: var(--otato-muted, #6f6a61);
 }
 
 /* ---------- Form fields ---------- */
@@ -350,19 +389,20 @@
 }
 
 .fieldLabel {
-  color: #5f5f5a;
+  color: var(--otato-muted, #6f6a61);
   font-size: 11px;
+  font-weight: 750;
 }
 
 .input,
 .select,
 .textarea {
   width: 100%;
-  border: 2px solid #050505;
-  border-radius: 18px;
-  background: #ffffff;
+  border: 2px solid var(--otato-line, #181818);
+  border-radius: var(--otato-radius-sm, 16px);
+  background: var(--otato-surface-strong, #ffffff);
   padding: 10px 12px;
-  color: #050505;
+  color: var(--otato-text, #181818);
   font-family: inherit;
   font-size: 13px;
   outline: none;
@@ -372,8 +412,8 @@
 .input:focus,
 .select:focus,
 .textarea:focus {
-  border-color: #050505;
-  background: #f7f7f4;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-surface, #fffdf8);
 }
 
 .input::placeholder,
@@ -399,11 +439,11 @@
   box-sizing: border-box;
   width: 100%;
   margin: 0;
-  border: 2px solid #050505;
+  border: 2px solid var(--otato-line, #181818);
   border-radius: 18px;
-  background: #ffffff;
+  background: var(--otato-surface-strong, #ffffff);
   padding: 5px 10px;
-  color: #050505;
+  color: var(--otato-text, #181818);
   font-family: inherit;
   font-size: 13px;
   line-height: 1.35;
@@ -413,8 +453,8 @@
 }
 
 .textareaComposer:focus {
-  border-color: #050505;
-  background: #f7f7f4;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-surface, #fffdf8);
 }
 
 .textareaComposer::placeholder {
@@ -436,11 +476,11 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #050505;
+  color: var(--otato-text, #181818);
 }
 
 .checkboxRow input[type="checkbox"] {
-  accent-color: #050505;
+  accent-color: var(--otato-red, #ff4d3d);
 }
 
 /* ---------- Buttons (form submit / inline action) ---------- */
@@ -452,46 +492,53 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 34px;
+  min-height: 38px;
+  height: auto;
   padding: 0 16px;
-  border: 3px solid #050505;
-  border-radius: 15px;
-  background: #ffffff;
-  color: #050505;
+  border: 2px solid var(--otato-line, #181818);
+  border-radius: var(--otato-radius-pill, 999px);
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
   font-size: 12px;
-  font-weight: 600;
-  box-shadow: none;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  font-weight: 850;
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
 .button:hover:not(:disabled) {
-  border-color: #050505;
-  background: #f3f3ef;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--otato-line, #181818);
+}
+
+.button:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .button:focus-visible {
-  outline: none;
-  outline-offset: 0;
-  box-shadow: none;
+  outline: 3px solid rgba(255, 77, 61, 0.55);
+  outline-offset: 3px;
 }
 
 .button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
-  background: #ffffff;
-  color: #5f5f5a;
-  border-color: #050505;
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-muted, #6f6a61);
+  border-color: var(--otato-line, #181818);
 }
 
 .buttonPrimary {
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
-  border-color: #050505;
-  box-shadow: none;
+  border-color: var(--otato-line, #181818);
 }
 
 .buttonPrimary:hover:not(:disabled) {
-  background: #050505;
+  background: #ff6b5d;
   color: #ffffff;
 }
 
@@ -508,20 +555,30 @@
 }
 
 .buttonSubtle {
-  height: 28px;
+  min-height: 30px;
+  height: auto;
   padding: 0 12px;
-  border-radius: 11px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #d4d4d8;
+  border-radius: var(--otato-radius-pill, 999px);
+  background: var(--otato-surface, #fffdf8);
+  border: 1.5px solid var(--otato-line, #181818);
+  color: var(--otato-text, #181818);
   font-size: 11px;
-  box-shadow: none;
+  font-weight: 850;
+  box-shadow: var(--otato-shadow-xs, 2px 2px 0 #181818);
 }
 
 .buttonSubtle:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.045);
-  color: #fafafa;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--otato-text, #181818);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.buttonSubtle:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 /* ---------- Banners (info/success/warn/error) ---------- */
@@ -721,8 +778,8 @@
   align-items: center;
   justify-content: center;
   width: 44px;
-  height: 44px;
-  border-radius: 15px;
+  height: var(--otato-topbar-control-height, 42px);
+  border-radius: var(--otato-control-radius, 15px);
   background: rgba(255, 255, 255, 0.06);
   color: #fafafa;
 }
@@ -1406,9 +1463,9 @@
 }
 
 .topbar {
-  margin: 24px 28px 0;
-  min-height: 48px;
-  padding: 0;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  min-height: 64px;
+  padding: 10px 14px;
   gap: 18px;
 }
 
@@ -1432,13 +1489,14 @@
   border-radius: 15px;
   background: #ffffff;
   color: var(--outline-ink, #050505);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 900;
   text-decoration: none;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .topbarLeft > a.plainDockText:hover {
-  background: var(--outline-fill, #f3f3ef);
+  background: var(--otato-yellow-soft, #fff1a8);
 }
 
 .brandLogo {
@@ -1522,8 +1580,8 @@
 .buttonSubtle:hover:not(:disabled),
 .iconBtn:hover:not(:disabled) {
   border-color: var(--outline-border, #050505);
-  background: var(--outline-ink, #050505);
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--outline-ink, #050505);
 }
 
 .navLink:active:not(:disabled),
@@ -1534,7 +1592,12 @@
 
 .navLinkActive,
 .navLinkPrimary,
-.buttonPrimary,
+.buttonPrimary {
+  border-color: var(--outline-border, #050505) !important;
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
+}
+
 .segmentedItemActive {
   border-color: var(--outline-border, #050505) !important;
   background: var(--outline-ink, #050505) !important;
@@ -1543,7 +1606,11 @@
 }
 
 .navLinkPrimary:hover:not(:disabled),
-.buttonPrimary:hover:not(:disabled),
+.buttonPrimary:hover:not(:disabled) {
+  background: #ff6b5d !important;
+  color: #ffffff !important;
+}
+
 .segmentedItemActive:hover {
   background: var(--outline-ink, #050505) !important;
   color: #ffffff !important;
@@ -1565,15 +1632,17 @@
 
 .segmented {
   border: 3px solid var(--outline-border, #050505);
-  border-radius: 15px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
+  gap: var(--otato-switch-gap, 4px);
   padding: 4px;
   overflow: hidden;
   background-clip: padding-box;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .segmentedItem {
-  border-radius: 8px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   color: var(--outline-ink, #050505);
   font-weight: 800;
   overflow: hidden;
@@ -1586,10 +1655,11 @@
 .buttonSubtle,
 .segmented {
   border-radius: 15px;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .segmentedItem {
-  border-radius: 8px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   overflow: hidden;
   background-clip: padding-box;
 }
@@ -1602,17 +1672,19 @@
 .segmented.segmentedComposer .segmentedItem,
 .segmented.segmentedComposer .segmentedItem:hover,
 .segmented.segmentedComposer .segmentedItem:focus-visible {
-  background: transparent !important;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
   color: var(--outline-ink, #050505);
-  box-shadow: none !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
 }
 
 .segmented.segmentedComposer .segmentedItemActive,
 .segmented.segmentedComposer .segmentedItemActive:hover,
 .segmented.segmentedComposer .segmentedItemActive:focus-visible {
-  background: var(--outline-ink, #050505) !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
 }
 
 .card,
@@ -1643,12 +1715,31 @@
 .textarea,
 .textareaComposer {
   border: 2px solid var(--outline-border, #050505);
-  border-radius: 18px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   background-clip: padding-box;
   color: var(--outline-ink, #050505);
   overflow: hidden;
   isolation: isolate;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.select {
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.select:hover,
+.select:focus,
+.select:focus-visible {
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.select:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .input::placeholder,
@@ -2341,7 +2432,7 @@
 
 @media (max-width: 920px) {
   .topbar {
-    margin: 16px 16px 0;
+    margin: 10px 12px 0;
     flex-wrap: wrap;
   }
 

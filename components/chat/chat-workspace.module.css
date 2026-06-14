@@ -4,6 +4,7 @@
   position: relative;
   flex: 1;
   width: 100%;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   box-sizing: border-box;
@@ -15,6 +16,11 @@
   --chat-session-rail: 120px;
   --chat-rail-gutter: 24px;
   --chat-message-width: min(980px, calc(100vw - 430px));
+}
+
+.workspaceComposerWrap {
+  max-width: min(1040px, calc(100vw - 430px));
+  padding-top: 6px;
 }
 
 .messages {
@@ -54,6 +60,31 @@
   max-width: 520px;
   margin-inline: auto;
   text-align: center;
+}
+
+.emptyEyebrow {
+  margin: 0 0 10px;
+  color: #050505;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: #050505;
+  font-size: clamp(34px, 6vw, 72px);
+  line-height: 0.92;
+  font-weight: 950;
+  letter-spacing: -0.06em;
+}
+
+.emptyCopy {
+  margin: 16px auto 0;
+  max-width: 420px;
+  color: #5f5f5a;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .messageList {
@@ -225,9 +256,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
+  height: 34px;
   padding: 0 12px;
-  border: 2px solid #050505;
+  border: 3px solid #050505;
   border-radius: 15px;
   background: #ffffff;
   color: #050505;
@@ -236,19 +267,30 @@
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
-  box-shadow: none;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .presetModeToggle:hover,
 .presetModeToggle:focus-visible {
   outline: none;
-  background: #f3f3ef;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.presetModeToggle:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .presetModeToggleActive,
 .presetModeToggleActive:hover,
-.presetModeToggleActive:focus-visible {
-  background: #050505;
+.presetModeToggleActive:focus-visible,
+.presetModeToggleActive:active {
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
 }
 
@@ -259,7 +301,7 @@
   width: 30px;
   height: 18px;
   border: 2px solid currentColor;
-  border-radius: 999px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: transparent;
 }
 
@@ -385,8 +427,8 @@
 
 .presetLibraryClear:hover,
 .presetLibraryClose:hover {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
 }
 
 .presetLibraryGrid {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useProjectWorkspace } from "@/components/project/ProjectProvider";
 import type { ProjectSummary } from "@/lib/types";
 import { STAGE_LABELS } from "@/lib/types";
 import shellStyles from "../shared/shell.module.css";
@@ -22,18 +23,26 @@ function formatUpdated(iso: string) {
 
 function ProjectsHubInner() {
   const router = useRouter();
+  const { openCreateDialog, openDeleteDialog } = useProjectWorkspace();
 
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch("/api/projects");
-      if (res.ok) setProjects(await res.json());
+      if (res.status === 401) {
+        setNeedsLogin(true);
+        setProjects([]);
+        return;
+      }
+      if (res.ok) {
+        setNeedsLogin(false);
+        setProjects(await res.json());
+      }
     } catch {
       // ignore
     } finally {
@@ -68,68 +77,69 @@ function ProjectsHubInner() {
   }, [projects, query, sortKey]);
 
   function handleOpen(id: string) {
-    router.push(`/studio/${id}`);
+    router.push(`/projects/${encodeURIComponent(id)}`);
   }
 
-  async function handleCreate() {
-    if (creating) return;
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "新剧本项目" }),
-      });
-      if (!res.ok) throw new Error("创建失败");
-      const project = (await res.json()) as { id: string };
-      router.push(`/project/${project.id}/onboarding`);
-    } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "创建失败");
-      setCreating(false);
-    }
-  }
-
-  async function handleDelete(e: MouseEvent, id: string) {
+  function handleDelete(e: MouseEvent, project: ProjectSummary) {
     e.stopPropagation();
-    if (!confirm("确定删除该项目？此操作不可恢复。")) return;
-    try {
-      await fetch(`/api/projects/${id}`, { method: "DELETE" });
-      await fetchProjects();
-    } catch {
-      // ignore
-    }
+    openDeleteDialog({
+      id: project.id,
+      name: project.name,
+      onDeleted: fetchProjects,
+    });
   }
 
   return (
     <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
-        <div className={shellStyles.topbarLeft}>
-          <Link href="/" className={shellStyles.navLink}>
-            返回首页
+      <header className={styles.projectTopbar}>
+        <div className={styles.projectTopbarIdentity}>
+          <Link href="/" className={styles.projectTopbarBack}>
+            首页
           </Link>
+          <span className={styles.projectTopbarTitle}>项目</span>
         </div>
-        <nav className={shellStyles.topnav}>
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            disabled={creating}
-            className={[shellStyles.navLink, shellStyles.navLinkPrimary].join(" ")}
-          >
-            {creating ? "创建中…" : "新建项目"}
-          </button>
+
+        <nav className={styles.projectTopbarModes} aria-label="项目入口">
+          <span className={styles.projectTopbarModeActive}>项目列表</span>
+          <Link href="/prompt" className={styles.projectTopbarMode}>
+            预设社区
+          </Link>
         </nav>
+
+        <div className={styles.projectTopbarActions}>
+          {needsLogin ? (
+            <Link href="/login?next=/projects" className={styles.projectTopbarAction}>
+              登录
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={openCreateDialog}
+              className={styles.projectTopbarAction}
+            >
+              新建项目
+            </button>
+          )}
+        </div>
       </header>
 
       <div className={shellStyles.body}>
         <div className={[shellStyles.shell, shellStyles.shellWide].join(" ")}>
-          {createError ? (
-            <div className={[shellStyles.banner, shellStyles.bannerError].join(" ")}>
-              {createError}
-            </div>
+          <section className={styles.hero}>
+            <span>PROJECTS</span>
+            <h1>项目</h1>
+            <p>只填写项目名称即可立项；进入项目后再切换工作台、剧本和无限画布。</p>
+          </section>
+
+          {needsLogin ? (
+            <section className={styles.loginPanel}>
+              <h2>先登录再管理项目</h2>
+              <p>项目、工作台、剧本、画布、素材和画廊都绑定账号保存。</p>
+              <Link href="/login?next=/projects">去登录</Link>
+            </section>
           ) : null}
 
-          <div className={styles.toolbar}>
+          {!needsLogin ? <div className={styles.toolbar}>
             <input
               type="search"
               value={query}
@@ -150,9 +160,9 @@ function ProjectsHubInner() {
               </select>
             </label>
             <span className={shellStyles.helpText}>共 {visible.length} 个项目</span>
-          </div>
+          </div> : null}
 
-          {visible.length > 0 ? (
+          {!needsLogin && visible.length > 0 ? (
             <div className={styles.grid}>
               {visible.map((p) => {
                 const stageLabel = p.currentStage > 0
@@ -219,7 +229,7 @@ function ProjectsHubInner() {
                     </div>
                     <button
                       type="button"
-                      onClick={(e) => void handleDelete(e, p.id)}
+                      onClick={(e) => handleDelete(e, p)}
                       className={styles.removeBtn}
                       title="删除项目"
                       aria-label="删除项目"
@@ -230,7 +240,7 @@ function ProjectsHubInner() {
                 );
               })}
             </div>
-          ) : (
+          ) : !needsLogin ? (
             <p className={shellStyles.helpText} style={{ textAlign: "center", marginTop: 24 }}>
               {!loaded
                 ? "加载中…"
@@ -238,7 +248,7 @@ function ProjectsHubInner() {
                   ? "没有匹配的项目，换个关键词试试。"
                   : "暂无项目，点击右上「新建项目」开始。"}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </main>

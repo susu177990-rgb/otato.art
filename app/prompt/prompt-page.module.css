@@ -1,8 +1,187 @@
 .promptPage {
-  background: #ffffff;
+  background: #faf7ef;
   color: #050505;
   height: 100dvh;
   overflow: hidden;
+}
+
+.promptTopbar {
+  position: sticky;
+  top: var(--otato-floating-bar-margin-top, 12px);
+  z-index: 80;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 76px;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  padding: 12px 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
+}
+
+.promptTopbarIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.promptTopbarBack,
+.promptTopbarTitle,
+.promptTopbarMode,
+.promptTopbarModeActive,
+.promptTopbarStatus,
+.promptTopbarAction {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--otato-topbar-control-height, 42px);
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.promptTopbarBack,
+.promptTopbarTitle {
+  flex: 0 0 auto;
+  padding: 0 20px;
+}
+
+.promptTopbarTitle {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.promptTopbarModes {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--otato-topbar-button-gap, 12px);
+  height: var(--otato-topbar-control-height, 42px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  background-clip: border-box;
+  box-shadow: none;
+}
+
+.promptTopbarActions {
+  grid-column: 3;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.promptTopbarMode,
+.promptTopbarModeActive,
+.promptTopbarStatus,
+.promptTopbarAction {
+  min-height: var(--otato-topbar-inner-height, 30px);
+  height: var(--otato-topbar-inner-height, 30px);
+  padding: 0 22px;
+}
+
+.promptTopbarStatus,
+.promptTopbarAction {
+  min-height: var(--otato-topbar-control-height, 42px);
+  height: var(--otato-topbar-control-height, 42px);
+}
+
+.promptTopbarMode,
+.promptTopbarModeActive {
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.promptTopbarModeActive {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.promptTopbarStatus {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.promptTopbarAction {
+  height: var(--otato-topbar-control-height, 42px);
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.promptTopbarMode:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.promptTopbarBack:hover,
+.promptTopbarAction:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.promptTopbarMode:active,
+.promptTopbarModeActive:active,
+.promptTopbarBack:active,
+.promptTopbarAction:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.promptTopbarModeActive:hover,
+.promptTopbarModeActive:active {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+@media (max-width: 980px) {
+  .promptTopbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 10px 14px;
+    overflow-x: auto;
+  }
+
+  .promptTopbarIdentity,
+  .promptTopbarModes,
+  .promptTopbarActions {
+    grid-column: 1;
+  }
+
+  .promptTopbarModes {
+    width: max-content;
+  }
+
+  .promptTopbarActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .promptBody {
@@ -116,6 +295,8 @@
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .secondaryFilterBar {
@@ -141,16 +322,56 @@
   font-size: 11px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.secondaryFilterButton:hover,
+.secondaryFilterButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.secondaryFilterButton:active {
+  background: var(--otato-yellow, #ffd86b);
+  color: #050505;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
 .secondaryFilterButtonActive {
   background: #050505;
   color: #ffffff;
 }
 
-.filterButton:hover,
+.secondaryFilterButtonActive:hover,
+.secondaryFilterButtonActive:active {
+  background: #050505;
+  color: #ffffff;
+}
+
+.filterButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.filterButton:active {
+  background: var(--otato-yellow, #ffd86b);
+  color: #050505;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
 .filterButtonActive {
+  background: #050505;
+  color: #ffffff;
+}
+
+.filterButtonActive:hover,
+.filterButtonActive:active {
   background: #050505;
   color: #ffffff;
 }
@@ -164,29 +385,6 @@
   border-radius: 999px;
   font-size: 11px;
   line-height: 1;
-}
-
-.statusPill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 14px;
-  border: 3px solid #050505;
-  border-radius: 15px;
-  background: #ffffff;
-  color: #050505;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.uploadButton {
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 15px;
-  font-size: 12px;
-  font-weight: 900;
 }
 
 .messageBox {
@@ -220,6 +418,21 @@
   font-size: 12px;
   text-decoration: none;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.inlineAction:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.inlineAction:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .uploadDialogRoot {
@@ -287,11 +500,15 @@
   font-weight: 950;
   line-height: 1;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .uploadCloseButton:hover:not(:disabled) {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .uploadCloseButton:disabled {
@@ -340,16 +557,20 @@
 }
 
 .uploadPresetActions button {
-  border: 2px solid #050505;
-  border-radius: 13px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
   font-weight: 900;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .uploadPresetActions button:hover:not(:disabled) {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .uploadPresetBody {
@@ -405,17 +626,18 @@
   justify-content: center;
   min-height: 28px;
   padding: 0 11px;
-  border: 2px solid #050505;
-  border-radius: 13px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
   font: inherit;
   font-size: 11px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.uploadKindButton:hover,
 .uploadKindButtonActive {
   background: #050505;
   color: #ffffff;
@@ -582,17 +804,18 @@
   justify-content: center;
   min-height: 28px;
   padding: 0 11px;
-  border: 2px solid #050505;
-  border-radius: 13px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
   font: inherit;
   font-size: 11px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.promptTagButton:hover,
 .promptTagButtonActive {
   background: #050505;
   color: #ffffff;
@@ -810,6 +1033,8 @@
   font-weight: 950;
   line-height: 1;
   cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .cardActionButton {
@@ -819,8 +1044,10 @@
 
 .cardActionButton:hover:not(:disabled),
 .copyButton:hover:not(:disabled) {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .cardActionButton:disabled {
@@ -884,13 +1111,43 @@
 .copyButton {
   width: 100%;
   min-height: 42px;
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
 }
 
 .copyButton:hover:not(:disabled) {
   background: #ffffff;
   color: #050505;
+}
+
+.uploadCloseButton:active:not(:disabled),
+.uploadPresetActions button:active:not(:disabled),
+.uploadKindButton:active,
+.promptTagButton:active,
+.cardActionButton:active:not(:disabled),
+.copyButton:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  color: #050505;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.uploadKindButton:hover,
+.promptTagButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.uploadKindButtonActive,
+.uploadKindButtonActive:hover,
+.uploadKindButtonActive:active,
+.promptTagButtonActive,
+.promptTagButtonActive:hover,
+.promptTagButtonActive:active {
+  background: #050505;
+  color: #ffffff;
 }
 
 .emptyState {

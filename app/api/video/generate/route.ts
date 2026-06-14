@@ -116,10 +116,25 @@ export async function POST(req: NextRequest) {
     resolution?: unknown;
     references?: unknown;
     providerOptions?: unknown;
+    projectId?: unknown;
   };
 
   const prompt = String(body.prompt ?? "").trim();
   if (!prompt) return Response.json({ error: "提示词为空" }, { status: 400 });
+  const projectId = String(body.projectId ?? "").trim();
+  if (!projectId) {
+    return Response.json({ error: "缺少 projectId，项目工作台生成必须绑定项目。" }, { status: 400 });
+  }
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (projectError) throw projectError;
+  if (!project) {
+    return Response.json({ error: "项目不存在或无权访问" }, { status: 403 });
+  }
 
   const modelId = mustBeVideoModelId(body.modelId);
   const modeId = mustBeModeId(body.modeId);

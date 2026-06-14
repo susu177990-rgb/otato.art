@@ -296,6 +296,7 @@ export async function runAgentChatTurn(params: {
   maxIterations?: number;
   supabase?: SupabaseClient;
   userId?: string;
+  projectId?: string | null;
 }): Promise<ChatMessage[]> {
   const {
     chatApiConfig,
@@ -307,6 +308,7 @@ export async function runAgentChatTurn(params: {
     conversationAttachments,
     supabase,
     userId,
+    projectId,
   } = params;
 
   const resolvedModelId = effectiveAgentImageModelId(undefined, defaultImageModelId);
@@ -320,6 +322,7 @@ export async function runAgentChatTurn(params: {
     latestUserText,
     supabase,
     userId,
+    projectId,
   };
 
   const slashCmd = extractLeadingSlashCommand(conversationMessages);

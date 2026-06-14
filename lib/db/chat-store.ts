@@ -6,6 +6,13 @@ import type {
   ChatMessage,
   ConversationAttachmentEntry,
 } from "@/lib/chat/types";
+import {
+  applyProjectScope,
+  normalizePageLimit,
+  type ProjectPage,
+  type ProjectPageOptions,
+  type ProjectScope,
+} from "@/lib/db/project-scope";
 
 function normalizeChatMode(mode: string | null | undefined): ChatMode {
   return mode === "skill" ? "skill" : "prompt";
@@ -26,6 +33,7 @@ function normalizeSelectedChatPresetId(selectedId: string | null | undefined): s
 
 function rowToConversation(row: {
   id: string;
+  project_id?: string | null;
   title: string;
   messages: unknown;
   attachments: unknown;
@@ -38,6 +46,7 @@ function rowToConversation(row: {
 }): ChatConversation {
   return {
     id: row.id,
+    projectId: row.project_id ?? null,
     title: row.title,
     updatedAt: new Date(row.updated_at).getTime(),
     messages: (Array.isArray(row.messages) ? row.messages : []) as ChatMessage[],
@@ -52,35 +61,85 @@ function rowToConversation(row: {
 export async function listChatConversations(
   supabase: SupabaseClient,
   userId: string,
+  scope: ProjectScope = {},
 ): Promise<ChatConversationSummary[]> {
-  const { data, error } = await supabase
+  const query = applyProjectScope(
+    supabase
     .from("chat_conversations")
-    .select("id, title, updated_at")
-    .eq("user_id", userId)
+      .select("id, project_id, title, updated_at")
+      .eq("user_id", userId),
+    scope,
+  );
+  const { data, error } = await query
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
 
   return (data ?? []).map((row) => ({
     id: row.id,
+    projectId: row.project_id ?? null,
     title: row.title,
     updatedAt: new Date(row.updated_at).getTime(),
   }));
+}
+
+export async function listChatConversationsPage(
+  supabase: SupabaseClient,
+  userId: string,
+  options: ProjectPageOptions = {},
+): Promise<ProjectPage<ChatConversationSummary>> {
+  const limit = normalizePageLimit(options.limit, 24);
+  let query = applyProjectScope(
+    supabase
+      .from("chat_conversations")
+      .select("id, project_id, title, updated_at")
+      .eq("user_id", userId),
+    options,
+  );
+  if (options.cursor) {
+    query = query.or(
+      `updated_at.lt.${options.cursor.timestamp},and(updated_at.eq.${options.cursor.timestamp},id.lt.${options.cursor.id})`,
+    );
+  }
+  const { data, error } = await query
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  return {
+    items: pageRows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id ?? null,
+      title: row.title,
+      updatedAt: new Date(row.updated_at).getTime(),
+    })),
+    nextCursor: rows.length > limit && last
+      ? { timestamp: last.updated_at, id: last.id }
+      : null,
+  };
 }
 
 export async function getChatConversation(
   supabase: SupabaseClient,
   userId: string,
   id: string,
+  scope: ProjectScope = {},
 ): Promise<ChatConversation | null> {
-  const { data, error } = await supabase
+  const query = applyProjectScope(
+    supabase
     .from("chat_conversations")
     .select(
-      "id, title, messages, attachments, chat_mode, selected_skill_pack_id, selected_chat_preset_id, preferred_llm_model_id, enabled_skill_pack_ids, updated_at",
+        "id, project_id, title, messages, attachments, chat_mode, selected_skill_pack_id, selected_chat_preset_id, preferred_llm_model_id, enabled_skill_pack_ids, updated_at",
     )
     .eq("user_id", userId)
-    .eq("id", id)
-    .maybeSingle();
+      .eq("id", id),
+    scope,
+  );
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
@@ -92,11 +151,13 @@ export async function createChatConversation(
   userId: string,
   id: string,
   title = "新对话",
+  scope: ProjectScope = {},
 ): Promise<ChatConversation> {
   const now = new Date().toISOString();
   const { error } = await supabase.from("chat_conversations").insert({
     id,
     user_id: userId,
+    project_id: scope.projectId ?? null,
     title,
     messages: [],
     attachments: [],
@@ -106,6 +167,7 @@ export async function createChatConversation(
   if (error) throw error;
   return {
     id,
+    projectId: scope.projectId ?? null,
     title,
     updatedAt: Date.now(),
     messages: [],
@@ -121,8 +183,11 @@ export async function saveChatConversation(
   supabase: SupabaseClient,
   userId: string,
   conv: ChatConversation,
+  scope: ProjectScope = {},
 ): Promise<void> {
-  const { error } = await supabase
+  const projectId = scope.projectId !== undefined ? scope.projectId : conv.projectId;
+  const query = applyProjectScope(
+    supabase
     .from("chat_conversations")
     .update({
       title: conv.title,
@@ -136,7 +201,10 @@ export async function saveChatConversation(
       updated_at: new Date(conv.updatedAt).toISOString(),
     })
     .eq("user_id", userId)
-    .eq("id", conv.id);
+      .eq("id", conv.id),
+    projectId === undefined ? {} : { projectId },
+  );
+  const { error } = await query;
 
   if (error) throw error;
 }
@@ -145,7 +213,12 @@ export async function deleteChatConversation(
   supabase: SupabaseClient,
   userId: string,
   id: string,
+  scope: ProjectScope = {},
 ): Promise<void> {
-  const { error } = await supabase.from("chat_conversations").delete().eq("user_id", userId).eq("id", id);
+  const query = applyProjectScope(
+    supabase.from("chat_conversations").delete().eq("user_id", userId).eq("id", id),
+    scope,
+  );
+  const { error } = await query;
   if (error) throw error;
 }

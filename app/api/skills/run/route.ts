@@ -11,6 +11,7 @@ type RunBody = {
   preferredImageModelId?: ImageModelId;
   action?: "prompt" | "generate";
   masterPrompt?: string;
+  projectId?: string | null;
 };
 
 export const maxDuration = 300;
@@ -29,6 +30,17 @@ export async function POST(req: Request) {
     if (body.payload === undefined) {
       return NextResponse.json({ error: "payload 必填" }, { status: 400 });
     }
+    const projectId = typeof body.projectId === "string" ? body.projectId.trim() : undefined;
+    if (projectId) {
+      const { data: project, error: projectError } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (projectError) throw projectError;
+      if (!project) return NextResponse.json({ error: "项目不存在或无权访问" }, { status: 403 });
+    }
 
     const pack = await getSiteSkillPackById(supabase, packId);
     if (!pack) return NextResponse.json({ error: "Skill 包不存在" }, { status: 404 });
@@ -41,6 +53,7 @@ export async function POST(req: Request) {
       preferredImageModelId: body.preferredImageModelId,
       action: body.action,
       masterPrompt: body.masterPrompt,
+      projectId,
     });
 
     return NextResponse.json(result);

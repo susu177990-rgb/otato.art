@@ -196,6 +196,7 @@ export async function executeCanvasVideoGeneration(params: {
   board: CanvasBoard;
   nodeId: string;
   workspaceSnapshot: WorkspaceSnapshot;
+  projectId?: string | null;
 }): Promise<CanvasVideoGenerationResult> {
   const sourceNode = mustBeVideoNode(params.board.nodes.find((node) => node.id === params.nodeId));
   const modelId = sourceNode.metadata?.videoModelId ?? params.workspaceSnapshot.videoWorkspace.uiDefaults.defaultModelId;
@@ -272,7 +273,11 @@ export async function executeCanvasVideoGeneration(params: {
     modeId: effectiveModeId,
     references,
   });
-  await prependVideoGalleryRecord(params.supabase, galleryRecord);
+  await prependVideoGalleryRecord(
+    params.supabase,
+    galleryRecord,
+    params.projectId === undefined ? {} : { projectId: params.projectId },
+  );
 
   return {
     sourceNode: nextSourceNode,

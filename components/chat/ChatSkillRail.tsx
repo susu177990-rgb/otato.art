@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
 import type { SkillPackRecord } from "@/lib/chat/types";
 import imageStyles from "@/app/image/image-page.module.css";
@@ -19,11 +20,14 @@ export function ChatSkillRail({
   skillSwitchDisabled?: boolean;
 }) {
   const noneActive = selectedPackId === null;
-  const faded = skillPacks.length + 1 > 7;
+  const itemCount = skillPacks.length === 0 ? 2 : skillPacks.length + 1;
+  const faded = itemCount > 5;
+  const visibleCount = Math.min(Math.max(itemCount, 1), 5);
+  const railStyle = { "--rail-visible-count": visibleCount } as CSSProperties;
 
   return (
     <aside className={[imageStyles.modePanel, railStyles.presetPanel].join(" ")} aria-label="Skill">
-      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
+      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")} style={railStyle}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>
             <div

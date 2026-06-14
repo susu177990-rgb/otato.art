@@ -1,0 +1,173 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 10, 10, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.dialog {
+  width: min(100%, 460px);
+  padding: 24px;
+  border: 3px solid #050505;
+  border-radius: 30px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: 8px 8px 0 #050505;
+}
+
+.dialogHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.dialogHead h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.closeButton,
+.secondaryButton,
+.primaryButton,
+.dangerButton {
+  appearance: none;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.closeButton {
+  width: 38px;
+  height: 38px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 16px;
+  border: 2px solid #050505;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.field input:focus {
+  box-shadow: 4px 4px 0 #050505;
+}
+
+.dialogCopy {
+  margin: 0;
+  color: #5f5f5a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.secondaryButton,
+.primaryButton,
+.dangerButton {
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+.primaryButton {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.dangerButton {
+  border-color: #b42318;
+  background: #b42318;
+  color: #ffffff;
+}
+
+.closeButton:hover,
+.secondaryButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.primaryButton:hover {
+  background: #ff6b5d;
+  color: #ffffff;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.dangerButton:hover {
+  background: #ffffff;
+  color: #b42318;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.closeButton:active,
+.secondaryButton:active,
+.primaryButton:active,
+.dangerButton:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.closeButton:disabled,
+.secondaryButton:disabled,
+.primaryButton:disabled,
+.dangerButton:disabled,
+.field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+@media (max-width: 560px) {
+  .scrim {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .dialog {
+    padding: 20px;
+    border-radius: 26px;
+    box-shadow: none;
+  }
+}

@@ -125,15 +125,24 @@
 
 .removeButton {
   border: 2px solid #b42318;
-  border-radius: 999px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #fff2f0;
   color: #b42318;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .removeButton:hover {
   border-color: #b42318;
   background: #b42318;
   color: #ffffff;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.removeButton:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .emptyText {

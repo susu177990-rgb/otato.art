@@ -82,6 +82,7 @@ export interface ConversationAttachmentEntry {
 
 export interface ChatConversation {
   id: string;
+  projectId?: string | null;
   title: string;
   updatedAt: number;
   messages: ChatMessage[];
@@ -108,6 +109,7 @@ export interface ChatApiConfig {
 
 export interface ChatConversationSummary {
   id: string;
+  projectId?: string | null;
   title: string;
   updatedAt: number;
 }

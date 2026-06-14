@@ -27,6 +27,7 @@ export interface AgentToolContext {
   /** 对话生图结果上传到 Storage；未提供时仅返回上游临时地址 */
   supabase?: SupabaseClient;
   userId?: string;
+  projectId?: string | null;
 }
 
 function resolveRefUrls(
@@ -208,7 +209,11 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
       refImageCount: rawRefs.length,
       status: "success",
     };
-    prependGalleryRecord(ctx.supabase, galleryRecord).catch((e) =>
+    prependGalleryRecord(
+      ctx.supabase,
+      galleryRecord,
+      ctx.projectId === undefined ? {} : { projectId: ctx.projectId },
+    ).catch((e) =>
       console.warn("[chat/agent gallery save]", e),
     );
   }

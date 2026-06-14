@@ -6,6 +6,7 @@ import type { ChatMode } from "@/lib/chat/types";
 import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } from "@/lib/image-workspace";
 import type { Settings } from "@/lib/types";
 import imageStyles from "@/app/image/image-page.module.css";
+import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-composer.module.css";
 
@@ -77,6 +78,11 @@ export function ChatComposer({
   return (
     <section ref={wrapRef} className={[imageStyles.composerWrap, className ?? ""].join(" ")}>
       {error ? <div className={imageStyles.error}>{error}</div> : null}
+
+      <div className={imageStyles.composerDock}>
+        <div className={styles.attachmentDock} />
+        <WorkspaceModeDock />
+      </div>
 
       <div
         className={[imageStyles.composer, styles.composer].join(" ")}

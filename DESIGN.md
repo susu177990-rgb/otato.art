@@ -1,116 +1,991 @@
-# Design
+# oTATo Art 统一设计规范
 
-## Source of truth
+版本：2.0  
+适用范围：首页、产品官网、功能介绍页、工作台外壳、模型配置页、积分页、预设库、画布、画廊、项目页。  
+核心要求：**全中文表达、产品化叙事、创作工作流优先、不要把 README 说明直接搬到页面上。**
 
-- Status: Active
-- Last refreshed: 2026-06-08
-- Primary product surfaces: home (`/`), login (`/login`), account (`/me`), settings (`/settings`), chat (`/chat`), projects (`/projects`), onboarding (`/project/[id]/onboarding`), studio (`/studio/[id]`), image workspace (`/image`, `/image/gallery`), video workspace (`/video`), infinite canvas (`/canvas`, `/canvas/[id]`).
-- Evidence reviewed: user-supplied reference image, current route structure under `app/`, shared shell styles under `app/shared/`, route-level CSS modules, chat components, settings panels, skill-form styles, and the current implementation state after the white-linework UI reset.
+---
 
-## Brand
+## 1. 设计定位
 
-- Personality: precise, composed, product-grade, editorial, direct.
-- Trust signals: stable black outlines, consistent control geometry, predictable page chrome, readable labels, explicit boundaries between tool groups.
-- Avoid: dark glass surfaces, translucent slabs, glow effects, soft gradient hero styling, decorative masks, speculative motion, low-contrast text, unfinished wireframe roughness.
+oTATo Art 不是单独的聊天工具，不是单独的生图工具，也不是普通素材库。它是面向内容创作者的 AI 内容创作工作台。
 
-## Product goals
+首页和后续页面必须围绕四件事展开：
 
-- Goals: unify all user-facing routes under one coherent visual system; preserve existing product behavior while replacing the visual language; improve scanability of tools, modes, presets, history, and workspace actions.
-- Non-goals: backend redesign, API changes, database/schema changes, auth/session changes, business-logic refactors, feature-scope expansion, design-system package adoption.
-- Success signals: every route reads as one product family; controls remain recognizable across pages; users can continue generating, saving, uploading, navigating, and editing without relearning workflows.
+1. **解决创作流程散乱的问题**：对话、提示词、剧本、图片、视频、画布、画廊、模型配置和生成记录放在一个流程里。
+2. **降低模型使用门槛**：内置主流模型配置，用户绑定自己的 API 密钥即可使用；没有密钥时，也可以充值积分使用站内模型能力。
+3. **沉淀长期创作资产**：角色、分镜、视觉参考、提示词预设、生成历史和项目资料不能生成一次就丢。
+4. **建立社区化预设库**：让有效提示词方法可以搜索、收藏、复制、分享和二次编辑。
 
-## Personas and jobs
+一句话定位：
 
-- Primary personas: creators and operators using oTATo to plan, generate, organize, review, and iterate on creative assets.
-- User jobs: enter a workspace, configure tools, manage projects, generate media, review history, arrange assets, and continue work across related surfaces.
-- Key contexts of use: desktop-first, long-session production work, frequent switching between rails, canvases, forms, history lists, and previews.
+```text
+把 AI 内容创作，放进一个真正连续的工作台。
+```
 
-## Information architecture
+---
 
-- Primary navigation: a sparse top bar for global movement; each workspace exposes local actions in a left rail, right rail, or compact top/bottom operation strip.
-- Core routes/screens: `/`, `/login`, `/me`, `/settings`, `/chat`, `/projects`, `/project/[id]/onboarding`, `/studio/[id]`, `/image`, `/image/gallery`, `/video`, `/canvas`, `/canvas/[id]`.
-- Content hierarchy: global chrome first; local tool selection second; one dominant work surface third; secondary status, history, and support actions adjacent to the work surface.
+## 2. 首页内容原则
 
-## Design principles
+### 2.1 不要把 README 当首页
 
-- Principle 1: Production linework, not draft wireframe. The visual system borrows the structural clarity of a wireframe, but the final interface must feel deliberate and product-ready.
-- Principle 2: White canvas, black controls. The UI defaults to white or warm-white surfaces with black outlines and dark text; color is used sparingly for semantic states.
-- Principle 3: One border owner per group. A layout cluster may be framed by one outer work panel or by individually outlined children, but never both at the same visual weight.
-- Principle 4: Rails over containers. Modes, presets, sessions, history, and categories should read as grouped rails of outlined items, not as stacked glass cards inside larger bordered trays.
-- Principle 5: Stable behavior, replaced shell. Visual redesign must not change route behavior, API usage, generation logic, upload flows, save logic, or persistence contracts.
-- Principle 6: Reuse before inventing. Shared shell primitives and established route patterns are extended first; new visual helpers are justified only when existing classes cannot express the required result.
+README 是给仓库访问者看的项目说明。首页是给潜在用户看的产品入口。二者的表达逻辑不同。
 
-## Visual language
+首页禁止采用这种结构：
 
-- Color:
-  Page background `#ffffff`
-  Soft background `#f7f7f4`
-  Fill hover `#f3f3ef`
-  Primary ink `#050505`
-  Muted ink `#5f5f5a`
-  Danger `#b42318`
-  Success `#146c43`
-  Warning `#8a5a00`
-- Typography: compact Chinese-first product typography; section titles generally `13-16px` with strong weight; body copy `12-14px`; helper text `11-12px`; no decorative letter spacing tricks.
-- Spacing rhythm: page padding `24-32px`; panel gaps `16-24px`; control gaps `8-12px`; maintain stable heights and widths for repeated controls so labels and hover states do not shift layout.
-- Shape and radius: primary work panels use `3-4px` black borders with `28-32px` radius; secondary cards and framed media use `2px` borders with `18-24px` radius; default controls use compact rounded rectangles, not pill capsules.
-- Control geometry: operation-bar controls standardize on `34px` height with `15px` outer radius; segmented controls use derived inner radii and closed geometry so inner fills never leak into parent corners, including in Safari.
-- Elevation: shadows are absent or extremely light; outlines and spacing define hierarchy.
-- Imagery and iconography: media is literal content and should be shown clearly within outlined frames; interface icons stay as simple stroke-based SVG marks aligned with the linework system.
+```text
+项目名称
+项目简介
+核心特点
+主要功能表格
+安装说明
+使用说明
+开发说明
+```
 
-## Components
+首页应该采用这种结构：
 
-- Shared shell primitives: `app/shared/shell.module.css` is the primary compatibility layer and remains the canonical source for shared page, card, form, button, segmented, banner, modal, and rail primitives.
-- Reuse targets: route CSS modules, chat rails/composer, settings panels, skill-form widgets, image/video workspaces, and canvas/studio surfaces should inherit shared control logic unless a route has a strong local reason to diverge.
-- Control states: inactive controls default to white fill with black outline; active controls invert to black fill with white text; hover states may use light fill but must preserve strong legibility and geometry; disabled controls stay visible with reduced opacity.
-- Text inputs and fields: fields keep their own border as the focus signal; do not add external gray focus rings, offset outlines, or browser-native gray halos around inputs, selects, textareas, or editable surfaces.
-- Rails: left/right/top rails are layout structures; individual rail items own the visible outline unless the rail itself is the main work panel.
-- Media frames: images, videos, and covers must clip cleanly to their parent radius; content and frame radii must align so no corner gaps appear.
-- Canvas generation nodes: image, video, and text-generation nodes on the infinite canvas reuse the same operation-bar language as the standalone workspace pages.
-- Canvas media nodes: custom linework controls are required for audio playback; native browser audio controls are not acceptable because they break the project visual system across browsers.
-- Canvas grid: the infinite-canvas grid is a functional world-space reference; decorative page grids belong only to the homepage and must not appear on unrelated routes.
-- Prompt preset card: all prompt preset cards must use the shared prompt-preset card component rather than route-local copies. The card uses a left 16:9 cover that displays the whole image, a right metadata column for kind, secondary tags, title, description, and model chips, plus a bottom action bar. On `/prompt` the action bar contains only `收藏 / 已收藏`; inside workspace preset dialogs it is split evenly between `查看提示词` and `收藏 / 已收藏`. Card body click applies/selects the preset; copying prompt text belongs only in the detail or preview dialog. Secondary tags, model chips, selected state, and favorite state must remain visually consistent across `/prompt`, image, video, chat, and canvas.
+```text
+用户痛点
+产品定位
+使用方式
+模型能力
+核心功能
+社区预设库
+适用场景
+进入工作台
+```
 
-## Accessibility
+### 2.2 首页必须回答的问题
 
-- Target standard: practical WCAG AA contrast for text and controls.
-- Keyboard/focus behavior: keyboard access remains required, but focused controls must express state through their own border and fill treatment rather than through a second external focus frame.
-- Contrast/readability: black-on-white is the default; muted text still needs clear readability; placeholder and helper text must remain visible on white backgrounds.
-- Screen-reader semantics: preserve existing semantics, labels, button roles, modal structure, and ARIA state wiring.
-- Motion sensitivity: transitions remain short and restrained; decorative animation is not introduced as a primary communication device.
+用户进入首页后，必须在 30 秒内理解以下信息：
 
-## Responsive behavior
+| 问题 | 首页回答方式 |
+|---|---|
+| 这是什么？ | 面向创作者的 AI 内容创作工作台 |
+| 解决什么问题？ | AI 创作流程、提示词、模型配置、生成结果太分散 |
+| 我能用它做什么？ | 对话、图片、视频、剧本、画布、画廊、预设、模型配置 |
+| 我没有 API 能用吗？ | 可以，充值积分即可使用站内模型能力 |
+| 我有自己的 API 呢？ | 绑定自己的 API 密钥即可使用 |
+| 为什么不是普通生图站？ | 它强调项目化、长期沉淀和工作流连续性 |
+| 预设库有什么价值？ | 把提示词方法变成可搜索、可收藏、可复制、可复用的资产 |
 
-- Supported breakpoints/devices: desktop-first with workable tablet and narrow-screen fallbacks.
-- Layout adaptation: side rails can collapse into horizontal grouped strips; main content stacks into a single column; control rows wrap instead of overflowing.
-- Touch and hover: hover is an enhancement, not a dependency; every core action remains tappable without hidden hover-only affordances.
+### 2.3 全中文规则
 
-## Interaction states
+页面主体必须全中文。允许保留以下专有名词：
 
-- Loading: use outlined placeholders, inline spinners, or existing progress treatments; avoid full-page dark overlays.
-- Empty: use concise empty states with clear boundaries and restrained helper copy.
-- Error: use readable warning or danger styles with immediate practical feedback.
-- Success: use black active controls or green semantic treatments without changing geometry.
-- Disabled: retain outline visibility with lower opacity instead of washing controls into the background.
-- Slow/offline behavior: preserve current behavioral handling; present status using the same outlined visual language.
+- oTATo Art
+- API
+- GitHub
+- OpenAI
+- Claude
+- Gemini
+- DeepSeek
+- Seedance
+- Veo
+- Nano Banana
+- GPT Image
 
-## Content voice
+除此之外，不要出现半英文半中文的标题，例如：
 
-- Tone: short, direct, operational.
-- Terminology: use product nouns consistently, including `项目`, `编剧室`, `画廊`, `模式`, `参考图`, `模型`, `比例`, `生成`, `保存`, `清空`, `设置`, `会话`.
-- Microcopy rules: labels should name the action or state directly; helper text should clarify only what is necessary; avoid decorative explanation or marketing phrasing.
+```text
+用英文口号作为主标题。
+用英文功能标题作为模块名。
+用英文开发者口号替代中文产品表达。
+```
 
-## Implementation constraints
+应改为：
 
-- Framework/styling system: Next.js App Router, React, CSS Modules, existing Tailwind import retained only because the codebase already includes it.
-- Design-token constraints: visual tokens live in `app/globals.css`; shared shell behavior lives in `app/shared/shell.module.css`; route-specific surfaces stay in local CSS modules.
-- Compatibility constraints: do not change API routes, Supabase access, authentication/session behavior, generation runtimes, upload logic, persistence keys, or schema assumptions as part of visual work.
-- Performance constraints: avoid heavy filters, layered shadows, redundant wrappers, or additional rendering surfaces that degrade workspace responsiveness.
-- Maintenance rule: preserve shared class names where possible to minimize JSX churn and reduce regression risk during continued UI cleanup.
-- Verification expectations: visual changes should be checked with lint, `npx tsc --noEmit`, and route-level smoke review on affected surfaces.
+```text
+把 AI 内容创作，放进一个真正连续的工作台。
+一个内容项目需要的创作入口，都放在这里。
+开源、可自部署、可绑定自己的模型密钥。
+```
 
-## Open questions
+---
 
-- [ ] Whether the brand should later introduce a controlled amount of hand-drawn irregularity without weakening the current production-grade linework.
-- [ ] Whether side rails in chat and studio should eventually become user-resizable.
-- [ ] Whether narrow-screen navigation should remain wrapped rails or evolve into a dedicated mobile navigation model.
+## 3. 品牌气质
+
+### 3.1 关键词
+
+```text
+开源、产品化、创作者工作台、黑白线框、米白纸感、轻微可爱、长期项目、提示词方法库、模型配置、积分使用、社区沉淀
+```
+
+### 3.2 气质比例
+
+| 气质 | 比例 | 说明 |
+|---|---:|---|
+| 专业产品感 | 45% | 让用户相信这是一个能长期使用的系统 |
+| 创作者工具感 | 30% | 体现剧本、图片、视频、画布、预设等创作流程 |
+| 开源可信感 | 15% | 通过 GitHub、可自部署、配置化能力体现 |
+| 可爱记忆点 | 10% | 由土豆 logo 和小贴纸式元素承担，不要过度卖萌 |
+
+### 3.3 避免方向
+
+- 不要做成纯 README 页面。
+- 不要做成普通 AI SaaS 落地页。
+- 不要做成赛博紫蓝渐变风。
+- 不要满屏英文口号。
+- 不要只展示模块名称，不解释解决的问题。
+- 不要把开源、自部署、API 配置讲得太工程化，创作者要能看懂。
+- 不要过度卡通化，logo 已经足够可爱。
+
+---
+
+## 4. 页面信息架构
+
+### 4.1 推荐首页结构
+
+```text
+01 顶部导航
+02 首屏主视觉
+03 痛点说明
+04 核心解决方案
+05 使用方式：自有 API / 积分 / 混合
+06 模型配置能力
+07 功能模块
+08 社区化预设库
+09 适用场景
+10 最终行动入口
+11 页脚
+```
+
+### 4.2 导航命名
+
+统一使用中文导航：
+
+```text
+解决问题
+使用方式
+模型配置
+功能模块
+预设库
+查看仓库
+进入工作台
+```
+
+不要使用：
+
+```text
+功能
+工作流
+预设
+画廊
+启动应用
+文档
+```
+
+### 4.3 首屏文案
+
+推荐主标题：
+
+```text
+把 AI 内容创作，放进一个真正连续的工作台。
+```
+
+推荐副文案：
+
+```text
+oTATo Art 把对话、图片、视频、剧本、画布、画廊、模型配置和提示词预设放在同一个流程里。你可以绑定自己的 API 密钥直接使用，也可以在没有密钥时充值积分继续创作。
+```
+
+首屏必须出现的卖点标签：
+
+```text
+内置主流模型配置
+绑定密钥即可使用
+无密钥可用积分
+社区化提示词预设
+```
+
+首屏按钮：
+
+```text
+立即访问网站
+查看 GitHub 仓库
+了解预设库
+```
+
+---
+
+## 5. 内容表达系统
+
+### 5.1 文案语气
+
+文案要像一个清楚的产品经理，不像营销号，也不像技术文档。
+
+推荐语气：
+
+```text
+清楚、直接、具体、可信、有产品判断。
+```
+
+避免语气：
+
+```text
+空泛、炫技、AI 套话、过度激动、过度技术化。
+```
+
+### 5.2 功能文案写法
+
+不要只写功能名称：
+
+```text
+对话
+图片
+视频
+剧本
+画布
+预设
+画廊
+```
+
+必须写清楚功能价值：
+
+```text
+对话工作台：用 Agent、多会话和 Skill 拆解需求、整理方案、生成提示词和推进项目。
+图片生成：通过模式化生图、参考图、历史记录和参数配置生产可复用视觉资产。
+视频生成：管理视频任务、镜头提示词、生成状态和动态素材记录。
+剧本项目：管理项目立项、人物设定、世界观、分集内容和场景规划。
+无限画布：把灵感、参考图、分镜、角色、场景和生成结果放在可视空间里组织。
+提示词预设：搜索、收藏、复制、维护和复用提示词结构，让有效方法可以沉淀下来。
+画廊资产库：集中查看图片、视频和项目结果，把生成内容继续整理成资产。
+账号与模型配置：统一管理模型、网关、密钥、积分和使用方式，让创作入口更清楚。
+```
+
+### 5.3 痛点文案写法
+
+推荐痛点：
+
+```text
+流程太散：对话、剧本、参考图、生成结果和最终素材分散在多个工具之间，项目越做越乱。
+提示词留不住：有效方法经常只存在于某次聊天记录里，下一次又要重新翻、重新改、重新试。
+模型切换麻烦：不同模型、网关、密钥和参数分散管理，每次创作都要在配置和平台之间来回切。
+结果难复用：生成后的图片、视频、画布素材和项目历史没有被结构化沉淀，很难继续整理和二次创作。
+```
+
+### 5.4 模型配置文案写法
+
+必须说清楚两种入口：
+
+```text
+有自己的 API 密钥：绑定密钥即可使用。
+没有自己的 API 密钥：充值积分后使用站内模型能力。
+```
+
+推荐表达：
+
+```text
+内置主流模型配置，少折腾接口，多专注创作。
+```
+
+不要写成：
+
+```text
+支持自定义 API。
+```
+
+这句话太弱，用户不知道它能解决什么。
+
+### 5.5 预设库文案写法
+
+预设库是重点，不要写成普通收藏夹。
+
+推荐表达：
+
+```text
+把好用的提示词方法，变成可以搜索和复用的资产。
+```
+
+预设库必须体现：
+
+- 社区共享
+- 私有收藏
+- 标签搜索
+- 一键复制
+- 二次编辑
+- 按任务场景分类
+- 可以沉淀长期创作方法
+
+---
+
+## 6. 视觉系统
+
+### 6.1 总体视觉
+
+视觉方向：
+
+```text
+米白纸感背景 + 黑色粗描边 + 圆角卡片 + 轻微彩色点缀 + 产品界面拼贴 + 土豆 logo 贴纸感
+```
+
+首页看起来要像：
+
+```text
+创作者版开源产品官网 + 可真实使用的工作台界面
+```
+
+不应该像：
+
+```text
+普通 README、模板站、AI 套壳落地页、纯后台系统、可爱儿童插画站
+```
+
+### 6.2 色彩规范
+
+核心色板：
+
+```css
+:root {
+  --bg: #FAF7EF;
+  --paper: #FFFDF8;
+  --card: #FFFFFF;
+  --ink: #171717;
+  --muted: #675F53;
+  --line: #171717;
+  --soft-line: #E7DECE;
+  --soft: #F2EADC;
+  --red: #FF4D3D;
+  --yellow: #FFD86B;
+  --blue: #A7D8FF;
+  --green: #B7DF8A;
+  --pink: #FFD1E5;
+}
+```
+
+色彩比例：
+
+```text
+米白 / 白色：70%
+黑色文字 / 描边：20%
+红黄蓝绿粉点缀：10%
+```
+
+大面积彩色只允许出现在 CTA 区或局部强调区。不要做满屏渐变。
+
+### 6.3 背景规范
+
+首页背景使用：
+
+- 米白底色
+- 细网格
+- 轻微纸感噪点
+- 弱彩色光斑
+
+背景示例：
+
+```css
+background:
+  radial-gradient(circle at 6% 8%, rgba(255,216,107,.36), transparent 28%),
+  radial-gradient(circle at 94% 6%, rgba(255,77,61,.13), transparent 28%),
+  radial-gradient(circle at 84% 72%, rgba(167,216,255,.2), transparent 24%),
+  linear-gradient(90deg, rgba(23,23,23,.04) 1px, transparent 1px),
+  linear-gradient(0deg, rgba(23,23,23,.04) 1px, transparent 1px),
+  var(--bg);
+background-size: auto, auto, auto, 42px 42px, 42px 42px, auto;
+```
+
+### 6.4 描边与阴影
+
+主风格来自黑色描边和错位阴影。
+
+```css
+border: 2px solid #171717;
+border-radius: 28px;
+box-shadow: 9px 9px 0 #171717;
+```
+
+规则：
+
+| 元素 | 描边 | 阴影 |
+|---|---:|---:|
+| 大型工作台窗口 | 2px | 9px |
+| 功能卡片 | 2px | 5px |
+| 按钮 | 2px | 3px |
+| 小标签 | 1.5px | 无或 2px |
+| 分割线 | 1px | 无 |
+
+---
+
+## 7. 组件规范
+
+### 7.1 顶部导航
+
+高度：76px  
+背景：米白半透明 + 模糊  
+边线：底部 1px 弱黑线  
+左侧：logo + oTATo Art  
+中间：中文导航  
+右侧：查看仓库、进入工作台
+
+导航项：
+
+```text
+解决问题
+使用方式
+模型配置
+功能模块
+预设库
+```
+
+按钮：
+
+```text
+查看仓库
+进入工作台
+```
+
+### 7.2 按钮
+
+主按钮：黑底白字或红底白字。  
+次按钮：白底黑字。  
+弱按钮：半透明白底 + 弱描边。
+
+推荐尺寸：
+
+```css
+min-height: 46px;
+padding: 0 18px;
+border-radius: 999px;
+font-weight: 900;
+```
+
+按钮文案必须具体：
+
+推荐：
+
+```text
+立即访问网站
+进入工作台
+查看 GitHub 仓库
+了解预设库
+复制并使用
+```
+
+不推荐：
+
+```text
+开始
+了解更多
+点击这里
+```
+
+### 7.3 卡片
+
+功能卡片结构：
+
+```text
+顶部彩色条
+标题
+说明文字
+标签组
+```
+
+卡片说明文字不要超过 2 行半。标签用于快速说明功能特征。
+
+示例：
+
+```text
+图片生成
+通过模式化生图、参考图、历史记录和参数配置生产可复用视觉资产。
+标签：参考图 / 历史记录 / 视觉资产
+```
+
+### 7.4 工作台窗口
+
+首屏右侧必须展示一个产品工作台示意，而不是只放 logo 或纯插画。
+
+工作台窗口应包含：
+
+- 左侧工作区导航
+- 顶部窗口栏
+- 对话 / 提示词 / 积分状态
+- 画布式流程节点
+- 图片、视频、剧本、画廊等模块入口
+
+目标：让用户第一眼感觉“这是一个真实产品”。
+
+### 7.5 模型配置卡片
+
+模型区建议使用深色大容器，与其他白底卡片形成对比。
+
+分类建议：
+
+```text
+对话与推理
+图片生成
+视频生成
+视觉理解
+```
+
+每张卡片内部放模型标签。
+
+### 7.6 预设库组件
+
+预设库必须有两个视觉层级：
+
+1. 左侧：搜索和预设列表。
+2. 右侧：预设详情和复制按钮。
+
+预设列表示例：
+
+```text
+电影感图片反推
+短剧分镜导演
+角色资产锁定
+Seedance 视频提示词
+```
+
+预设详情必须出现：
+
+```text
+社区共享
+可收藏
+可二次编辑
+复制并使用
+```
+
+---
+
+## 8. 功能模块展示规范
+
+### 8.1 对话工作台
+
+核心价值：不是聊天，而是推进创作项目。
+
+展示文案：
+
+```text
+用 Agent、多会话和 Skill 拆解需求、整理方案、生成提示词和推进项目。
+```
+
+标签：
+
+```text
+多会话 / 创意拆解 / 方案整理
+```
+
+### 8.2 图片生成
+
+核心价值：生产可复用视觉资产。
+
+展示文案：
+
+```text
+通过模式化生图、参考图、历史记录和参数配置生产可复用视觉资产。
+```
+
+标签：
+
+```text
+参考图 / 历史记录 / 视觉资产
+```
+
+### 8.3 视频生成
+
+核心价值：生成并管理动态素材。
+
+展示文案：
+
+```text
+管理视频任务、镜头提示词、生成状态和动态素材记录。
+```
+
+标签：
+
+```text
+生视频 / 镜头设计 / 任务记录
+```
+
+### 8.4 剧本项目
+
+核心价值：项目化管理内容设定。
+
+展示文案：
+
+```text
+管理项目立项、人物设定、世界观、分集内容和场景规划。
+```
+
+标签：
+
+```text
+角色 / 分集 / 故事线
+```
+
+### 8.5 无限画布
+
+核心价值：整理素材之间的关系。
+
+展示文案：
+
+```text
+把灵感、参考图、分镜、角色、场景和生成结果放在可视空间里组织。
+```
+
+标签：
+
+```text
+素材关系 / 分镜墙 / 灵感整理
+```
+
+### 8.6 提示词预设
+
+核心价值：沉淀方法。
+
+展示文案：
+
+```text
+搜索、收藏、复制、维护和复用提示词结构，让有效方法可以沉淀下来。
+```
+
+标签：
+
+```text
+收藏 / 复制 / 标签
+```
+
+### 8.7 画廊资产库
+
+核心价值：保存并复用生成结果。
+
+展示文案：
+
+```text
+集中查看图片、视频和项目结果，把生成内容继续整理成资产。
+```
+
+标签：
+
+```text
+图片 / 视频 / 复用
+```
+
+### 8.8 账号与模型配置
+
+核心价值：把模型使用入口讲清楚。
+
+展示文案：
+
+```text
+统一管理模型、网关、密钥、积分和使用方式，让创作入口更清楚。
+```
+
+标签：
+
+```text
+密钥 / 积分 / 网关
+```
+
+---
+
+## 9. 模型与积分表达规范
+
+### 9.1 必须出现的三种使用方式
+
+```text
+自有密钥模式：绑定自己的 API 密钥。
+积分模式：没有密钥时充值积分使用。
+混合模式：不同任务可以在密钥和积分之间灵活切换。
+```
+
+### 9.2 模型配置区必须传达的价值
+
+```text
+内置主流模型配置，少折腾接口，多专注创作。
+```
+
+模型区不要只是罗列模型名称，要先讲它们用于什么创作任务。
+
+推荐分类：
+
+| 分类 | 用途 |
+|---|---|
+| 对话与推理 | 创意拆解、剧本规划、提示词编写、项目复盘 |
+| 图片生成 | 角色图、场景图、参考图、视觉资产生产 |
+| 视频生成 | 分镜动态化、短片生成、镜头测试、素材管理 |
+| 视觉理解 | 参考图分析、构图拆解、角色资产理解、提示词反推 |
+
+### 9.3 积分文案要清楚
+
+推荐：
+
+```text
+没有自己的 API 密钥时，也可以直接用积分调用模型。
+```
+
+不推荐：
+
+```text
+支持积分体系。
+```
+
+后者太抽象。
+
+---
+
+## 10. 社区化预设库规范
+
+预设库是 oTATo Art 的重要差异点。它必须被设计成“创作者方法库”，而不是普通提示词列表。
+
+### 10.1 预设类型
+
+推荐分类：
+
+```text
+图片反推
+角色锁定
+画风继承
+短剧分镜
+MV 镜头
+生视频提示词
+参考图分析
+项目设定
+人物小传
+视觉资产整理
+```
+
+### 10.2 预设卡片字段
+
+每个预设卡片应包含：
+
+```text
+预设名称
+适用场景
+标签
+收藏状态
+使用次数或热度
+复制按钮
+二次编辑入口
+```
+
+### 10.3 预设详情页
+
+预设详情页应包含：
+
+```text
+预设说明
+适合什么任务
+输入字段
+输出结构
+完整提示词
+使用示例
+作者信息
+收藏 / 复制 / 使用 / 二次编辑
+```
+
+### 10.4 社区与私有并存
+
+预设库要同时支持：
+
+```text
+社区公开预设
+用户私有预设
+团队内部预设
+收藏夹
+历史使用记录
+```
+
+视觉上建议用标签或切换器区分。
+
+---
+
+## 11. 页面扩展规则
+
+### 11.1 新增功能页的固定结构
+
+每个功能页建议使用：
+
+```text
+首屏：一句话说清楚这个模块解决什么问题
+痛点：为什么需要这个模块
+能力：模块能做什么
+流程：用户怎么用
+界面：关键界面展示
+场景：适合什么创作任务
+行动入口：立即进入工作台
+```
+
+### 11.2 新增模块必须回答
+
+```text
+这个模块解决什么问题？
+它和其他模块怎么连接？
+它能沉淀什么资产？
+它对创作者有什么实际价值？
+```
+
+### 11.3 不允许孤立介绍功能
+
+错误示例：
+
+```text
+画廊：查看生成结果。
+```
+
+正确示例：
+
+```text
+画廊资产库：集中查看图片、视频和项目结果，把生成内容继续整理成资产。它连接图片生成、视频生成和画布，让生成结果可以继续复用。
+```
+
+---
+
+## 12. 响应式规范
+
+### 12.1 桌面端
+
+- 最大内容宽度：1180px。
+- 首屏左右布局：左文案，右工作台。
+- 功能卡片：三列。
+- 痛点卡片：四列。
+- 模型卡片：四列。
+- 适用场景：四列。
+
+### 12.2 平板端
+
+- 首屏改为上下布局。
+- 功能卡片两列。
+- 痛点卡片两列。
+- 模型卡片两列。
+- 隐藏中间导航，保留按钮。
+
+### 12.3 手机端
+
+- 所有卡片单列。
+- 工作台窗口简化侧边栏。
+- 按钮最多两行。
+- 标题降低字距压缩，避免文字挤压。
+- 不展示过多漂浮元素。
+
+---
+
+## 13. 动效规范
+
+动效必须轻，不要影响产品可信度。
+
+推荐：
+
+```text
+按钮 hover 上浮 1px
+卡片 hover 上浮 2px
+阴影轻微变大
+导航 hover 出现浅色背景
+工作台贴纸轻微倾斜
+```
+
+避免：
+
+```text
+大面积滚动视差
+复杂粒子动画
+文字逐字闪烁
+过度弹跳
+赛博霓虹流光
+```
+
+---
+
+## 14. 图标与插画规则
+
+### 14.1 Logo
+
+土豆 logo 负责品牌记忆点。页面内可以作为：
+
+- Header 标志
+- 首屏贴纸
+- Favicon
+- App 图标
+- 空状态插画的一部分
+
+### 14.2 图标风格
+
+图标统一使用：
+
+```text
+黑色线框
+圆角矩形容器
+少量彩色底色
+```
+
+不要混用 3D 图标、毛玻璃图标、Emoji 图标和复杂插画。
+
+### 14.3 产品示意图
+
+产品示意图要偏真实界面，而不是纯概念插画。必须出现：
+
+```text
+工作区导航
+任务卡片
+提示词预设
+积分状态
+画布节点
+模型或模块标签
+```
+
+---
+
+## 15. 可访问性与可读性
+
+- 正文颜色不能太浅。
+- 彩色标签必须有黑色描边或足够对比度。
+- 按钮文字必须清楚可读。
+- 不依赖颜色单独表达状态。
+- 移动端字号不能低于 14px。
+- 大标题可以紧凑，但正文行高必须充足。
+
+推荐正文：
+
+```css
+font-size: 18px;
+line-height: 1.7;
+font-weight: 560;
+color: #675F53;
+```
+
+---
+
+## 16. 设计检查清单
+
+发布任何页面前检查：
+
+```text
+[ ] 页面是否全中文，除必要专有名词外没有半英文标题？
+[ ] 首屏是否说清楚 oTATo Art 是什么？
+[ ] 是否说明解决了哪些 AI 创作痛点？
+[ ] 是否说明有自己的 API 密钥可以绑定？
+[ ] 是否说明没有 API 密钥可以充值积分使用？
+[ ] 是否说明内置主流模型配置？
+[ ] 是否突出社区化预设库？
+[ ] 是否展示真实工作台感，而不是 README 文档感？
+[ ] 是否体现对话、图片、视频、剧本、画布、画廊、预设之间的连续流程？
+[ ] 是否有清楚的进入工作台按钮？
+[ ] 卡片是否有清楚标题、说明和标签？
+[ ] 移动端是否没有排版溢出？
+[ ] 彩色点缀是否克制，没有变成儿童插画风？
+```
+
+---
+
+## 17. 后续页面统一生成提示词
+
+如果之后继续生成页面，统一使用以下设计指令：
+
+```text
+请按照 oTATo Art 统一设计规范生成页面。页面必须全中文，除 oTATo Art、API、GitHub 和模型专有名词外不要使用英文标题。整体采用米白纸感背景、黑色粗描边、圆角卡片、错位阴影、少量红黄蓝绿点缀。页面必须围绕创作者工作流展开，不要写成 README 或技术说明。必须清楚说明该页面对应功能解决什么问题、怎么使用、和其他模块如何连接、能沉淀什么创作资产。文案要具体、直接、产品化，避免空泛 AI 营销话术。
+```
+
+---
+
+## 18. 最终设计判断标准
+
+一个合格的 oTATo Art 页面应该让用户产生三个判断：
+
+```text
+1. 我知道它能解决我的 AI 创作流程混乱问题。
+2. 我知道我可以绑定自己的 API，也可以没密钥时用积分。
+3. 我知道这里不只是生成工具，而是能长期沉淀项目、提示词和素材的工作台。
+```
+
+如果页面只让用户看到“这是一个开源项目，有很多模块”，就失败了。

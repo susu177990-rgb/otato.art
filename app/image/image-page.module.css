@@ -12,6 +12,117 @@
   padding: 16px 24px 24px;
 }
 
+.projectWorkspacePage {
+  flex: 0 0 auto;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.projectWorkspacePage .stage {
+  height: 100% !important;
+  min-height: 0 !important;
+  padding: 10px 24px 14px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.projectWorkspacePage .canvas {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+
+.projectWorkspacePage .modePanel,
+.projectWorkspacePage .historyPanel {
+  top: 44%;
+  max-height: calc(100% - 12px);
+  overflow: hidden;
+}
+
+.projectWorkspacePage .modeColumn,
+.projectWorkspacePage .historyColumn {
+  --history-thumb: 68px;
+  --history-gap: 8px;
+  --history-visible: 5;
+  --mode-visible: 5;
+  --mode-gap: 8px;
+}
+
+.projectWorkspacePage .modePanelImage {
+  --image-mode-thumb: 68px;
+  --image-mode-pad-x: 6px;
+}
+
+.projectWorkspacePage .emptyHistory,
+.projectWorkspacePage .historyItem,
+.projectWorkspacePage .modePanelImage .modeButton {
+  border-radius: 18px;
+}
+
+.projectWorkspacePage .modeScrollWrap,
+.projectWorkspacePage .modeScroll,
+.projectWorkspacePage .historyScrollWrap,
+.projectWorkspacePage .historyScroll {
+  height: calc(5 * 68px + 4 * 8px);
+  max-height: calc(5 * 68px + 4 * 8px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.projectWorkspacePage .modeRailFrame,
+.projectWorkspacePage .historyRailFrame {
+  overflow: hidden;
+}
+
+.projectWorkspacePage .composerWrap {
+  max-width: min(1040px, calc(100vw - 430px));
+  padding-top: 6px;
+}
+
+.projectWorkspacePage .referenceStrip {
+  gap: 7px;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.projectWorkspacePage .refSlot {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+}
+
+.projectWorkspacePage .promptSlotGrid,
+.projectWorkspacePage .promptSlotPane {
+  grid-template-rows: 88px;
+  height: 88px;
+  min-height: 88px;
+  max-height: 88px;
+}
+
+.projectWorkspacePage .promptInput,
+.projectWorkspacePage .promptPlaceholder {
+  padding: 12px 18px;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.projectWorkspacePage .toolbar {
+  min-height: 34px;
+  gap: 6px;
+  padding: 8px 14px 10px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.projectWorkspacePage .composerSelect,
+.projectWorkspacePage .generate,
+.projectWorkspacePage .freeModeToggle {
+  height: 34px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .canvas {
   grid-column: 1;
   grid-row: 1;
@@ -1253,6 +1364,15 @@
   padding-top: 18px;
 }
 
+.composerDock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: calc(100% - 72px);
+  margin: 0 36px 12px;
+}
+
 .error {
   margin-bottom: 12px;
   border: 1px solid rgba(248, 113, 113, 0.28);
@@ -1267,11 +1387,12 @@
 
 .referenceStrip {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 9px;
   overflow-x: auto;
-  padding: 0 4px 14px;
-  margin-bottom: 12px;
+  min-width: 0;
+  padding: 0;
+  margin-bottom: 0;
 }
 
 .refSlot {
@@ -1924,8 +2045,8 @@
 .presetMetaButton:hover:not(:disabled),
 .libraryOpen:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
 }
 
 .composerSelect,
@@ -1939,8 +2060,22 @@
   background-clip: padding-box;
   color: #050505 !important;
   outline: none !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
   overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.composerSelect:hover {
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.composerSelect:active {
+  background-color: var(--otato-yellow, #ffd86b) !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
 
 /* Final preset switch redesign: keep the action bar wireframe-native. */
@@ -1956,36 +2091,51 @@
   color: #050505;
   padding: 0 8px 0 7px;
   gap: 6px;
-  box-shadow: none;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
   background-clip: padding-box;
   overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .freeModeToggle:hover,
 .freeModeToggleActive:hover {
-  background: #f3f3ef;
+  background: var(--otato-yellow-soft, #fff1a8);
   color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.freeModeToggleActive,
+.freeModeToggleActive:hover {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.freeModeToggle:active,
+.freeModeToggleActive:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .freeModeToggle:focus-visible {
   outline: none;
   outline-offset: 0;
-  box-shadow: none;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
 }
 
 .freeSwitchTrack {
   width: 36px;
   height: 18px;
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: #ffffff;
   box-shadow: none;
 }
 
 .freeModeToggleActive .freeSwitchTrack {
-  background: #050505;
+  background: #ffffff;
 }
 
 .freeSwitchThumb {
@@ -2001,7 +2151,7 @@
 
 .freeModeToggleActive .freeSwitchThumb {
   transform: translateX(18px);
-  background: #ffffff;
+  background: var(--otato-action, #ff4d3d);
 }
 
 .centerStatus {
@@ -2033,11 +2183,29 @@
 }
 
 .generate {
-  background: #050505;
-  color: #ffffff;
+  background: #ffffff;
+  color: #050505;
+  border: 3px solid #050505;
   border-radius: 15px;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
   background-clip: padding-box;
   overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.generate:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.generate:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .error,
@@ -2110,12 +2278,23 @@
   border: 3px solid #050505;
   background: #ffffff;
   color: #050505;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .promptPreviewClose:hover,
 .presetLibraryClose:hover {
-  background: #050505;
-  color: #ffffff;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.promptPreviewClose:active,
+.presetLibraryClose:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 /* Shared prompt preset cards own their height and internal structure. */
@@ -2136,6 +2315,20 @@
 .modePanel,
 .historyPanel {
   --rail-window-height: min(536px, calc(100vh - 320px));
+  --rail-frame-padding: 12px;
+  --rail-card-width: 128px;
+  --rail-card-height: 72px;
+  --rail-shadow-outset: 10px;
+  --rail-visible-count: 5;
+  --rail-card-window-width: calc(var(--rail-card-width) + var(--rail-shadow-outset));
+  --rail-frame-width: calc(var(--rail-card-window-width) + (var(--rail-frame-padding) * 2) + 6px);
+  --rail-outer-width: calc(var(--rail-frame-width) + var(--rail-shadow-outset));
+  --rail-content-height: calc(
+    (var(--rail-card-height) * var(--rail-visible-count)) +
+    (14px * (var(--rail-visible-count) - 1))
+  );
+  --rail-frame-height: calc(var(--rail-content-height) + (var(--rail-frame-padding) * 2) + 6px);
+  --rail-outer-height: calc(var(--rail-frame-height) + var(--rail-shadow-outset));
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
@@ -2146,15 +2339,17 @@
   top: 50% !important;
   bottom: auto !important;
   transform: translateY(-50%) !important;
-  max-height: var(--rail-window-height) !important;
+  width: var(--rail-outer-width) !important;
+  max-width: var(--rail-outer-width) !important;
+  max-height: min(var(--rail-outer-height), var(--rail-window-height)) !important;
+  height: min(var(--rail-outer-height), var(--rail-window-height)) !important;
   min-height: 0;
   justify-content: flex-start !important;
+  overflow: visible !important;
 }
 
 .modeRail,
 .historyRail,
-.modeRailFrame,
-.historyRailFrame,
 .modeScrollWrap,
 .historyScrollWrap,
 .modeScroll,
@@ -2166,6 +2361,31 @@
   box-shadow: none !important;
   backdrop-filter: none !important;
   filter: none !important;
+}
+
+.modeRail,
+.historyRail {
+  width: var(--rail-outer-width) !important;
+  max-width: var(--rail-outer-width) !important;
+  align-items: center !important;
+  overflow: visible !important;
+}
+
+.modeRailFrame,
+.historyRailFrame {
+  box-sizing: border-box;
+  width: var(--rail-frame-width) !important;
+  margin-inline: auto !important;
+  height: min(var(--rail-frame-height), var(--rail-window-height)) !important;
+  max-height: var(--rail-window-height) !important;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-floating-bar-radius, 24px) !important;
+  background: rgba(250, 247, 239, 0.92) !important;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505) !important;
+  backdrop-filter: blur(18px) !important;
+  filter: none !important;
+  padding: var(--rail-frame-padding) !important;
+  overflow: visible !important;
 }
 
 .modeRailFrame::before,
@@ -2188,33 +2408,50 @@
 .modePanelImage .modeColumn,
 .historyColumn {
   --history-thumb: 96px;
-  --rail-card-width: 128px;
-  --rail-card-height: 72px;
   --history-gap: 14px;
   --history-visible: 5;
   --mode-visible: 5;
-  width: var(--rail-card-width);
-  max-width: var(--rail-card-width);
+  width: var(--rail-outer-width) !important;
+  max-width: var(--rail-outer-width) !important;
+  align-items: center !important;
+  overflow: visible !important;
 }
 
 .modePanelImage .modeList,
 .historyList {
   gap: 14px !important;
-  width: var(--rail-card-width) !important;
+  width: var(--rail-card-window-width) !important;
   align-items: center;
+  justify-content: safe center !important;
+  min-height: 100% !important;
 }
 
 .modeScrollWrap,
 .historyScrollWrap {
-  max-height: var(--rail-window-height) !important;
+  width: var(--rail-card-window-width) !important;
+  max-width: var(--rail-card-window-width) !important;
+  height: min(var(--rail-content-height), calc(var(--rail-window-height) - (var(--rail-frame-padding) * 2))) !important;
+  max-height: min(var(--rail-content-height), calc(var(--rail-window-height) - (var(--rail-frame-padding) * 2))) !important;
 }
 
 .modePanelImage .modeScroll,
 .historyScroll {
-  width: var(--rail-card-width) !important;
-  max-height: var(--rail-window-height) !important;
+  width: var(--rail-card-window-width) !important;
+  height: min(var(--rail-content-height), calc(var(--rail-window-height) - (var(--rail-frame-padding) * 2))) !important;
+  max-height: min(var(--rail-content-height), calc(var(--rail-window-height) - (var(--rail-frame-padding) * 2))) !important;
   padding: 0 !important;
+  align-items: center !important;
   justify-content: safe center !important;
+}
+
+.historyRailFrame:has(.emptyHistory:only-child) {
+  height: calc(var(--rail-card-height) + (var(--rail-frame-padding) * 2) + 6px) !important;
+}
+
+.historyRailFrame:has(.emptyHistory:only-child) .historyScrollWrap,
+.historyRailFrame:has(.emptyHistory:only-child) .historyScroll {
+  height: var(--rail-card-height) !important;
+  max-height: var(--rail-card-height) !important;
 }
 
 .modePanelImage .modeButton,
@@ -2230,10 +2467,14 @@
   border-radius: 18px !important;
   background: #ffffff !important;
   color: #050505 !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease) !important;
   backdrop-filter: none !important;
   filter: none !important;
   overflow: hidden;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
 }
 
 .emptyRail,
@@ -2255,19 +2496,30 @@
 .historyItem:hover,
 .historyItem:focus-visible {
   border-color: #050505 !important;
-  background: #f3f3ef !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
   color: #050505 !important;
-  box-shadow: none !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px)) !important;
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
   outline: none;
+}
+
+.modePanelImage .modeButton:active,
+.emptyRail:active,
+.emptyHistory:active,
+.historyItem:active {
+  background: var(--otato-yellow, #ffd86b) !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px)) !important;
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
 
 .modePanelImage .modeButtonActive,
 .modePanelImage .modeButtonActive:hover,
 .modePanelImage .modeButtonActive:focus-visible {
   border-color: #050505 !important;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
-  box-shadow: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transform: none !important;
 }
 
 .modePanelImage .modeButtonActive .modeCoverFallback {
@@ -2307,6 +2559,7 @@
 .emptyHistory {
   color: #050505 !important;
   font-weight: 800;
+  text-align: center !important;
 }
 
 .modeMeta,
@@ -2315,7 +2568,7 @@
   max-width: calc(100% - 12px);
   padding: 3px 7px;
   border: 2px solid #050505;
-  border-radius: 999px;
+  border-radius: var(--otato-control-inner-radius, 10px);
   background: #ffffff !important;
   color: #050505 !important;
   font-size: 9px;
@@ -2325,8 +2578,15 @@
   box-shadow: none !important;
 }
 
+.modeName,
+.modeCoverFallback,
+.modeMeta,
+.historyMeta {
+  text-align: center !important;
+}
+
 .modePanelImage .modeButtonActive .modeMeta {
-  border-color: #ffffff;
-  background: #050505 !important;
-  color: #ffffff !important;
+  border-color: #050505;
+  background: #ffffff !important;
+  color: #050505 !important;
 }

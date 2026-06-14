@@ -11,6 +11,7 @@ import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
 import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { projectIdFromRequest } from "@/lib/db/project-scope";
 
 export const maxDuration = 300;
 
@@ -44,6 +45,7 @@ type AgentBody = {
   userMessage: ChatMessage;
   preferredImageModelId?: ImageModelId;
   preferredLlmModelId?: string;
+  projectId?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -59,7 +61,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "conversationId 与 userMessage 必填" }, { status: 400 });
     }
 
-    const conv = await getChatConversation(supabase, user.id, body.conversationId);
+    const projectId = projectIdFromRequest(req, body.projectId);
+    const scope = projectId === undefined ? {} : { projectId };
+    const conv = await getChatConversation(supabase, user.id, body.conversationId, scope);
     if (!conv) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
 
     const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
@@ -107,6 +111,7 @@ export async function POST(req: Request) {
       conversationAttachments: mergedAttachments,
       supabase,
       userId: user.id,
+      projectId,
     });
 
     const updated: typeof conv = {
@@ -128,7 +133,7 @@ export async function POST(req: Request) {
       if (title) updated.title = title;
     }
 
-    await saveChatConversation(supabase, user.id, updated);
+    await saveChatConversation(supabase, user.id, updated, scope);
 
     return NextResponse.json({
       conversation: updated,

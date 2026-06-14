@@ -14,6 +14,7 @@ import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
 import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ImageModelId } from "@/lib/image-workspace";
+import { projectIdFromRequest, type ProjectScope } from "@/lib/db/project-scope";
 
 export const maxDuration = 300;
 
@@ -23,6 +24,7 @@ type CanvasChatRunBody = {
   userMessage?: unknown;
   preferredImageModelId?: ImageModelId;
   preferredLlmModelId?: string;
+  projectId?: string | null;
 };
 
 function getSkillMarkdownBlocks(
@@ -102,15 +104,16 @@ async function resolveConversation(params: {
   userId: string;
   sourceNode: CanvasNode;
   userMessage: ChatMessage;
+  scope: ProjectScope;
 }): Promise<ChatConversation> {
   const existingId = params.sourceNode.metadata?.chatConversationId?.trim();
   if (existingId) {
-    const existing = await getChatConversation(params.supabase, params.userId, existingId);
+    const existing = await getChatConversation(params.supabase, params.userId, existingId, params.scope);
     if (existing) return existing;
   }
 
   const title = deriveConversationTitleFromFirstMessage(textFromMessage(params.userMessage)) || params.sourceNode.title || "画布对话节点";
-  return createChatConversation(params.supabase, params.userId, randomUUID(), title);
+  return createChatConversation(params.supabase, params.userId, randomUUID(), title, params.scope);
 }
 
 export async function POST(req: NextRequest) {
@@ -126,18 +129,20 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as CanvasChatRunBody;
     const boardId = typeof body.boardId === "string" ? body.boardId.trim() : "";
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.trim() : "";
+    const projectId = projectIdFromRequest(req, body.projectId);
+    const scope = projectId === undefined ? {} : { projectId };
     const userMessage = parseUserMessage(body.userMessage);
     if (!boardId || !nodeId || !userMessage || userMessage.parts.length === 0) {
       return Response.json({ error: "缺少 boardId、nodeId 或有效 userMessage" }, { status: 400 });
     }
 
-    const board = await getCanvasBoard(supabase, boardId);
+    const board = await getCanvasBoard(supabase, boardId, scope);
     if (!board) {
       return Response.json({ error: "画布不存在" }, { status: 404 });
     }
     const sourceNode = mustBeTextNode(board.nodes.find((node) => node.id === nodeId));
 
-    const conv = await resolveConversation({ supabase, userId: user.id, sourceNode, userMessage });
+    const conv = await resolveConversation({ supabase, userId: user.id, sourceNode, userMessage, scope });
     const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
     const preferredLlmModelId = typeof body.preferredLlmModelId === "string" && body.preferredLlmModelId.trim()
       ? body.preferredLlmModelId.trim()
@@ -177,7 +182,7 @@ export async function POST(req: NextRequest) {
       if (title) updatedConversation.title = title;
     }
 
-    await saveChatConversation(supabase, user.id, updatedConversation);
+    await saveChatConversation(supabase, user.id, updatedConversation, scope);
     const previewMarkdown = latestAssistantMarkdown(updatedConversation.messages);
 
     const sourceNodeNext: CanvasNode = {

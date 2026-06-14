@@ -64,7 +64,7 @@ export async function runSkillFormApi(
   packId: string,
   payload: unknown,
   preferredImageModelId?: ImageModelId,
-  options?: { action?: "prompt" | "generate"; masterPrompt?: string },
+  options?: { action?: "prompt" | "generate"; masterPrompt?: string; projectId?: string },
 ): Promise<SkillFormRunResult> {
   const res = await fetch("/api/skills/run", {
     method: "POST",

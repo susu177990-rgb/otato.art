@@ -90,8 +90,9 @@ export async function runSkillForm(params: {
   preferredImageModelId?: ImageModelId;
   action?: "prompt" | "generate";
   masterPrompt?: string;
+  projectId?: string | null;
 }): Promise<SkillFormRunResult> {
-  const { supabase, userId, pack, payload, preferredImageModelId, action, masterPrompt } = params;
+  const { supabase, userId, pack, payload, preferredImageModelId, action, masterPrompt, projectId } = params;
 
   if (!pack.inputSchema) {
     throw new Error("该 Skill 未配置表单 interface");
@@ -175,7 +176,11 @@ export async function runSkillForm(params: {
     refImageCount: refImages.length,
     status: "success",
   };
-  prependGalleryRecord(supabase, galleryRecord).catch((e) =>
+  prependGalleryRecord(
+    supabase,
+    galleryRecord,
+    projectId === undefined ? {} : { projectId },
+  ).catch((e) =>
     console.warn("[skills/run gallery save]", e),
   );
 

@@ -7,7 +7,8 @@ import type { PersonalApiModule, PersonalApiTestResult } from "@/lib/personal-ap
 export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", { cache: "no-store" });
   if (!res.ok) {
-    throw new Error("无法加载工作区设置");
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error?.trim() || "无法加载工作区设置");
   }
   return (await res.json()) as WorkspaceSnapshot;
 }
@@ -150,25 +151,32 @@ export async function deleteVideoModeCover(
   return { videoWorkspace: data.videoWorkspace };
 }
 
-export async function fetchGalleryRecords() {
-  const res = await fetch("/api/image/gallery", { cache: "no-store" });
+function projectQuery(projectId?: string): string {
+  return projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+}
+
+export async function fetchGalleryRecords(projectId?: string) {
+  const res = await fetch(`/api/image/gallery${projectQuery(projectId)}`, { cache: "no-store" });
   if (!res.ok) throw new Error("无法加载画廊");
   const data = (await res.json()) as { records: import("@/lib/image-workspace").ImageGalleryRecord[] };
   return data.records;
 }
 
-export async function fetchVideoGalleryRecords() {
-  const res = await fetch("/api/video/gallery", { cache: "no-store" });
+export async function fetchVideoGalleryRecords(projectId?: string) {
+  const res = await fetch(`/api/video/gallery${projectQuery(projectId)}`, { cache: "no-store" });
   if (!res.ok) throw new Error("无法加载生视频记录");
   const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
   return data.records;
 }
 
-export async function prependVideoGalleryRecordApi(record: import("@/lib/video-gallery").VideoGalleryRecord) {
+export async function prependVideoGalleryRecordApi(
+  record: import("@/lib/video-gallery").VideoGalleryRecord,
+  projectId?: string,
+) {
   const res = await fetch("/api/video/gallery", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "prepend", record }),
+    body: JSON.stringify({ action: "prepend", record, projectId }),
   });
   if (!res.ok) throw new Error("无法保存生视频记录");
   const data = (await res.json()) as { records: import("@/lib/video-gallery").VideoGalleryRecord[] };
@@ -199,11 +207,12 @@ export async function importVideoGalleryRecordsApi(records: import("@/lib/video-
 
 export async function prependGalleryRecordApi(
   record: import("@/lib/image-workspace").ImageGalleryRecord,
+  projectId?: string,
 ) {
   const res = await fetch("/api/image/gallery", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "prepend", record }),
+    body: JSON.stringify({ action: "prepend", record, projectId }),
   });
   if (!res.ok) throw new Error("无法保存画廊记录");
   const data = (await res.json()) as { records: import("@/lib/image-workspace").ImageGalleryRecord[] };

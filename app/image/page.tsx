@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
@@ -24,6 +25,8 @@ import {
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
+import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
@@ -66,6 +69,7 @@ const RESULT_ASPECT_RATIO_NUMBER_BY_VALUE: Partial<Record<ImageAspectRatio, numb
 const IMAGE_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-image-generation-runtime-v1";
 const IMAGE_GENERATION_RUNTIME_EVENT = "script-agent-image-generation-runtime-change";
 const IMAGE_REFERENCE_CACHE_STORAGE_KEY = "script-agent-image-reference-cache-v1";
+const OPEN_IMAGE_PROMPT_PRESETS_EVENT = "otato:open-image-prompt-presets";
 const FREE_MODE = { id: "free", label: "自由模式" } as const;
 
 type RefSlot = { previewUrl: string; file: File } | null;
@@ -388,6 +392,14 @@ async function downloadGeneratedImage(url: string): Promise<void> {
 }
 
 export default function ImagePage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const workspaceProject = useOptionalWorkspaceProject();
+  const projectId = workspaceProject?.projectId;
+  useEffect(() => {
+    if (pathname === "/image") router.replace("/projects");
+  }, [pathname, router]);
+
   const { settings: llmSettings, imageWorkspace, videoWorkspace, apiUsageMode, workspaceReady, refreshWorkspace } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
@@ -466,6 +478,14 @@ export default function ImagePage() {
   }, []);
 
   useEffect(() => {
+    function openPromptPresetLibrary() {
+      setPresetLibraryOpen(true);
+    }
+    window.addEventListener(OPEN_IMAGE_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
+    return () => window.removeEventListener(OPEN_IMAGE_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
+  }, []);
+
+  useEffect(() => {
     setResultNaturalAspectRatio("");
     setResultNaturalAspectRatioValue(0);
   }, [resultUrl]);
@@ -540,7 +560,7 @@ export default function ImagePage() {
   useEffect(() => {
     async function refreshGallery() {
       try {
-        const records = await fetchGalleryRecords();
+        const records = await fetchGalleryRecords(projectId);
         setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(records)));
       } catch (e) {
         console.warn("[image] gallery load failed", e);
@@ -556,7 +576,7 @@ export default function ImagePage() {
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [workspaceReady, refreshWorkspace]);
+  }, [workspaceReady, refreshWorkspace, projectId]);
 
   const loadImagePromptPresets = useCallback(() => {
     void fetchSitePromptPresets("image")
@@ -876,7 +896,7 @@ export default function ImagePage() {
     saveReferenceImagesForRecord(record.id, referenceImages ?? []);
     if (imageUrl?.trim()) saveImageResultForRecord(record.id, imageUrl);
     try {
-      const next = await prependGalleryRecordApi(record);
+      const next = await prependGalleryRecordApi(record, projectId);
       if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
     } catch (e) {
       console.warn("[image] gallery save failed", e);
@@ -962,6 +982,7 @@ export default function ImagePage() {
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
           refImages: [],
+          projectId,
         }),
       );
       for (const slot of requestSlots) {
@@ -1016,9 +1037,14 @@ export default function ImagePage() {
     }
   }
 
+  const modeRailVisibleCount = Math.min(Math.max(modes.length, 1), 5);
+  const historyRailVisibleCount = Math.min(Math.max(sidebarHistoryRecords.length, 1), 5);
+  const modeRailStyle = { "--rail-visible-count": modeRailVisibleCount } as CSSProperties;
+  const historyRailStyle = { "--rail-visible-count": historyRailVisibleCount } as CSSProperties;
+
   return (
-    <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
+    <main className={[shellStyles.page, projectId ? styles.projectWorkspacePage : ""].filter(Boolean).join(" ")}>
+      {!projectId ? <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <Link href="/" className={shellStyles.navLink}>
             返回首页
@@ -1034,10 +1060,10 @@ export default function ImagePage() {
         <div className={shellStyles.topnav}>
           <ApiUsageModeSwitch module="image" />
         </div>
-      </header>
+      </header> : null}
 
       <section className={styles.stage}>
-        <aside className={[styles.modePanel, styles.modePanelImage].join(" ")}>
+        <aside className={[styles.modePanel, styles.modePanelImage].join(" ")} style={modeRailStyle}>
           <div className={styles.modeColumn}>
             <div className={styles.modeRail}>
               <div className={styles.modeRailFrame}>
@@ -1146,7 +1172,7 @@ export default function ImagePage() {
           </div>
         </div>
 
-        <aside className={styles.historyPanel}>
+        <aside className={styles.historyPanel} style={historyRailStyle}>
           <div className={styles.historyColumn}>
             <div className={styles.historyRail}>
               <div className={styles.historyRailFrame}>
@@ -1222,56 +1248,59 @@ export default function ImagePage() {
         <section className={styles.composerWrap}>
           {error ? <div className={styles.error}>{error}</div> : null}
 
-          <div className={styles.referenceStrip}>
-            {refSlots.map((slot, index) => (
-              <div
-                key={index}
-                className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  fillRefImagesFromIndex(index, e.dataTransfer.files);
-                }}
-              >
-                <label
-                  aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，点击上传参考图`}
+          <div className={styles.composerDock}>
+            <div className={styles.referenceStrip}>
+              {refSlots.map((slot, index) => (
+                <div
+                  key={index}
+                  className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    fillRefImagesFromIndex(index, e.dataTransfer.files);
+                  }}
                 >
-                  <input
-                    className={styles.hiddenInput}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => {
-                      fillRefImagesFromIndex(index, e.target.files);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                  {slot ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={slot.previewUrl} alt={`参考图 ${index + 1}`} />
-                    </>
-                  ) : (
-                    <span className={styles.refEmptyContent}>
-                      <span className={styles.refSlotIndex}>图{index + 1}</span>
-                      {refSlotHintsLines[index]?.trim() ? (
-                        <span className={styles.refSlotHintText}>{refSlotHintsLines[index].trim()}</span>
-                      ) : null}
-                    </span>
-                  )}
-                </label>
-                {slot ? (
-                  <button
-                    type="button"
-                    onClick={() => clearRefImage(index)}
-                    className={styles.deleteRef}
-                    aria-label="移除参考图"
+                  <label
+                    aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，点击上传参考图`}
                   >
-                    ×
-                  </button>
-                ) : null}
-              </div>
-            ))}
+                    <input
+                      className={styles.hiddenInput}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        fillRefImagesFromIndex(index, e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    {slot ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={slot.previewUrl} alt={`参考图 ${index + 1}`} />
+                      </>
+                    ) : (
+                      <span className={styles.refEmptyContent}>
+                        <span className={styles.refSlotIndex}>图{index + 1}</span>
+                        {refSlotHintsLines[index]?.trim() ? (
+                          <span className={styles.refSlotHintText}>{refSlotHintsLines[index].trim()}</span>
+                        ) : null}
+                      </span>
+                    )}
+                  </label>
+                  {slot ? (
+                    <button
+                      type="button"
+                      onClick={() => clearRefImage(index)}
+                      className={styles.deleteRef}
+                      aria-label="移除参考图"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <WorkspaceModeDock />
           </div>
 
           <div className={styles.composer}>

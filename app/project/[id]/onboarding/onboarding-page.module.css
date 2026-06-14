@@ -260,10 +260,11 @@
 .dangerButton,
 .uploadButton {
   border: 3px solid #050505;
-  border-radius: 999px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #ffffff;
   color: #050505;
-  box-shadow: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .tabActive,
@@ -312,15 +313,50 @@
 
 .materialItem button {
   border: 2px solid #b42318;
-  border-radius: 999px;
+  border-radius: var(--otato-control-radius, 15px);
   background: #fff2f0;
   color: #b42318;
   padding: 2px 8px;
+  box-shadow: 2px 2px 0 #050505;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .materialItem button:hover {
   background: #b42318;
   color: #ffffff;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: 4px 4px 0 #050505;
+}
+
+.tab:hover,
+.stepPill:hover,
+.modePill:hover,
+.actionButton:hover,
+.secondaryButton:hover,
+.uploadButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.dangerButton:hover {
+  background: #b42318;
+  color: #ffffff;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.tab:active,
+.stepPill:active,
+.modePill:active,
+.actionButton:active,
+.secondaryButton:active,
+.dangerButton:active,
+.uploadButton:active,
+.materialItem button:active {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .generatingOverlay {

@@ -1,0 +1,23 @@
+{
+  "id": "legacy-script-001",
+  "name": "旧版剧本工程",
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "updatedAt": "2025-01-02T00:00:00.000Z",
+  "currentStage": 5,
+  "messages": [
+    {
+      "role": "user",
+      "content": "继续写第五阶段"
+    }
+  ],
+  "artifacts": [
+    {
+      "stage": 5,
+      "subKey": "episode-1",
+      "label": "第1集",
+      "content": "旧版第五阶段分集剧本",
+      "updatedAt": "2025-01-02T00:00:00.000Z"
+    }
+  ],
+  "maxApprovedStage": 5
+}

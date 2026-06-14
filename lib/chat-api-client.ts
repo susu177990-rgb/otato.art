@@ -6,44 +6,48 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
   return data.error?.trim() || fallback;
 }
 
-export async function fetchChatConversations(): Promise<ChatConversationSummary[]> {
-  const res = await fetch("/api/chat/conversations", { cache: "no-store" });
+function projectQuery(projectId?: string): string {
+  return projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+}
+
+export async function fetchChatConversations(projectId?: string): Promise<ChatConversationSummary[]> {
+  const res = await fetch(`/api/chat/conversations${projectQuery(projectId)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res, "无法加载会话列表"));
   const data = (await res.json()) as { conversations: ChatConversationSummary[] };
   return data.conversations;
 }
 
-export async function createChatConversation(title?: string): Promise<ChatConversation> {
+export async function createChatConversation(title?: string, projectId?: string): Promise<ChatConversation> {
   const res = await fetch("/api/chat/conversations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, projectId }),
   });
   if (!res.ok) throw new Error(await readApiError(res, "无法创建会话"));
   const data = (await res.json()) as { conversation: ChatConversation };
   return data.conversation;
 }
 
-export async function fetchChatConversation(id: string): Promise<ChatConversation> {
-  const res = await fetch(`/api/chat/conversations/${id}`, { cache: "no-store" });
+export async function fetchChatConversation(id: string, projectId?: string): Promise<ChatConversation> {
+  const res = await fetch(`/api/chat/conversations/${id}${projectQuery(projectId)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res, "无法加载会话"));
   const data = (await res.json()) as { conversation: ChatConversation };
   return data.conversation;
 }
 
-export async function saveChatConversation(conv: ChatConversation): Promise<ChatConversation> {
+export async function saveChatConversation(conv: ChatConversation, projectId?: string): Promise<ChatConversation> {
   const res = await fetch(`/api/chat/conversations/${conv.id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(conv),
+    body: JSON.stringify({ ...conv, projectId }),
   });
   if (!res.ok) throw new Error("无法保存会话");
   const data = (await res.json()) as { conversation: ChatConversation };
   return data.conversation;
 }
 
-export async function deleteChatConversationApi(id: string): Promise<void> {
-  const res = await fetch(`/api/chat/conversations/${id}`, { method: "DELETE" });
+export async function deleteChatConversationApi(id: string, projectId?: string): Promise<void> {
+  const res = await fetch(`/api/chat/conversations/${id}${projectQuery(projectId)}`, { method: "DELETE" });
   if (!res.ok) throw new Error("无法删除会话");
 }
 
@@ -54,6 +58,7 @@ export async function sendChatAgentTurn(
   userMessage: ChatMessage,
   preferredImageModelId?: ImageModelId,
   preferredLlmModelId?: string,
+  projectId?: string,
 ): Promise<ChatConversation> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHAT_AGENT_TIMEOUT_MS);
@@ -62,7 +67,13 @@ export async function sendChatAgentTurn(
     const res = await fetch("/api/chat/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, userMessage, preferredImageModelId, preferredLlmModelId }),
+      body: JSON.stringify({
+        conversationId,
+        userMessage,
+        preferredImageModelId,
+        preferredLlmModelId,
+        projectId,
+      }),
       signal: controller.signal,
     });
     if (!res.ok) {

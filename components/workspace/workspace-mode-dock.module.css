@@ -1,0 +1,64 @@
+.dock {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--otato-workbar-button-gap, 10px);
+  height: var(--otato-workbar-control-height, 34px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #050505;
+  overflow: visible;
+  background-clip: border-box;
+  box-shadow: none;
+}
+
+.link {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-width: 52px;
+  height: var(--otato-workbar-control-height, 34px);
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.link:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.link:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.linkActive {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.linkActive:hover,
+.linkActive:active {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.link:focus-visible {
+  outline: 2px solid #050505;
+  outline-offset: 2px;
+}

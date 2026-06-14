@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
+import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
@@ -42,6 +45,7 @@ import {
 } from "@/lib/video-workspace";
 
 const MEDIA_BUCKET = "generated-images";
+const OPEN_VIDEO_PROMPT_PRESETS_EVENT = "otato:open-video-prompt-presets";
 
 type ReferenceKind = "image" | "video" | "audio";
 type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string } | null;
@@ -197,6 +201,14 @@ function workspaceModeToPromptPreset(
 }
 
 export default function VideoPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const workspaceProject = useOptionalWorkspaceProject();
+  const projectId = workspaceProject?.projectId;
+  useEffect(() => {
+    if (pathname === "/video") router.replace("/projects");
+  }, [pathname, router]);
+
   const { videoWorkspace, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
   const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
@@ -281,16 +293,28 @@ export default function VideoPage() {
     const success = records.filter((item) => item.status === "success" && Boolean(item.videoUrl)).slice(0, 24);
     return success.slice().reverse();
   }, [records]);
+  const presetRailVisibleCount = Math.min(Math.max(presetRailItems.length, 1), 5);
+  const historyRailVisibleCount = Math.min(Math.max(sidebarHistoryRecords.length, 1), 5);
+  const presetRailStyle = { "--rail-visible-count": presetRailVisibleCount } as CSSProperties;
+  const historyRailStyle = { "--rail-visible-count": historyRailVisibleCount } as CSSProperties;
 
   useEffect(() => {
     if (!workspaceReady) return;
-    void fetchVideoGalleryRecords()
+    void fetchVideoGalleryRecords(projectId)
       .then((rows) => setRecords(rows))
       .catch((e) => console.warn("[video] gallery load failed", e));
-  }, [workspaceReady]);
+  }, [workspaceReady, projectId]);
 
   useEffect(() => {
     setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    function openPromptPresetLibrary() {
+      setPresetLibraryOpen(true);
+    }
+    window.addEventListener(OPEN_VIDEO_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
+    return () => window.removeEventListener(OPEN_VIDEO_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
   }, []);
 
   useEffect(() => {
@@ -548,7 +572,7 @@ export default function VideoPage() {
       error: message,
     };
     try {
-      const next = await prependVideoGalleryRecordApi(record);
+      const next = await prependVideoGalleryRecordApi(record, projectId);
       setRecords(next);
     } catch (e) {
       console.warn("[video] gallery save failed", e);
@@ -647,6 +671,7 @@ export default function VideoPage() {
           aspectRatio: selectedAspectRatio,
           resolution: selectedResolution,
           references: allReferences,
+          projectId,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -713,8 +738,8 @@ export default function VideoPage() {
   }
 
   return (
-    <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
+    <main className={[shellStyles.page, projectId ? styles.projectWorkspacePage : ""].filter(Boolean).join(" ")}>
+      {!projectId ? <header className={shellStyles.topbar}>
         <div className={shellStyles.topbarLeft}>
           <Link href="/" className={shellStyles.navLink}>
             返回首页
@@ -730,38 +755,40 @@ export default function VideoPage() {
         <div className={shellStyles.topnav}>
           <ApiUsageModeSwitch module="video" />
         </div>
-      </header>
+      </header> : null}
 
       <section className={styles.stage}>
-        <aside className={styles.modePanel}>
+        <aside className={styles.modePanel} style={presetRailStyle}>
           <div className={styles.modeColumn}>
-            <div className={styles.railFrame}>
-              <div className={styles.scrollWrap}>
-                <div className={styles.scroll}>
-                  <div className={styles.list}>
-                    {presetRailItems.length === 0 ? (
-                      <div className={styles.emptyRail}>暂无预设</div>
-                    ) : (
-                      presetRailItems.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => setSelectedPresetId(preset.id)}
-                          className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
-                          aria-label={preset.label}
-                        >
-                          {preset.coverUrl ? (
-                            <>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
-                              <span className={styles.modeMeta}>{preset.label}</span>
-                            </>
-                          ) : (
-                            <span className={styles.modeCoverFallback}>{preset.label}</span>
-                          )}
-                        </button>
-                      ))
-                    )}
+            <div className={styles.rail}>
+              <div className={styles.railFrame}>
+                <div className={styles.scrollWrap}>
+                  <div className={styles.scroll}>
+                    <div className={styles.list}>
+                      {presetRailItems.length === 0 ? (
+                        <div className={styles.emptyRail}>暂无预设</div>
+                      ) : (
+                        presetRailItems.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setSelectedPresetId(preset.id)}
+                            className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
+                            aria-label={preset.label}
+                          >
+                            {preset.coverUrl ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
+                                <span className={styles.modeMeta}>{preset.label}</span>
+                              </>
+                            ) : (
+                              <span className={styles.modeCoverFallback}>{preset.label}</span>
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -790,24 +817,26 @@ export default function VideoPage() {
           </div>
         </div>
 
-        <aside className={styles.historyPanel}>
+        <aside className={styles.historyPanel} style={historyRailStyle}>
           <div className={styles.historyColumn}>
-            <div className={styles.railFrame}>
-              <div className={[styles.scrollWrap, sidebarHistoryRecords.length > 7 ? styles.scrollWrapFaded : ""].filter(Boolean).join(" ")}>
-                <div ref={historyScrollRef} className={styles.scroll}>
-                  <div className={styles.list}>
-                    {sidebarHistoryRecords.length === 0 ? (
-                      <div className={styles.emptyRail}>暂无记录</div>
-                    ) : (
-                      sidebarHistoryRecords.map((record) => (
-                        <button key={record.id} type="button" onClick={() => applyHistoryRecord(record)} className={styles.historyItem}>
-                          {record.videoUrl ? <video src={record.videoUrl} muted playsInline /> : null}
-                          <span className={styles.historyMeta}>
-                            {record.modeName} · {record.durationSeconds}s
-                          </span>
-                        </button>
-                      ))
-                    )}
+            <div className={styles.rail}>
+              <div className={styles.railFrame}>
+                <div className={[styles.scrollWrap, sidebarHistoryRecords.length > 7 ? styles.scrollWrapFaded : ""].filter(Boolean).join(" ")}>
+                  <div ref={historyScrollRef} className={styles.scroll}>
+                    <div className={styles.list}>
+                      {sidebarHistoryRecords.length === 0 ? (
+                        <div className={styles.emptyRail}>暂无记录</div>
+                      ) : (
+                        sidebarHistoryRecords.map((record) => (
+                          <button key={record.id} type="button" onClick={() => applyHistoryRecord(record)} className={styles.historyItem}>
+                            {record.videoUrl ? <video src={record.videoUrl} muted playsInline /> : null}
+                            <span className={styles.historyMeta}>
+                              {record.modeName} · {record.durationSeconds}s
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -818,97 +847,100 @@ export default function VideoPage() {
         <section className={styles.composerWrap}>
           {error ? <div className={styles.error}>{error}</div> : null}
 
-          <div className={styles.referenceStrip}>
-            {selectedUiModeId === "start_end_frame" ? (
-              references.frames.map((slot, index) => (
-                <div
-                  key={`frame-${index}`}
-                  className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    void uploadReferenceFiles("image", index, e.dataTransfer.files);
-                  }}
-                >
-                  <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
-                    <input
-                      ref={(node) => {
-                        fileInputRefs.current[`frame:${index}`] = node;
-                      }}
-                      className={styles.hiddenInput}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        void uploadReferenceFiles("image", index, e.target.files);
-                      }}
-                    />
-                    {slot ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={slot.previewUrl} alt={slot.label} />
-                    ) : (
-                      <span className={styles.refEmptyContent}>
-                        <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
-                      </span>
-                    )}
-                  </label>
-                  {slot ? (
-                    <button type="button" onClick={() => clearReference("image", index)} className={styles.deleteRef} aria-label="移除参考图">
-                      ×
-                    </button>
-                  ) : null}
-                </div>
-              ))
-            ) : (
-              REFERENCE_KINDS.map((kind) => (
-                <div key={kind} className={styles.refGroup} aria-label={`${kindGroupLabel(kind)}素材`}>
-                  {[...references.allPurpose[kind], null].map((slot, index) => (
-                    <div
-                      key={`${kind}-${index}`}
-                      className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        void uploadReferenceFiles(kind, index, e.dataTransfer.files);
-                      }}
-                    >
-                      <label aria-label={`${kindSlotLabel(kind, index)}，点击上传${kindGroupLabel(kind)}素材`}>
-                        <input
-                          ref={(node) => {
-                            fileInputRefs.current[`${kind}:${index}`] = node;
-                          }}
-                          className={styles.hiddenInput}
-                          type="file"
-                          accept={kindAccept(kind)}
-                          multiple
-                          onChange={(e) => {
-                            void uploadReferenceFiles(kind, index, e.target.files);
-                          }}
-                        />
-                        {slot ? (
-                          kind === "image" ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={slot.previewUrl} alt={slot.label} />
-                          ) : kind === "video" ? (
-                            <video src={slot.previewUrl} muted playsInline />
-                          ) : (
-                            <span className={styles.refMediaGlyph}>音频</span>
-                          )
-                        ) : (
-                          <span className={styles.refEmptyContent}>
-                            <span className={styles.refSlotIndex}>{kindSlotLabel(kind, index)}</span>
-                          </span>
-                        )}
-                      </label>
+          <div className={styles.composerDock}>
+            <div className={styles.referenceStrip}>
+              {selectedUiModeId === "start_end_frame" ? (
+                references.frames.map((slot, index) => (
+                  <div
+                    key={`frame-${index}`}
+                    className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      void uploadReferenceFiles("image", index, e.dataTransfer.files);
+                    }}
+                  >
+                    <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
+                      <input
+                        ref={(node) => {
+                          fileInputRefs.current[`frame:${index}`] = node;
+                        }}
+                        className={styles.hiddenInput}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          void uploadReferenceFiles("image", index, e.target.files);
+                        }}
+                      />
                       {slot ? (
-                        <button type="button" onClick={() => clearReference(kind, index)} className={styles.deleteRef} aria-label={`移除${kindGroupLabel(kind)}素材`}>
-                          ×
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ))
-            )}
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={slot.previewUrl} alt={slot.label} />
+                      ) : (
+                        <span className={styles.refEmptyContent}>
+                          <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
+                        </span>
+                      )}
+                    </label>
+                    {slot ? (
+                      <button type="button" onClick={() => clearReference("image", index)} className={styles.deleteRef} aria-label="移除参考图">
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                REFERENCE_KINDS.map((kind) => (
+                  <div key={kind} className={styles.refGroup} aria-label={`${kindGroupLabel(kind)}素材`}>
+                    {[...references.allPurpose[kind], null].map((slot, index) => (
+                      <div
+                        key={`${kind}-${index}`}
+                        className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          void uploadReferenceFiles(kind, index, e.dataTransfer.files);
+                        }}
+                      >
+                        <label aria-label={`${kindSlotLabel(kind, index)}，点击上传${kindGroupLabel(kind)}素材`}>
+                          <input
+                            ref={(node) => {
+                              fileInputRefs.current[`${kind}:${index}`] = node;
+                            }}
+                            className={styles.hiddenInput}
+                            type="file"
+                            accept={kindAccept(kind)}
+                            multiple
+                            onChange={(e) => {
+                              void uploadReferenceFiles(kind, index, e.target.files);
+                            }}
+                          />
+                          {slot ? (
+                            kind === "image" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={slot.previewUrl} alt={slot.label} />
+                            ) : kind === "video" ? (
+                              <video src={slot.previewUrl} muted playsInline />
+                            ) : (
+                              <span className={styles.refMediaGlyph}>音频</span>
+                            )
+                          ) : (
+                            <span className={styles.refEmptyContent}>
+                              <span className={styles.refSlotIndex}>{kindSlotLabel(kind, index)}</span>
+                            </span>
+                          )}
+                        </label>
+                        {slot ? (
+                          <button type="button" onClick={() => clearReference(kind, index)} className={styles.deleteRef} aria-label={`移除${kindGroupLabel(kind)}素材`}>
+                            ×
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+            <WorkspaceModeDock />
           </div>
 
           <div className={styles.composer}>
@@ -1014,9 +1046,9 @@ export default function VideoPage() {
               <div className={styles.toolbarActions}>
                 <button
                   type="button"
-                  className={[styles.freeModeToggle, isFreeMode ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}
-                  aria-pressed={isFreeMode}
-                  title="不使用提示词预设"
+                  className={[styles.freeModeToggle, !isFreeMode ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}
+                  aria-pressed={!isFreeMode}
+                  title="启用预设提示词"
                   onClick={() => {
                     setSelectedPresetId(isFreeMode ? presetRailItems[0]?.id ?? "free" : "free");
                   }}
@@ -1024,7 +1056,7 @@ export default function VideoPage() {
                   <span className={styles.freeSwitchTrack} aria-hidden>
                     <span className={styles.freeSwitchThumb} />
                   </span>
-                  <span>自由</span>
+                  <span>预设</span>
                 </button>
                 <button type="button" onClick={handleGenerate} disabled={isGenerating || isUploading} className={styles.generate}>
                   {isGenerating ? "生成中" : "生成"}

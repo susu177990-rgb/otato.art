@@ -1,6 +1,7 @@
 "use client";
 
 import imageStyles from "@/app/image/image-page.module.css";
+import type { CSSProperties } from "react";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import railStyles from "./chat-side-rail.module.css";
 
@@ -15,11 +16,13 @@ export function ChatPromptPresetRail({
   onSelectPreset: (presetId: string) => void;
   switchDisabled?: boolean;
 }) {
-  const faded = favoritePresets.length > 7;
+  const faded = favoritePresets.length > 5;
+  const visibleCount = Math.min(Math.max(favoritePresets.length, 1), 5);
+  const railStyle = { "--rail-visible-count": visibleCount } as CSSProperties;
 
   return (
     <aside className={[imageStyles.modePanel, railStyles.presetPanel].join(" ")} aria-label="对话提示词预设">
-      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")}>
+      <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")} style={railStyle}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>
             <div

@@ -1,0 +1,57 @@
+.nav {
+  position: sticky;
+  z-index: 45;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  margin: 12px auto 0;
+  padding: 3px;
+  border: 2px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
+}
+
+.link {
+  display: inline-flex;
+  min-width: 54px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 12px;
+  border-radius: var(--otato-control-inner-radius, 10px);
+  color: #050505;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.link:hover,
+.linkActive {
+  background: #050505;
+  color: #ffffff;
+}
+
+.link:focus-visible {
+  outline: 2px solid #050505;
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .nav {
+    top: 10px;
+    max-width: calc(100vw - 28px);
+    overflow-x: auto;
+  }
+
+  .link {
+    min-width: 44px;
+    padding-inline: 9px;
+  }
+}

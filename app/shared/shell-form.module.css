@@ -283,11 +283,16 @@
 }
 
 .button:hover:not(:disabled),
-.buttonSubtle:hover:not(:disabled),
+.buttonSubtle:hover:not(:disabled) {
+  border-color: #050505;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+}
+
 .buttonPrimary,
 .buttonPrimary:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
 }
 
