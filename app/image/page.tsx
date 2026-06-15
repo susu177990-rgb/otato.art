@@ -25,9 +25,11 @@ import {
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { ProjectAssetPickerDialog } from "@/components/project-assets/ProjectAssetPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
+import type { ProjectAsset } from "@/lib/project-assets";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import {
   mergeCachedImageUrls,
@@ -73,6 +75,7 @@ const OPEN_IMAGE_PROMPT_PRESETS_EVENT = "otato:open-image-prompt-presets";
 const FREE_MODE = { id: "free", label: "自由模式" } as const;
 
 type RefSlot = { previewUrl: string; file: File } | null;
+type RefUploadMenuState = { index: number } | null;
 type ImagePromptPresetCard = SitePromptPreset & {
   promptModelProviders: Array<"gpt-image" | "nano-banana">;
 };
@@ -153,6 +156,29 @@ function revokeRefPreview(slot: RefSlot | null) {
 
 function refSlotFromFile(file: File): NonNullable<RefSlot> {
   return { file, previewUrl: URL.createObjectURL(file) };
+}
+
+function mediaFileNameFromUrl(url: string, fallback: string): string {
+  try {
+    const parsed = new URL(url, window.location.href);
+    const name = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).at(-1) ?? "").trim();
+    return name || fallback;
+  } catch {
+    return decodeURIComponent(url.split(/[?#]/)[0]?.split("/").filter(Boolean).at(-1) ?? "").trim() || fallback;
+  }
+}
+
+async function refSlotFromProjectAsset(asset: ProjectAsset): Promise<NonNullable<RefSlot>> {
+  const response = await fetch(asset.primaryImageUrl);
+  if (!response.ok) throw new Error("项目素材读取失败");
+  const blob = await response.blob();
+  if (!blob.type.startsWith("image/")) throw new Error("请选择图片素材");
+  const file = new File(
+    [blob],
+    mediaFileNameFromUrl(asset.primaryImageUrl, `${asset.name || "project-asset"}.png`),
+    { type: blob.type || "image/png" },
+  );
+  return { file, previewUrl: asset.primaryImageUrl };
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -417,6 +443,8 @@ export default function ImagePage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
   const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
+  const [refUploadMenu, setRefUploadMenu] = useState<RefUploadMenuState>(null);
+  const [assetPickerSlot, setAssetPickerSlot] = useState<number | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
@@ -457,6 +485,7 @@ export default function ImagePage() {
   }, [refSlots]);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const resultClipRef = useRef<HTMLDivElement>(null);
+  const refFileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
   /** 用户已手动改过参考图槽时，勿用 localStorage 里的旧 runtime 覆盖 */
@@ -607,24 +636,30 @@ export default function ImagePage() {
   );
   const promptPresetById = useMemo(() => new Map(promptPresets.map((preset) => [preset.id, preset])), [promptPresets]);
   const displayedPromptPresets = useMemo(
-    () =>
-      allModes
+    () => {
+      const workspacePresets = allModes
         .filter((mode) => !IMAGE_MODES.some((base) => base.id === mode.id))
-        .map((mode) => workspaceModeToPromptPreset(mode, settings, promptPresetById.get(mode.id))),
-    [allModes, promptPresetById, settings],
+        .map((mode) => workspaceModeToPromptPreset(mode, settings, promptPresetById.get(mode.id)));
+      const workspacePresetIds = new Set(workspacePresets.map((preset) => preset.id));
+      const libraryOnlyFavorites = promptPresets.filter(
+        (preset) => preset.kind === "image" && preset.isFavorite && !workspacePresetIds.has(preset.id),
+      );
+      return [...workspacePresets, ...libraryOnlyFavorites];
+    },
+    [allModes, promptPresetById, promptPresets, settings],
   );
-  const favoritePresetIds = useMemo(
-    () => new Set(displayedPromptPresets.filter((preset) => preset.isFavorite).map((preset) => preset.id)),
+  const displayedPromptPresetById = useMemo(
+    () => new Map(displayedPromptPresets.map((preset) => [preset.id, preset])),
     [displayedPromptPresets],
   );
   const modes = useMemo(
-    () => allModes.filter((mode) => favoritePresetIds.has(mode.id)),
-    [allModes, favoritePresetIds],
+    () => displayedPromptPresets.filter((preset) => preset.isFavorite).map((preset) => ({ id: preset.id, label: preset.title })),
+    [displayedPromptPresets],
   );
   const isFreeMode = selectedModeId === "free";
 
   const selectedModel = settings.models[selectedModelId];
-  const promptTemplate = settings.prompts[selectedModeId] ?? "";
+  const promptTemplate = settings.prompts[selectedModeId] ?? displayedPromptPresetById.get(selectedModeId)?.promptTemplate ?? "";
   const placeholderOccurrences = useMemo(
     () => extractPromptPlaceholderOccurrences(promptTemplate),
     [promptTemplate],
@@ -638,14 +673,15 @@ export default function ImagePage() {
   useEffect(() => {
     if (selectedModeId === "free") return;
     if (allModes.some((m) => m.id === selectedModeId)) return;
+    if (displayedPromptPresetById.has(selectedModeId)) return;
     setSelectedModeId("free");
-  }, [allModes, selectedModeId]);
+  }, [allModes, displayedPromptPresetById, selectedModeId]);
 
   const finalPrompt = useMemo(
     () => buildImagePromptFromSlots(promptTemplate, slotInputs),
     [promptTemplate, slotInputs],
   );
-  const refSlotHintsLines = settings.refSlotHintsByMode[selectedModeId] ?? [];
+  const refSlotHintsLines = settings.refSlotHintsByMode[selectedModeId] ?? displayedPromptPresetById.get(selectedModeId)?.refSlotHints ?? [];
   const modelReady = Boolean(
     selectedModel.endpointUrl.trim() &&
       selectedModel.modelName.trim() &&
@@ -687,13 +723,8 @@ export default function ImagePage() {
 
   function selectPromptPreset(preset: SitePromptPreset) {
     if (preset.kind !== "image") return;
-    const mode = allModes.find((item) => item.id === preset.id);
-    if (!mode) {
-      setError("这个预设还没有同步到作图工作台，请刷新后再试。");
-      return;
-    }
     setError("");
-    setSelectedModeId(mode.id);
+    setSelectedModeId(preset.id);
   }
 
   useEffect(() => {
@@ -758,6 +789,23 @@ export default function ImagePage() {
       });
       return next;
     });
+  }
+
+  async function fillRefImageFromProjectAsset(index: number, asset: ProjectAsset) {
+    setError("");
+    try {
+      const slot = await refSlotFromProjectAsset(asset);
+      markRefSlotsUserEdited();
+      setRefSlots((prev) => {
+        const next = normalizeRefSlots(prev);
+        revokeRefPreview(next[index]);
+        next[index] = slot;
+        return next;
+      });
+      setAssetPickerSlot(null);
+    } catch (assetError) {
+      setError(assetError instanceof Error ? assetError.message : "项目素材载入失败");
+    }
   }
 
   function clearRefImage(index: number) {
@@ -875,7 +923,7 @@ export default function ImagePage() {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       modeId: selectedModeId,
-      modeName: allModes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId,
+      modeName: allModes.find((m) => m.id === selectedModeId)?.label ?? displayedPromptPresetById.get(selectedModeId)?.title ?? selectedModeId,
       modelId: selectedModelId,
       modelName: selectedModel.modelName,
       finalPrompt: resolvedPrompt,
@@ -918,7 +966,7 @@ export default function ImagePage() {
     const liveSettings = liveSnapshot.imageWorkspace;
     setSettings(liveSettings);
     const liveModel = liveSettings.models[selectedModelId];
-    const liveTemplate = liveSettings.prompts[selectedModeId] ?? "";
+    const liveTemplate = liveSettings.prompts[selectedModeId] ?? displayedPromptPresetById.get(selectedModeId)?.promptTemplate ?? "";
     const promptForRequest = buildImagePromptFromSlots(liveTemplate, slotInputs);
     const mentionResolution = resolveAssetMentions(promptForRequest, mentionCandidates);
     if (mentionResolution.missingMentions.length > 0) {
@@ -1082,7 +1130,8 @@ export default function ImagePage() {
                       ) : (
                         modes.map((mode) => {
                           const active = selectedModeId === mode.id;
-                          const coverUrl = settings.coverImageUrlByMode?.[mode.id]?.trim() ?? "";
+                          const coverUrl =
+                            settings.coverImageUrlByMode?.[mode.id]?.trim() || displayedPromptPresetById.get(mode.id)?.coverImageUrl || "";
                           return (
                             <button
                               key={mode.id}
@@ -1260,19 +1309,25 @@ export default function ImagePage() {
                     fillRefImagesFromIndex(index, e.dataTransfer.files);
                   }}
                 >
-                  <label
-                    aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，点击上传参考图`}
+                  <input
+                    ref={(node) => {
+                      refFileInputRefs.current[index] = node;
+                    }}
+                    className={styles.hiddenInput}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => {
+                      fillRefImagesFromIndex(index, e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={styles.refSlotButton}
+                    aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，选择参考图来源`}
+                    onClick={() => setRefUploadMenu((current) => current?.index === index ? null : { index })}
                   >
-                    <input
-                      className={styles.hiddenInput}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => {
-                        fillRefImagesFromIndex(index, e.target.files);
-                        e.currentTarget.value = "";
-                      }}
-                    />
                     {slot ? (
                       <>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1286,7 +1341,30 @@ export default function ImagePage() {
                         ) : null}
                       </span>
                     )}
-                  </label>
+                  </button>
+                  {refUploadMenu?.index === index && !slot ? (
+                    <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRefUploadMenu(null);
+                          refFileInputRefs.current[index]?.click();
+                        }}
+                      >
+                        本地上传
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!projectId}
+                        onClick={() => {
+                          setRefUploadMenu(null);
+                          setAssetPickerSlot(index);
+                        }}
+                      >
+                        项目素材
+                      </button>
+                    </div>
+                  ) : null}
                   {slot ? (
                     <button
                       type="button"
@@ -1453,7 +1531,7 @@ export default function ImagePage() {
                       当前模式提示词
                     </p>
                     <h2 className={styles.promptPreviewTitle}>
-                      {allModes.find((m) => m.id === selectedModeId)?.label ?? selectedModeId}
+                      {allModes.find((m) => m.id === selectedModeId)?.label ?? displayedPromptPresetById.get(selectedModeId)?.title ?? selectedModeId}
                     </h2>
                   </div>
                   <button
@@ -1492,6 +1570,17 @@ export default function ImagePage() {
           if (preset.kind === "image") loadImagePromptPresets();
         }}
       />
+      {portalMounted && projectId && assetPickerSlot !== null
+        ? createPortal(
+            <ProjectAssetPickerDialog
+              projectId={projectId}
+              allowedKinds={["image"]}
+              onClose={() => setAssetPickerSlot(null)}
+              onSelect={(asset) => void fillRefImageFromProjectAsset(assetPickerSlot, asset)}
+            />,
+            document.body,
+          )
+        : null}
     </main>
   );
 }

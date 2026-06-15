@@ -59,8 +59,8 @@ export function ProjectCanvasWorkspace({ projectId }: ProjectCanvasWorkspaceProp
       value={{
         projectId,
         boardId: resolution.board.id,
-        backHref: `/projects/${encodeURIComponent(projectId)}`,
-        backLabel: "返回项目",
+        backHref: "/projects",
+        backLabel: "返回项目列表",
         displayTitle: buildProjectCanvasDisplayTitle(resolution.project),
         titleEditable: false,
       }}

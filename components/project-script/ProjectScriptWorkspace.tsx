@@ -1,6 +1,8 @@
 "use client";
 
+import OnboardingPage from "@/app/project/[id]/onboarding/page";
 import StudioPage from "@/app/studio/[id]/page";
+import { useProjectWorkspace } from "@/components/project/ProjectProvider";
 import { ProjectScriptRouteProvider } from "./project-script-route-context";
 
 type ProjectScriptWorkspaceProps = {
@@ -8,12 +10,32 @@ type ProjectScriptWorkspaceProps = {
 };
 
 export function ProjectScriptWorkspace({ projectId }: ProjectScriptWorkspaceProps) {
+  const { project, refreshProject } = useProjectWorkspace();
+  const encodedProjectId = encodeURIComponent(projectId);
+  const scriptHref = `/projects/${encodedProjectId}/script`;
+  const onboardingHref = `${scriptHref}`;
+  const onboardingStatus = project?.onboardingStatus ?? "ready";
+
+  if (project && onboardingStatus !== "ready") {
+    return (
+      <OnboardingPage
+        projectId={projectId}
+        embedded
+        backHref="/projects"
+        studioHref={scriptHref}
+        onCompleted={refreshProject}
+      />
+    );
+  }
+
   return (
     <ProjectScriptRouteProvider
       value={{
         projectId,
-        backHref: `/projects/${encodeURIComponent(projectId)}`,
-        requireOnboarding: false,
+        backHref: "/projects",
+        onboardingHref,
+        onRestartOnboarding: refreshProject,
+        requireOnboarding: true,
       }}
     >
       <StudioPage />

@@ -12,6 +12,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Project } from "@/lib/types";
+import { projectModeHref } from "./project-routes";
 import styles from "./project-provider.module.css";
 
 type DeleteTarget = {
@@ -72,7 +73,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError("");
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
         cache: "no-store",
@@ -138,7 +139,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const created = (await response.json()) as Project;
         setDialog(null);
         setName("");
-        router.push(`/projects/${encodeURIComponent(created.id)}`);
+        router.push(projectModeHref(created.id, "workspace"));
         return;
       }
 

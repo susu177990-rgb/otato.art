@@ -3,7 +3,7 @@ import { projectAssetsToMentionCandidates } from "./mentions";
 import type { ProjectAsset } from "./types";
 
 describe("project asset mention candidates", () => {
-  it("creates strong image-reference candidates with stable ids", () => {
+  it("creates single-media candidates with stable ids", () => {
     const candidates = projectAssetsToMentionCandidates([
       {
         id: "asset-1",
@@ -29,9 +29,34 @@ describe("project asset mention candidates", () => {
         description: "午夜月台",
         thumbnailUrl: "https://example.com/platform.png",
         url: "https://example.com/platform.png",
-        referenceUrls: ["https://example.com/platform-ref.png"],
+        referenceUrls: [],
         nodeType: "image",
       },
     ]);
+  });
+
+  it("marks video assets as video references", () => {
+    const [candidate] = projectAssetsToMentionCandidates([
+      {
+        id: "asset-2",
+        projectId: "project-1",
+        type: "prop",
+        name: "片段",
+        description: "",
+        tags: ["动作"],
+        primaryImageUrl: "https://example.com/clip.mp4",
+        referenceImageUrls: [],
+        createdAt: "2026-06-14T00:00:00.000Z",
+        updatedAt: "2026-06-14T00:00:00.000Z",
+      } satisfies ProjectAsset,
+    ]);
+
+    expect(candidate).toMatchObject({
+      id: "asset-2",
+      role: "video_reference",
+      referenceUrls: [],
+      nodeType: "video",
+      url: "https://example.com/clip.mp4",
+    });
   });
 });

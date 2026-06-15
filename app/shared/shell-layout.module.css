@@ -10,10 +10,8 @@
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(39, 39, 42, 0.52), rgba(5, 5, 6, 0) 34%),
-    linear-gradient(180deg, #070708 0%, #030304 100%);
-  color: #f4f4f5;
+  background: var(--otato-paper-background, var(--otato-bg, #faf7ef)) !important;
+  color: var(--otato-text, #181818);
 }
 
 .body {
@@ -263,7 +261,7 @@
 /* Production outline compatibility overrides. */
 
 .page {
-  background: #ffffff;
+  background: var(--otato-paper-background, #ffffff) !important;
   color: #050505;
 }
 

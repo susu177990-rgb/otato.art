@@ -48,7 +48,7 @@ const video = {
 } as VideoGalleryRecord;
 
 describe("project gallery aggregation", () => {
-  it("merges assets, successful images, and successful videos by newest first", () => {
+  it("lists only successful images and videos by newest first", () => {
     const items = buildProjectGalleryItems({
       assets: [asset],
       images: [image, { ...image, id: "failed", status: "error", imageUrl: undefined }],
@@ -58,7 +58,6 @@ describe("project gallery aggregation", () => {
     expect(items.map((item) => item.id)).toEqual([
       "image:image-1",
       "video:video-1",
-      "project-asset:asset-1",
     ]);
   });
 
@@ -66,8 +65,16 @@ describe("project gallery aggregation", () => {
     const [item] = buildProjectGalleryItems({ assets: [], images: [image], videos: [] });
     expect(item).toMatchObject({
       kind: "image",
+      name: "雨夜",
       sourceRecordId: "image-1",
       mediaUrl: "https://example.com/rain.png",
     });
+  });
+
+  it("uses prompt content instead of generation mode labels as card names", () => {
+    const items = buildProjectGalleryItems({ assets: [], images: [image], videos: [video] });
+
+    expect(items.find((item) => item.id === "image:image-1")?.name).toBe("雨夜");
+    expect(items.find((item) => item.id === "video:video-1")?.name).toBe("列车驶入");
   });
 });

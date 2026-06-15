@@ -4,12 +4,19 @@
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background: #faf7ef;
+  background: var(--otato-paper-background, #faf7ef);
   color: #050505;
+}
+
+@media (max-width: 920px) {
+  .shell {
+    --project-mode-bar-height: 182px;
+  }
 }
 
 .content {
   min-height: calc(100vh - var(--project-mode-bar-height));
+  background: transparent;
 }
 
 .workspaceContent {
@@ -52,7 +59,15 @@
   line-height: 1.7;
 }
 
-.state a {
+.stateActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.state a,
+.state button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -69,12 +84,25 @@
   transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.state a:hover {
+.state button {
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  cursor: pointer;
+}
+
+.state a:hover,
+.state button:hover {
   transform: var(--otato-control-hover-transform, translate(-1px, -1px));
   box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
-.state a:active {
+.state button:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+}
+
+.state a:active,
+.state button:active {
   transform: var(--otato-control-press-transform, translate(2px, 2px));
   box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
@@ -97,7 +125,7 @@
   overflow: auto;
   padding: 16px;
   border-left: 4px solid #050505;
-  background: #faf7ef;
+  background: var(--otato-paper-background, #faf7ef);
   box-shadow: -10px 0 0 rgba(5, 5, 5, 0.1);
 }
 

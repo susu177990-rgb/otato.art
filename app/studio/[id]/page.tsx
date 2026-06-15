@@ -75,6 +75,8 @@ function StudioInner() {
   const routeOptions = useProjectScriptRouteOptions();
   const projectId = routeOptions?.projectId ?? params.id ?? "";
   const backHref = routeOptions?.backHref ?? "/projects";
+  const onboardingHref = routeOptions?.onboardingHref ?? `/project/${projectId}/onboarding`;
+  const onRestartOnboarding = routeOptions?.onRestartOnboarding;
   const requireOnboarding = routeOptions?.requireOnboarding ?? true;
   const { settings, openSettings } = useApiSettings();
 
@@ -119,11 +121,9 @@ function StudioInner() {
   const fullAutoAbortRef = useRef(false);
   const projectReady = !requireOnboarding || (onboardingStatus ?? "ready") === "ready";
 
-  // 顶栏「分集体检」+「导出 ZIP」相关 state（原 ArtifactPanel 内部，已上提）
+  // 顶栏「导出 ZIP」相关 state（原 ArtifactPanel 内部，已上提）
   const [exportingZip, setExportingZip] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [statsResult, setStatsResult] = useState<string | null>(null);
+  const [restartingOnboarding, setRestartingOnboarding] = useState(false);
 
   useEffect(() => {
     artifactsRef.current = artifacts;
@@ -303,25 +303,6 @@ function StudioInner() {
       }, 600);
     },
     [projectId]
-  );
-
-  /** 未达标仍要标记已验（需填写原因）；「达标」路径由下方 effect 根据 Gate 自动写入 */
-  const handleGateOverrideMark = useCallback(
-    async (overrideNote?: string) => {
-      if (!projectId || currentStage < 1) return;
-      const nextMax = Math.max(currentStage, maxApprovedStage);
-      const note = (overrideNote ?? "").trim() || "未达标仍标记";
-      setMaxApprovedStage(nextMax);
-      setGateOverrideNote(note);
-      try {
-        await fetch(`/api/projects/${projectId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ maxApprovedStage: nextMax, gateOverrideNote: note }),
-        });
-      } catch {}
-    },
-    [projectId, currentStage, maxApprovedStage]
   );
 
   /** 当前对话阶段 Gate 通过时，自动将工程「已验至」提升到 currentStage（等同原「标为已验收」） */
@@ -812,12 +793,7 @@ function StudioInner() {
     [handleStartPipeline, handleStartOutlinePipeline]
   );
 
-  // ----- 顶栏「分集体检」+「导出 ZIP」 -----
-  const stage7Artifacts = useMemo(
-    () => artifacts.filter((a) => a.stage === 7),
-    [artifacts]
-  );
-  const canEpisodeCheck = Boolean(projectId) && stage7Artifacts.length > 0;
+  // ----- 顶栏「导出 ZIP」 -----
   const hasBriefForExport = Boolean(creativeBrief.trim());
   const hasBibleForExport = Boolean(seriesBible.trim());
   const canExport =
@@ -841,27 +817,29 @@ function StudioInner() {
     }
   }, [canExport, projectName, artifacts, creativeBrief, seriesBible]);
 
-  const handleEpisodeCheck = useCallback(async () => {
-    if (!canEpisodeCheck) return;
-    const text = stage7Artifacts.map((a) => `## ${a.label}\n\n${a.content}`).join("\n\n---\n\n");
-    setStatsLoading(true);
-    setStatsResult(null);
-    setStatsOpen(true);
+  const handleRestartOnboarding = useCallback(async () => {
+    if (!projectId || restartingOnboarding) return;
+    const ok = window.confirm(
+      "将回到剧本前置流程，重新核对基本信息、素材、策划和立项确认。已有编剧室对话、产物、思路书和系列圣经不会被清空。是否继续？"
+    );
+    if (!ok) return;
+
+    setRestartingOnboarding(true);
     try {
-      const res = await fetch("/api/episode-stats", {
-        method: "POST",
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ onboardingStatus: "planning" }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      setStatsResult(JSON.stringify(data, null, 2));
+      if (!res.ok) throw new Error("无法回到前置流程");
+      setOnboardingStatus("planning");
+      await onRestartOnboarding?.();
     } catch (e) {
-      setStatsResult(e instanceof Error ? e.message : String(e));
+      alert(e instanceof Error ? e.message : "无法回到前置流程");
     } finally {
-      setStatsLoading(false);
+      setRestartingOnboarding(false);
     }
-  }, [canEpisodeCheck, stage7Artifacts]);
+  }, [projectId, restartingOnboarding, onRestartOnboarding]);
 
   function handleMessagesChange(newMessages: Message[]) {
     setMessages(newMessages);
@@ -1049,10 +1027,10 @@ function StudioInner() {
   const switchDisabled = !projectId || !settings.apiKey || !projectReady;
   const isAutoError = !fullAutoEnabled && pipelineProgress?.status === "error" && fullAutoStage > 0;
   const autoSwitchClass = fullAutoEnabled
-    ? [styles.autoSwitch, styles.autoSwitchActive].join(" ")
+    ? [shellStyles.navLink, shellStyles.navLinkActive, styles.autoSwitch, styles.autoSwitchActive].join(" ")
     : isAutoError
-      ? [styles.autoSwitch, styles.autoSwitchError].join(" ")
-      : styles.autoSwitch;
+      ? [shellStyles.navLink, styles.autoSwitch, styles.autoSwitchError].join(" ")
+      : [shellStyles.navLink, styles.autoSwitch].join(" ");
   const autoLabelClass = fullAutoEnabled
     ? [styles.autoLabel, styles.autoLabelActive].join(" ")
     : isAutoError
@@ -1060,15 +1038,23 @@ function StudioInner() {
       : styles.autoLabel;
 
   return (
-    <main className={shellStyles.page}>
+    <main className={routeOptions ? [shellStyles.page, styles.embeddedProjectPage].join(" ") : shellStyles.page}>
       <header className={shellStyles.topbar}>
         <div className={[shellStyles.topbarLeft, styles.topbarLeftCompact].join(" ")}>
-          <Link href={backHref} className={shellStyles.navLink}>
-            返回
-          </Link>
-          <div className={styles.titleStack}>
-            <span className={styles.titleSub}>{projectName || "…"}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleRestartOnboarding()}
+            disabled={!projectId || restartingOnboarding}
+            className={shellStyles.navLink}
+            title="保留当前内容，重新回到基本信息、素材、策划、立项确认流程"
+          >
+            {restartingOnboarding ? "返回中…" : "重新开始"}
+          </button>
+          {!routeOptions ? (
+            <div className={styles.titleStack}>
+              <span className={styles.titleSub}>{projectName || "…"}</span>
+            </div>
+          ) : null}
         </div>
 
         <div className={styles.stageStripCluster}>
@@ -1080,11 +1066,10 @@ function StudioInner() {
                 setBibleDrawerOpen(true);
               }}
               disabled={!projectId}
-              className={shellStyles.stageStripTile}
+              className={[shellStyles.stageStripTile, styles.prePipelineTile].join(" ")}
               title="《创作思路确认书》：立项方向与体量（Markdown）"
             >
               <span>思路书</span>
-              <span className={shellStyles.stageStripDot} aria-hidden />
             </button>
             <button
               type="button"
@@ -1093,11 +1078,10 @@ function StudioInner() {
                 setBibleDrawerOpen(true);
               }}
               disabled={!projectId}
-              className={shellStyles.stageStripTile}
+              className={[shellStyles.stageStripTile, styles.prePipelineTile].join(" ")}
               title="项目设定真源（SSOT）"
             >
               <span>圣经</span>
-              <span className={shellStyles.stageStripDot} aria-hidden />
             </button>
             <button
               type="button"
@@ -1106,11 +1090,10 @@ function StudioInner() {
                 setBibleDrawerOpen(true);
               }}
               disabled={!projectId}
-              className={shellStyles.stageStripTile}
+              className={[shellStyles.stageStripTile, styles.prePipelineTile].join(" ")}
               title="全剧英语对白语体简报（与系列圣经同抽屉）"
             >
               <span>简报</span>
-              <span className={shellStyles.stageStripDot} aria-hidden />
             </button>
           </div>
           <StudioStageStrip
@@ -1119,9 +1102,6 @@ function StudioInner() {
             currentStage={currentStage}
             viewStage={viewStage}
             onViewStageChange={setViewStage}
-            maxApprovedStage={maxApprovedStage}
-            gateOverrideNote={gateOverrideNote}
-            onGateOverrideMark={handleGateOverrideMark}
             episodeCount={projectMeta?.episodeCount ? parseTargetEpisodeCount(projectMeta.episodeCount) ?? undefined : undefined}
           />
         </div>
@@ -1145,36 +1125,23 @@ function StudioInner() {
               onClick={handleToggleFullAuto}
               className={autoSwitchClass}
             >
-              <span aria-hidden />
+              <span className={styles.autoSwitchTrack} aria-hidden>
+                <span className={styles.autoSwitchThumb} />
+              </span>
+              <span className={autoLabelClass}>
+                {fullAutoEnabled ? (
+                  <>
+                    <span className={styles.autoDot} aria-hidden />
+                    自动 S{fullAutoStage || "…"}
+                  </>
+                ) : isAutoError ? (
+                  `S${fullAutoStage} 出错`
+                ) : (
+                  "全自动"
+                )}
+              </span>
             </button>
-            <span className={autoLabelClass}>
-              {fullAutoEnabled ? (
-                <>
-                  <span className={styles.autoDot} aria-hidden />
-                  自动 S{fullAutoStage || "…"}
-                </>
-              ) : isAutoError ? (
-                `S${fullAutoStage} 出错`
-              ) : (
-                "全自动"
-              )}
-            </span>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleEpisodeCheck()}
-            disabled={!canEpisodeCheck}
-            className={shellStyles.navLink}
-            title={
-              !projectId
-                ? "请先选择项目"
-                : stage7Artifacts.length === 0
-                  ? "暂无分集产物，无法体检"
-                  : "分集体检：汉字量、估时等（启发式，对齐 tools/episode-stats）"
-            }
-          >
-            体检
-          </button>
           <button
             type="button"
             onClick={() => void handleExportZip()}
@@ -1188,7 +1155,7 @@ function StudioInner() {
                   : "打包下载 ZIP（含立项文档与各阶段产物，正文为 Markdown）"
             }
           >
-            {exportingZip ? "打包中…" : "ZIP"}
+            {exportingZip ? "打包中…" : "下载"}
           </button>
         </nav>
       </header>
@@ -1197,7 +1164,7 @@ function StudioInner() {
         <div className={styles.banner}>
           <div className={styles.bannerInner}>
             立项未完成（{onboardingStatus === "pending_setup" ? "待填写" : "策划中"}）。
-            <Link href={`/project/${projectId}/onboarding`}>去立项页</Link>
+            <Link href={onboardingHref}>去立项页</Link>
           </div>
         </div>
       ) : null}
@@ -1206,7 +1173,7 @@ function StudioInner() {
         <div className={styles.banner}>
           <div className={styles.bannerInner}>
             检测到已有对话或产物但系列圣经仍为空。请到立项页补生成系列圣经，或在顶栏「系列圣经」抽屉中用 LLM 生成。
-            <Link href={`/project/${projectId}/onboarding`}>去立项页</Link>
+            <Link href={onboardingHref}>去立项页</Link>
           </div>
         </div>
       ) : null}
@@ -1247,54 +1214,6 @@ function StudioInner() {
           />
         </div>
       </section>
-
-      {statsOpen && (
-        <div
-          className={shellStyles.modalScrim}
-          onClick={() => setStatsOpen(false)}
-          role="presentation"
-        >
-          <div
-            className={shellStyles.modalCard}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="分集体检结果"
-          >
-            <div className={shellStyles.modalHead}>
-              <h2 className={shellStyles.modalTitle}>分集体检</h2>
-              <button
-                type="button"
-                onClick={() => setStatsOpen(false)}
-                className={[shellStyles.button, shellStyles.buttonSubtle].join(" ")}
-              >
-                关闭
-              </button>
-            </div>
-            {statsLoading ? (
-              <p className={shellStyles.helpText}>计算中…</p>
-            ) : (
-              <pre
-                className={shellStyles.mono}
-                style={{
-                  margin: 0,
-                  maxHeight: "60vh",
-                  overflow: "auto",
-                  whiteSpace: "pre-wrap",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
-                  background: "rgba(0, 0, 0, 0.32)",
-                  padding: 12,
-                  fontSize: 11,
-                  lineHeight: 1.6,
-                  color: "#d4d4d8",
-                }}
-              >
-                {statsResult}
-              </pre>
-            )}
-          </div>
-        </div>
-      )}
 
       <StudioBibleDrawer
         open={bibleDrawerOpen}

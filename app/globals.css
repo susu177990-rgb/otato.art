@@ -4,6 +4,11 @@
   --background: #faf7ef;
   --foreground: #181818;
   --otato-bg: #faf7ef;
+  --otato-paper-background:
+    radial-gradient(circle at 1px 1px, rgba(5, 5, 5, 0.075) 1px, transparent 1.8px) 0 0 / 22px 22px,
+    radial-gradient(circle at 14px 16px, rgba(255, 216, 107, 0.22) 0.9px, transparent 1.8px) 0 0 / 42px 42px,
+    linear-gradient(90deg, rgba(5, 5, 5, 0.022) 1px, transparent 1px) 0 0 / 56px 56px,
+    linear-gradient(180deg, #fbf3e4 0%, #f0e7d6 100%);
   --otato-surface: #fffdf8;
   --otato-surface-strong: #ffffff;
   --otato-text: #181818;

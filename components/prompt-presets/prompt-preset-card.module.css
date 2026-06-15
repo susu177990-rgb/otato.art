@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 164px;
+  min-height: 180px;
   border: 2px solid #050505;
   border-radius: 20px;
   background: #ffffff;
@@ -16,7 +16,7 @@
 }
 
 .cardCompact {
-  min-height: 172px;
+  min-height: 180px;
 }
 
 .main {
@@ -26,8 +26,9 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   padding: 8px;
+  border-radius: 18px 18px 0 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -203,8 +204,10 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 0 0 auto;
   gap: 10px;
-  padding: 8px 11px 11px 8px;
+  padding: 8px 16px 18px 8px;
   border-top: 2px solid #050505;
+  border-radius: 0 0 18px 18px;
+  overflow: visible;
 }
 
 .cardFooterSingle {

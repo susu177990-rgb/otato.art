@@ -181,13 +181,12 @@
 /* Production outline UI override */
 
 .stage {
-  background: #ffffff;
+  background: transparent;
   color: #050505;
 }
 
 .messages,
 .messagesForm,
-.emptyGuide,
 .toolBubble,
 .toolJson,
 .toolCall,
@@ -197,6 +196,12 @@
   color: #050505;
   box-shadow: none;
   backdrop-filter: none;
+}
+
+.emptyGuide {
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
 .messages {

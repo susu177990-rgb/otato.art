@@ -14,7 +14,7 @@ type ProjectModeBarProps = {
 export function ProjectModeBar({ onOpenAssets, onOpenPresets }: ProjectModeBarProps) {
   const pathname = usePathname();
   const { project, projectId, loading, error, openRenameDialog } = useProjectWorkspace();
-  const activeMode = projectId ? projectModeFromPathname(pathname, projectId) : "overview";
+  const activeMode = projectId ? projectModeFromPathname(pathname, projectId) : "workspace";
 
   return (
     <header className={styles.bar}>

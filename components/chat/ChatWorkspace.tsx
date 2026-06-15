@@ -695,7 +695,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   };
 
   return (
-    <div className={styles.stage}>
+    <div className={[styles.stage, projectId ? styles.projectStage : ""].filter(Boolean).join(" ")}>
       {isSkillMode ? (
         <ChatSkillRail
           skillPacks={skillPacks}

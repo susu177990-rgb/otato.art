@@ -40,6 +40,14 @@ import styles from "./onboarding-page.module.css";
 
 type TabId = "meta" | "materials" | "planning" | "finalize";
 
+type OnboardingPageProps = {
+  projectId?: string;
+  embedded?: boolean;
+  backHref?: string;
+  studioHref?: string;
+  onCompleted?: () => void | Promise<void>;
+};
+
 const TAB_LABELS: Record<TabId, string> = {
   meta: "基本信息",
   materials: "素材",
@@ -66,10 +74,17 @@ function effectiveAdaptPhase(p: Project): AdaptationPhase {
   return p.adaptationPhase ?? "upload";
 }
 
-export default function OnboardingPage() {
-  const params = useParams<{ id: string }>();
+export default function OnboardingPage({
+  projectId,
+  embedded = false,
+  backHref = "/projects",
+  studioHref,
+  onCompleted,
+}: OnboardingPageProps = {}) {
+  const params = useParams<{ id?: string }>();
   const router = useRouter();
-  const id = params.id;
+  const id = projectId ?? params.id ?? "";
+  const finalStudioHref = studioHref ?? `/studio/${id}`;
 
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -688,7 +703,8 @@ export default function OnboardingPage() {
       setCreativeBrief(saved.creativeBrief ?? brief);
 
       if ((saved.seriesBible ?? "").trim()) {
-        router.push(`/studio/${id}`);
+        await onCompleted?.();
+        router.push(finalStudioHref);
         return;
       }
 
@@ -708,7 +724,8 @@ export default function OnboardingPage() {
       } finally {
         setGeneratingBible(false);
       }
-      router.push(`/studio/${id}`);
+      await onCompleted?.();
+      router.push(finalStudioHref);
     } catch (e) {
       alert(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -753,7 +770,7 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <main className={shellStyles.page}>
+      <main className={embedded ? styles.embeddedPage : shellStyles.page}>
         <div className={shellStyles.empty}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
             <span className={shellStyles.spinner} aria-hidden /> 加载中…
@@ -765,12 +782,12 @@ export default function OnboardingPage() {
 
   if (!project) {
     return (
-      <main className={shellStyles.page}>
+      <main className={embedded ? styles.embeddedPage : shellStyles.page}>
         <div className={shellStyles.empty}>
           <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <span>项目不存在</span>
-            <Link href="/projects" className={shellStyles.navLink}>
-              返回项目列表
+            <Link href={backHref} className={shellStyles.navLink}>
+              返回项目
             </Link>
           </span>
         </div>
@@ -779,70 +796,120 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
-        <div className={shellStyles.topbarLeft}>
-          <Link href="/projects" className={shellStyles.navLink}>
-            返回项目列表
-          </Link>
-          <div className={shellStyles.topbarTagline}>
-            <p className={shellStyles.helpText}>
-              基本信息 → 素材 → 策划 → 立项确认 → 编剧室
-              {saving ? <span style={{ marginLeft: 8 }}>· 保存中…</span> : null}
-            </p>
+    <main className={embedded ? styles.embeddedPage : shellStyles.page}>
+      {!embedded ? (
+        <header className={shellStyles.topbar}>
+          <div className={shellStyles.topbarLeft}>
+            <Link href={backHref} className={shellStyles.navLink}>
+              返回项目
+            </Link>
+            <div className={shellStyles.topbarTagline}>
+              <p className={shellStyles.helpText}>
+                基本信息 → 素材 → 策划 → 立项确认 → 编剧室
+                {saving ? <span style={{ marginLeft: 8 }}>· 保存中…</span> : null}
+              </p>
+            </div>
           </div>
-        </div>
-        <nav className={shellStyles.topnav}>
-          <div className={shellStyles.segmented} aria-label="创作模式">
-            <button
-              type="button"
-              onClick={() => requestOriginTab("original")}
-              className={[
-                shellStyles.segmentedItem,
-                originTab === "original" ? shellStyles.segmentedItemActive : "",
-              ].join(" ")}
-            >
-              原创
-            </button>
-            <button
-              type="button"
-              onClick={() => requestOriginTab("adaptation")}
-              className={[
-                shellStyles.segmentedItem,
-                originTab === "adaptation" ? shellStyles.segmentedItemActive : "",
-              ].join(" ")}
-            >
-              改编
-            </button>
-          </div>
-          {serverMode === "adaptation" && originTab === "original" ? (
-            <span className={styles.adaptHint}>（已存为改编）</span>
-          ) : null}
-        </nav>
-      </header>
+          <nav className={shellStyles.topnav}>
+            <div className={shellStyles.segmented} aria-label="创作模式">
+              <button
+                type="button"
+                onClick={() => requestOriginTab("original")}
+                className={[
+                  shellStyles.segmentedItem,
+                  originTab === "original" ? shellStyles.segmentedItemActive : "",
+                ].join(" ")}
+              >
+                原创
+              </button>
+              <button
+                type="button"
+                onClick={() => requestOriginTab("adaptation")}
+                className={[
+                  shellStyles.segmentedItem,
+                  originTab === "adaptation" ? shellStyles.segmentedItemActive : "",
+                ].join(" ")}
+              >
+                改编
+              </button>
+            </div>
+            {serverMode === "adaptation" && originTab === "original" ? (
+              <span className={styles.adaptHint}>（已存为改编）</span>
+            ) : null}
+          </nav>
+        </header>
+      ) : null}
 
       <div className={styles.body}>
         <section className={styles.shell}>
-          <div className={shellStyles.tabsRow}>
-            <div className={shellStyles.segmented} aria-label="立项步骤">
-              {TAB_ORDER.map((tab) => {
-                const isActive = activeTab === tab;
-                const showBadge = !isActive && suggestedTab === tab;
-                return (
+          <div className={styles.workspaceTopRow}>
+            <div className={styles.stepControls}>
+              {embedded ? (
+                <div className={shellStyles.segmented} aria-label="创作模式">
                   <button
-                    key={tab}
                     type="button"
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => requestOriginTab("original")}
                     className={[
                       shellStyles.segmentedItem,
-                      isActive ? shellStyles.segmentedItemActive : "",
+                      originTab === "original" ? shellStyles.segmentedItemActive : "",
                     ].join(" ")}
                   >
-                    {TAB_LABELS[tab]}
-                    {showBadge ? <span className={styles.tabBadge} aria-label="建议下一步" /> : null}
+                    原创
                   </button>
-                );
-              })}
+                  <button
+                    type="button"
+                    onClick={() => requestOriginTab("adaptation")}
+                    className={[
+                      shellStyles.segmentedItem,
+                      originTab === "adaptation" ? shellStyles.segmentedItemActive : "",
+                    ].join(" ")}
+                  >
+                    改编
+                  </button>
+                </div>
+              ) : null}
+              <div className={shellStyles.segmented} aria-label="立项步骤">
+                {TAB_ORDER.map((tab) => {
+                  const isActive = activeTab === tab;
+                  const showBadge = !isActive && suggestedTab === tab;
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                      className={[
+                        shellStyles.segmentedItem,
+                        isActive ? shellStyles.segmentedItemActive : "",
+                      ].join(" ")}
+                    >
+                      {TAB_LABELS[tab]}
+                      {showBadge ? <span className={styles.tabBadge} aria-label="建议下一步" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {embedded && serverMode === "adaptation" && originTab === "original" ? (
+                <span className={styles.adaptHint}>（已存为改编）</span>
+              ) : null}
+            </div>
+            <div className={styles.enterStudioGroup}>
+              {!finalizeReady ? (
+                <span className={shellStyles.helpText}>
+                  需先填写剧名 / 创作思路 / 系列圣经
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleFinalizeAndEnterStudio()}
+                disabled={saving || generatingBible || generatingLocaleBrief || !finalizeReady}
+                className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+              >
+                {saving
+                  ? generatingBible
+                    ? "正在生成系列圣经…"
+                    : "保存中…"
+                  : "保存并进入编剧室"}
+              </button>
             </div>
           </div>
 
@@ -1176,7 +1243,7 @@ export default function OnboardingPage() {
           )}
 
           {activeTab === "finalize" && (
-            <section className={styles.section}>
+            <section className={[styles.section, styles.finalizeSection].join(" ")}>
               <div
                 className={[
                   shellStyles.banner,
@@ -1206,8 +1273,8 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              <div className={shellStyles.finalizeGrid}>
-                <div className={[shellStyles.card, shellStyles.finalizeGridFull].join(" ")}>
+              <div className={styles.finalizeGrid}>
+                <div className={[shellStyles.card, styles.finalizeCard, styles.creativeBriefCard].join(" ")}>
                   <div className={shellStyles.cardHead}>
                     <div>
                       <h2 className={shellStyles.cardTitle}>创作思路确认书</h2>
@@ -1244,11 +1311,11 @@ export default function OnboardingPage() {
                     onChange={(e) => setCreativeBrief(e.target.value)}
                     rows={14}
                     placeholder="规划正文将显示在此…"
-                    className={[shellStyles.textarea, styles.finalizeBigTextarea].join(" ")}
+                    className={[shellStyles.textarea, styles.finalizeTextarea, styles.finalizeBigTextarea].join(" ")}
                   />
                 </div>
 
-                <div className={shellStyles.card}>
+                <div className={[shellStyles.card, styles.finalizeCard, styles.seriesBibleCard].join(" ")}>
                   <div className={shellStyles.cardHead}>
                     <div>
                       <h2 className={shellStyles.cardTitle}>系列圣经（SSOT）</h2>
@@ -1299,11 +1366,11 @@ export default function OnboardingPage() {
                     onChange={(e) => setSeriesBibleDraft(e.target.value)}
                     rows={12}
                     placeholder="建议含一级标题「# 系列圣经与里程碑（SERIES_BIBLE）」…"
-                    className={[shellStyles.textarea, styles.finalizeMidTextarea].join(" ")}
+                    className={[shellStyles.textarea, styles.finalizeTextarea, styles.finalizeMidTextarea].join(" ")}
                   />
                 </div>
 
-                <div className={shellStyles.card}>
+                <div className={[shellStyles.card, styles.finalizeCard, styles.localeBriefCard].join(" ")}>
                   <div className={shellStyles.cardHead}>
                     <div>
                       <h2 className={shellStyles.cardTitle}>英语 Locale 简报（STAGE 7）</h2>
@@ -1334,32 +1401,13 @@ export default function OnboardingPage() {
                     onChange={(e) => setEnglishLocaleBriefDraft(e.target.value)}
                     rows={8}
                     placeholder="可选；也可进编剧室后在顶栏「英语简报」中生成。"
-                    className={[shellStyles.textarea, styles.finalizeMidTextarea].join(" ")}
+                    className={[shellStyles.textarea, styles.finalizeTextarea, styles.finalizeMidTextarea].join(" ")}
                   />
                 </div>
               </div>
             </section>
           )}
 
-          <div className={shellStyles.stickyCta}>
-            {!finalizeReady ? (
-              <span className={shellStyles.helpText} style={{ alignSelf: "center" }}>
-                需先填写剧名 / 创作思路 / 系列圣经
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void handleFinalizeAndEnterStudio()}
-              disabled={saving || generatingBible || generatingLocaleBrief || !finalizeReady}
-              className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
-            >
-              {saving
-                ? generatingBible
-                  ? "正在生成系列圣经…"
-                  : "保存中…"
-                : "保存并进入编剧室"}
-            </button>
-          </div>
         </section>
       </div>
 

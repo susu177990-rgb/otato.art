@@ -10,8 +10,10 @@ import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { ProjectAssetPickerDialog, type ProjectAssetMediaKind } from "@/components/project-assets/ProjectAssetPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
+import type { ProjectAsset } from "@/lib/project-assets";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
@@ -54,6 +56,8 @@ type ReferenceState = {
   frames: [ReferenceSlot, ReferenceSlot];
   allPurpose: ReferenceCollections;
 };
+type ReferenceUploadMenuState = { kind: ReferenceKind; index: number } | null;
+type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
 type PresetRailItem = {
   id: string;
   label: string;
@@ -101,6 +105,25 @@ function kindGroupLabel(kind: ReferenceKind): string {
   if (kind === "image") return "图片";
   if (kind === "video") return "视频";
   return "音频";
+}
+
+function assetPickerKindsForReference(kind: ReferenceKind): ProjectAssetMediaKind[] {
+  if (kind === "image") return ["image"];
+  if (kind === "video") return ["video"];
+  return [];
+}
+
+function mimeTypeFromAssetUrl(url: string, kind: Extract<ReferenceKind, "image" | "video">): string {
+  if (/^data:([^;,]+)/i.test(url)) return url.match(/^data:([^;,]+)/i)?.[1] || (kind === "video" ? "video/mp4" : "image/png");
+  if (kind === "video") {
+    if (/\.webm(?:[?#]|$)/i.test(url)) return "video/webm";
+    if (/\.(mov|quicktime)(?:[?#]|$)/i.test(url)) return "video/quicktime";
+    return "video/mp4";
+  }
+  if (/\.jpe?g(?:[?#]|$)/i.test(url)) return "image/jpeg";
+  if (/\.webp(?:[?#]|$)/i.test(url)) return "image/webp";
+  if (/\.gif(?:[?#]|$)/i.test(url)) return "image/gif";
+  return "image/png";
 }
 
 function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): string[] {
@@ -223,6 +246,8 @@ export default function VideoPage() {
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [referenceUploadMenu, setReferenceUploadMenu] = useState<ReferenceUploadMenuState>(null);
+  const [projectAssetPicker, setProjectAssetPicker] = useState<ProjectAssetPickerState>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -247,34 +272,30 @@ export default function VideoPage() {
   );
   const promptPresetById = useMemo(() => new Map(promptPresets.map((preset) => [preset.id, preset])), [promptPresets]);
   const displayedPromptPresets = useMemo(
-    () =>
-      allModes
+    () => {
+      const workspacePresets = allModes
         .filter((mode) => !VIDEO_MODES.some((base) => base.id === mode.id))
-        .map((mode) => workspaceModeToPromptPreset(mode, videoWorkspace, promptPresetById.get(mode.id))),
-    [allModes, promptPresetById, videoWorkspace],
-  );
-  const favoritePresetIds = useMemo(
-    () => new Set(displayedPromptPresets.filter((preset) => preset.isFavorite).map((preset) => preset.id)),
-    [displayedPromptPresets],
+        .map((mode) => workspaceModeToPromptPreset(mode, videoWorkspace, promptPresetById.get(mode.id)));
+      const workspacePresetIds = new Set(workspacePresets.map((preset) => preset.id));
+      const libraryOnlyFavorites = promptPresets.filter(
+        (preset) => preset.kind === "video" && preset.isFavorite && !workspacePresetIds.has(preset.id),
+      );
+      return [...workspacePresets, ...libraryOnlyFavorites];
+    },
+    [allModes, promptPresetById, promptPresets, videoWorkspace],
   );
 
   const presetRailItems = useMemo<PresetRailItem[]>(
-    () => {
-      const customRows = (videoWorkspace.customModes ?? []).map((mode) => ({
-        id: mode.id,
-        label: mode.label,
-      }));
-      return customRows
-        .filter((item) => favoritePresetIds.has(item.id))
-        .reverse()
-        .map((item) => ({
-          id: item.id,
-          label: item.label,
-          promptTemplate: videoWorkspace.prompts[item.id] ?? "",
-          coverUrl: videoWorkspace.coverImageUrlByMode?.[item.id]?.trim() ?? "",
-        }));
-    },
-    [videoWorkspace.coverImageUrlByMode, videoWorkspace.customModes, videoWorkspace.prompts, favoritePresetIds],
+    () =>
+      displayedPromptPresets
+        .filter((preset) => preset.isFavorite)
+        .map((preset) => ({
+          id: preset.id,
+          label: preset.title,
+          promptTemplate: preset.promptTemplate,
+          coverUrl: preset.coverImageUrl,
+        })),
+    [displayedPromptPresets],
   );
 
   const selectedPreset = selectedPresetId === "free" ? FREE_PRESET : presetRailItems.find((item) => item.id === selectedPresetId) ?? FREE_PRESET;
@@ -378,13 +399,8 @@ export default function VideoPage() {
 
   function selectPromptPreset(preset: SitePromptPreset) {
     if (preset.kind !== "video") return;
-    const mode = allModes.find((item) => item.id === preset.id);
-    if (!mode) {
-      setError("这个预设还没有同步到视频工作台，请刷新后再试。");
-      return;
-    }
     setError("");
-    setSelectedPresetId(mode.id);
+    setSelectedPresetId(preset.id);
   }
 
   const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
@@ -520,6 +536,33 @@ export default function VideoPage() {
         if (fileInputRefs.current[key]) fileInputRefs.current[key]!.value = "";
       }
     }
+  }
+
+  function applyProjectAssetAsReference(kind: Extract<ReferenceKind, "image" | "video">, index: number, asset: ProjectAsset) {
+    const slot: NonNullable<ReferenceSlot> = {
+      kind,
+      url: asset.primaryImageUrl,
+      previewUrl: asset.primaryImageUrl,
+      label: asset.name,
+      mimeType: mimeTypeFromAssetUrl(asset.primaryImageUrl, kind),
+    };
+    setReferences((prev) => {
+      if (selectedUiModeId === "start_end_frame") {
+        const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
+        if (index === 0 || index === 1) frames[index] = slot;
+        return { ...prev, frames };
+      }
+      const current = [...prev.allPurpose[kind]];
+      current[index] = slot;
+      return {
+        ...prev,
+        allPurpose: {
+          ...prev.allPurpose,
+          [kind]: compactReferenceList(current),
+        },
+      };
+    });
+    setProjectAssetPicker(null);
   }
 
   function clearReference(kind: ReferenceKind, index: number) {
@@ -860,18 +903,25 @@ export default function VideoPage() {
                       void uploadReferenceFiles("image", index, e.dataTransfer.files);
                     }}
                   >
-                    <label aria-label={`${slotLabel(selectedUiModeId, index)}，点击上传参考图`}>
-                      <input
-                        ref={(node) => {
-                          fileInputRefs.current[`frame:${index}`] = node;
-                        }}
-                        className={styles.hiddenInput}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          void uploadReferenceFiles("image", index, e.target.files);
-                        }}
-                      />
+                    <input
+                      ref={(node) => {
+                        fileInputRefs.current[`frame:${index}`] = node;
+                      }}
+                      className={styles.hiddenInput}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        void uploadReferenceFiles("image", index, e.target.files);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={styles.refSlotButton}
+                      aria-label={`${slotLabel(selectedUiModeId, index)}，选择参考图来源`}
+                      onClick={() => setReferenceUploadMenu((current) =>
+                        current?.kind === "image" && current.index === index ? null : { kind: "image", index },
+                      )}
+                    >
                       {slot ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={slot.previewUrl} alt={slot.label} />
@@ -880,7 +930,30 @@ export default function VideoPage() {
                           <span className={styles.refSlotIndex}>{slotLabel(selectedUiModeId, index)}</span>
                         </span>
                       )}
-                    </label>
+                    </button>
+                    {referenceUploadMenu?.kind === "image" && referenceUploadMenu.index === index && !slot ? (
+                      <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReferenceUploadMenu(null);
+                            fileInputRefs.current[`frame:${index}`]?.click();
+                          }}
+                        >
+                          本地上传
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!projectId}
+                          onClick={() => {
+                            setReferenceUploadMenu(null);
+                            setProjectAssetPicker({ kind: "image", index });
+                          }}
+                        >
+                          项目素材
+                        </button>
+                      </div>
+                    ) : null}
                     {slot ? (
                       <button type="button" onClick={() => clearReference("image", index)} className={styles.deleteRef} aria-label="移除参考图">
                         ×
@@ -901,19 +974,26 @@ export default function VideoPage() {
                           void uploadReferenceFiles(kind, index, e.dataTransfer.files);
                         }}
                       >
-                        <label aria-label={`${kindSlotLabel(kind, index)}，点击上传${kindGroupLabel(kind)}素材`}>
-                          <input
-                            ref={(node) => {
-                              fileInputRefs.current[`${kind}:${index}`] = node;
-                            }}
-                            className={styles.hiddenInput}
-                            type="file"
-                            accept={kindAccept(kind)}
-                            multiple
-                            onChange={(e) => {
-                              void uploadReferenceFiles(kind, index, e.target.files);
-                            }}
-                          />
+                        <input
+                          ref={(node) => {
+                            fileInputRefs.current[`${kind}:${index}`] = node;
+                          }}
+                          className={styles.hiddenInput}
+                          type="file"
+                          accept={kindAccept(kind)}
+                          multiple
+                          onChange={(e) => {
+                            void uploadReferenceFiles(kind, index, e.target.files);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className={styles.refSlotButton}
+                          aria-label={`${kindSlotLabel(kind, index)}，选择${kindGroupLabel(kind)}素材来源`}
+                          onClick={() => setReferenceUploadMenu((current) =>
+                            current?.kind === kind && current.index === index ? null : { kind, index },
+                          )}
+                        >
                           {slot ? (
                             kind === "image" ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -928,7 +1008,32 @@ export default function VideoPage() {
                               <span className={styles.refSlotIndex}>{kindSlotLabel(kind, index)}</span>
                             </span>
                           )}
-                        </label>
+                        </button>
+                        {referenceUploadMenu?.kind === kind && referenceUploadMenu.index === index && !slot ? (
+                          <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReferenceUploadMenu(null);
+                                fileInputRefs.current[`${kind}:${index}`]?.click();
+                              }}
+                            >
+                              本地上传
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!projectId || assetPickerKindsForReference(kind).length === 0}
+                              onClick={() => {
+                                const [assetKind] = assetPickerKindsForReference(kind);
+                                if (!assetKind) return;
+                                setReferenceUploadMenu(null);
+                                setProjectAssetPicker({ kind: assetKind, index });
+                              }}
+                            >
+                              项目素材
+                            </button>
+                          </div>
+                        ) : null}
                         {slot ? (
                           <button type="button" onClick={() => clearReference(kind, index)} className={styles.deleteRef} aria-label={`移除${kindGroupLabel(kind)}素材`}>
                             ×
@@ -1123,6 +1228,17 @@ export default function VideoPage() {
           if (preset.kind === "video") loadVideoPromptPresets();
         }}
       />
+      {portalMounted && projectId && projectAssetPicker
+        ? createPortal(
+            <ProjectAssetPickerDialog
+              projectId={projectId}
+              allowedKinds={[projectAssetPicker.kind]}
+              onClose={() => setProjectAssetPicker(null)}
+              onSelect={(asset) => applyProjectAssetAsReference(projectAssetPicker.kind, projectAssetPicker.index, asset)}
+            />,
+            document.body,
+          )
+        : null}
     </main>
   );
 }

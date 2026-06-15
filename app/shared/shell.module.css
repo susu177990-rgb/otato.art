@@ -15,7 +15,7 @@
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--otato-bg, #faf7ef);
+  background: var(--otato-paper-background, var(--otato-bg, #faf7ef)) !important;
   color: var(--otato-text, #181818);
 }
 
@@ -863,7 +863,7 @@
   flex-shrink: 0;
   height: 100%;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 7, 8, 0.55);
+  background: var(--otato-bg, #faf7ef);
   backdrop-filter: blur(20px);
   padding: 8px 4px;
   overflow: hidden;
@@ -986,7 +986,7 @@
   flex-direction: column;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(7, 7, 8, 0.55);
+  background: var(--otato-bg, #faf7ef);
   backdrop-filter: blur(20px);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
   overflow: hidden;
@@ -1008,16 +1008,44 @@
   overflow: hidden;
 }
 
+@media (max-width: 760px) {
+  .canvasStage {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 12px 16px 24px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .sideCard {
+    width: 100%;
+    height: min(68vh, 620px);
+    flex: 0 0 auto;
+  }
+
+  .canvasCard {
+    width: 100%;
+    height: min(72vh, 680px);
+    flex: 0 0 auto;
+  }
+}
+
 /* ---------- Stage strip (single-row, top-bar) ---------- */
 
-/* 顶栏内嵌的 7 阶段段控；与 navLink 同一行使用，不带边框。 */
+/* 顶栏内嵌的 7 阶段段控；使用项目统一描边按钮语言。 */
 .stageStrip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 8px;
+  height: 42px;
+  padding: 3px;
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  box-shadow: var(--otato-control-shadow-small, 2px 2px 0 #050505);
   overflow-x: auto;
 }
 
@@ -1026,31 +1054,32 @@
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
-  color: #a1a1aa;
+  gap: 5px;
+  height: 30px;
+  padding: 0 7px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--otato-text, #181818);
   font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 900;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
   white-space: nowrap;
 }
 
 .stageStripTile:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.05);
-  color: #e4e4e7;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--otato-text, #181818);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-small, 2px 2px 0 #050505);
 }
 
 .stageStripTile:focus-visible {
-  outline: none;
-  outline-offset: 0;
-  box-shadow: none;
+  outline: 3px solid rgba(255, 77, 61, 0.55);
+  outline-offset: 2px;
 }
 
 .stageStripTile:disabled {
@@ -1059,19 +1088,21 @@
 }
 
 .stageStripTileActive {
-  border-color: rgba(255, 255, 255, 0.4);
-  background: #fafafa;
-  color: #09090b;
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+  box-shadow: var(--otato-control-shadow-small, 2px 2px 0 #050505);
 }
 
 .stageStripTileActive:hover:not(:disabled) {
-  background: #ffffff;
-  color: #09090b;
+  background: #ff6b5d;
+  color: #ffffff;
 }
 
 .stageStripTileInferred {
-  color: #fafafa;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--otato-line, #181818);
+  background: #050505;
+  color: #ffffff;
 }
 
 .stageStripIndex {
@@ -1080,50 +1111,64 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  background: #ffffff;
   color: inherit;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 900;
 }
 
 .stageStripTileActive .stageStripIndex {
-  background: rgba(0, 0, 0, 0.16);
+  background: #ffffff;
+  color: var(--otato-action, #ff4d3d);
+  border-color: #ffffff;
+}
+
+.stageStripTileInferred .stageStripIndex {
+  background: #ffffff;
+  color: #050505;
+  border-color: #ffffff;
 }
 
 .stageStripCount {
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--otato-surface, #f7f4ed);
   color: inherit;
-  opacity: 0.7;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stageStripTileActive .stageStripCount,
+.stageStripTileInferred .stageStripCount {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 
 .stageStripDot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  background: #52525b;
+  border: 2px solid currentColor;
+  background: #8f8f8f;
   flex-shrink: 0;
 }
 
-/* 顶栏 Stage popover：从 stage tile 下方滑出。 */
-.stagePopover {
-  position: absolute;
-  z-index: 50;
-  min-width: 280px;
-  max-width: 320px;
-  max-height: min(60vh, 460px);
-  overflow-y: auto;
-  border-radius: 15px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(8, 8, 9, 0.96);
-  backdrop-filter: blur(24px);
-  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.55);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  color: #e4e4e7;
+.stageStripTileComplete .stageStripDot {
+  background: #19a35b;
+}
+
+.stageStripTileNeedsWork .stageStripDot {
+  background: #f5b400;
+}
+
+.stageStripTileEmpty .stageStripDot {
+  background: #d8d8d8;
 }
 
 /* ---------- Floater / Popover ---------- */
@@ -1148,22 +1193,22 @@
 
 .floaterTitle {
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fafafa;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--otato-text, #181818);
 }
 
 .floaterSubtitle {
   margin: 0;
-  font-size: 10px;
-  color: #71717a;
+  font-size: 11px;
+  color: var(--otato-muted, #6f6a61);
   line-height: 1.5;
 }
 
 .floaterList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1171,15 +1216,31 @@
 
 .floaterListItem {
   display: flex;
-  gap: 6px;
-  font-size: 10px;
-  line-height: 1.5;
-  color: #d4d4d8;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 9px;
+  border: 2px solid var(--otato-line, #181818);
+  border-radius: 12px;
+  background: var(--otato-surface, #f7f4ed);
+  color: var(--otato-text, #181818);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .floaterListItem code {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 /* ---------- Pipeline strip (artifact panel top) ---------- */
@@ -1430,7 +1491,7 @@
 /* ---------- Production outline UI override (2026-06-08) ---------- */
 
 .page {
-  background: var(--outline-bg, #ffffff);
+  background: var(--otato-paper-background, var(--outline-bg, #ffffff)) !important;
   color: var(--outline-ink, #050505);
 }
 
@@ -1438,7 +1499,7 @@
   background:
     linear-gradient(rgba(5, 5, 5, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(5, 5, 5, 0.035) 1px, transparent 1px),
-    var(--outline-bg, #ffffff);
+    var(--outline-bg, #ffffff) !important;
   background-size: 42px 42px;
 }
 
@@ -1692,8 +1753,7 @@
 .drawerCard,
 .sideCard,
 .canvasCard,
-.floater,
-.stagePopover {
+.floater {
   border: 3px solid var(--outline-border, #050505);
   background: #ffffff;
   color: var(--outline-ink, #050505);
@@ -2311,30 +2371,71 @@
 .sideCard,
 .canvasCard {
   border-radius: 30px;
+  background: var(--otato-bg, #faf7ef);
 }
 
 .stageStrip {
   border: 3px solid var(--outline-border, #050505);
   border-radius: 15px;
   background: #ffffff;
+  box-shadow: var(--otato-control-shadow-small, 2px 2px 0 #050505);
 }
 
 .stageStripTile {
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
   color: var(--outline-ink, #050505);
 }
 
-.stageStripTileActive,
+.stageStripTile:hover:not(:disabled) {
+  border-color: var(--outline-border, #050505);
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--outline-ink, #050505);
+}
+
+.stageStripTileActive {
+  border-color: var(--outline-border, #050505);
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
+.stageStripTileActive:hover:not(:disabled) {
+  background: #ff6b5d;
+  color: #ffffff;
+}
+
 .stageStripTileInferred {
   border-color: var(--outline-border, #050505);
   background: var(--outline-ink, #050505);
   color: #ffffff;
 }
 
-.stageStripDot {
-  background: currentColor;
+.stageStripIndex {
+  border: 2px solid currentColor;
+  background: #ffffff;
+}
+
+.stageStripTileActive .stageStripIndex {
+  color: var(--otato-action, #ff4d3d);
+  border-color: #ffffff;
+}
+
+.stageStripTileInferred .stageStripIndex {
+  color: #050505;
+  border-color: #ffffff;
+}
+
+.stageStripTileComplete .stageStripDot {
+  background: #19a35b;
+}
+
+.stageStripTileNeedsWork .stageStripDot {
+  background: #f5b400;
+}
+
+.stageStripTileEmpty .stageStripDot {
+  background: #d8d8d8;
 }
 
 .pipelineStrip,

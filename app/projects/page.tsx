@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useMemo, type MouseEvent } from "reac
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProjectWorkspace } from "@/components/project/ProjectProvider";
+import { projectModeHref } from "@/components/project/project-routes";
 import type { ProjectSummary } from "@/lib/types";
-import { STAGE_LABELS } from "@/lib/types";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./projects-page.module.css";
 
@@ -19,6 +19,17 @@ function formatUpdated(iso: string) {
   } catch {
     return "";
   }
+}
+
+function projectStatusLabel(project: ProjectSummary) {
+  if (project.onboardingStatus === "pending_setup") return "待立项";
+  if (project.onboardingStatus === "planning") return "策划中";
+  return "项目中";
+}
+
+function projectModeLabel(project: ProjectSummary) {
+  if (project.originMode === "adaptation") return "改编项目";
+  return "原创项目";
 }
 
 function ProjectsHubInner() {
@@ -97,7 +108,7 @@ function ProjectsHubInner() {
   }, [projects, query, sortKey]);
 
   function handleOpen(id: string) {
-    router.push(`/projects/${encodeURIComponent(id)}`);
+    router.push(projectModeHref(id, "workspace"));
   }
 
   function handleDelete(e: MouseEvent, project: ProjectSummary) {
@@ -110,7 +121,7 @@ function ProjectsHubInner() {
   }
 
   return (
-    <main className={shellStyles.page}>
+    <main className={[shellStyles.page, styles.projectsPage].join(" ")}>
       <header className={styles.projectTopbar}>
         <div className={styles.projectTopbarIdentity}>
           <Link href="/" className={styles.projectTopbarBack}>
@@ -154,12 +165,6 @@ function ProjectsHubInner() {
 
       <div className={shellStyles.body}>
         <div className={[shellStyles.shell, shellStyles.shellWide].join(" ")}>
-          <section className={styles.hero}>
-            <span>PROJECTS</span>
-            <h1>项目</h1>
-            <p>只填写项目名称即可立项；进入项目后再切换工作台、剧本和无限画布。</p>
-          </section>
-
           {needsLogin ? (
             <section className={styles.loginPanel}>
               <h2>先登录再管理项目</h2>
@@ -193,7 +198,7 @@ function ProjectsHubInner() {
                   className={[shellStyles.select, shellStyles.inputCompact].join(" ")}
                 >
                   <option value="updated">按更新时间</option>
-                  <option value="stage">按已验阶段</option>
+                  <option value="stage">按项目进度</option>
                   <option value="name">按名称</option>
                 </select>
               </label>
@@ -203,12 +208,7 @@ function ProjectsHubInner() {
           {!needsLogin && visible.length > 0 ? (
             <div className={styles.grid}>
               {visible.map((p) => {
-                const stageLabel = p.currentStage > 0
-                  ? STAGE_LABELS[p.currentStage] || `STAGE ${p.currentStage}`
-                  : "未开始";
-                const approved = p.maxApprovedStage ?? 0;
-                const seriesBibleOk = Boolean(p.seriesBibleFilled);
-                const onboardingPending = p.onboardingStatus && p.onboardingStatus !== "ready";
+                const updated = formatUpdated(p.updatedAt);
                 return (
                   <article
                     key={p.id}
@@ -223,47 +223,25 @@ function ProjectsHubInner() {
                     }}
                     className={styles.projectCard}
                   >
+                    <div className={styles.projectCardHead}>
+                      <span className={styles.projectStatus}>{projectStatusLabel(p)}</span>
+                      <span className={styles.projectMode}>{projectModeLabel(p)}</span>
+                    </div>
                     <div className={styles.projectBody}>
                       <h2 className={styles.projectTitle}>{p.name}</h2>
-                      <p className={styles.projectStage}>{stageLabel}</p>
-                      <div className={styles.projectMeta}>
-                        {p.creativeDirectionLabel ? (
-                          <span className={shellStyles.metaPill} title="创作方向">
-                            {p.creativeDirectionLabel}
-                          </span>
-                        ) : null}
-                        <span
-                          className={[
-                            shellStyles.metaPill,
-                            approved > 0 ? shellStyles.metaPillOk : shellStyles.metaPillMute,
-                          ].join(" ")}
-                          title="工程已验收的最高阶段"
-                        >
-                          已验至 {approved > 0 ? `S${approved}` : "—"}
-                        </span>
-                        {p.episodeCount ? (
-                          <span className={shellStyles.metaPill} title="目标集数">
-                            {p.episodeCount.includes("集") ? p.episodeCount : `${p.episodeCount} 集`}
-                          </span>
-                        ) : null}
-                        <span
-                          className={[
-                            shellStyles.metaPill,
-                            seriesBibleOk ? shellStyles.metaPillOk : shellStyles.metaPillMute,
-                          ].join(" ")}
-                          title="是否已生成系列圣经"
-                        >
-                          圣经 {seriesBibleOk ? "✓" : "·"}
-                        </span>
-                        {onboardingPending ? (
-                          <span className={[shellStyles.metaPill, styles.metaPillPending].join(" ")}>
-                            {p.onboardingStatus === "pending_setup" ? "待立项" : "策划中"}
-                          </span>
-                        ) : null}
+                      <p className={styles.projectSummary}>
+                        总项目空间，统一承接对话策划、剧本推进、图片视频、画布整理和资产沉淀。
+                      </p>
+                      <div className={styles.projectModules} aria-label="项目模块">
+                        <span>工作台</span>
+                        <span>剧本</span>
+                        <span>画布</span>
+                        <span>素材</span>
                       </div>
                     </div>
                     <div className={styles.projectFoot}>
-                      {formatUpdated(p.updatedAt) ? `更新 ${formatUpdated(p.updatedAt)}` : "\u00a0"}
+                      <span>{updated ? `更新 ${updated}` : "\u00a0"}</span>
+                      <span className={styles.projectEnter}>进入项目</span>
                     </div>
                     <button
                       type="button"

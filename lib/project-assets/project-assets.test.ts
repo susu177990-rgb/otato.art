@@ -101,7 +101,7 @@ describe("project asset CRUD contracts", () => {
     ).toBe("user_1/projects/project_1/assets/asset_1/reference-2.png");
   });
 
-  it("merges project assets into the permanent gallery in newest-first order", () => {
+  it("keeps project assets out of generation history", () => {
     const items = buildProjectGalleryItems({
       assets: [asset],
       images: [
@@ -124,12 +124,7 @@ describe("project asset CRUD contracts", () => {
       videos: [],
     });
 
-    expect(items.map((item) => item.id)).toEqual(["image:image-1", "project-asset:asset-1"]);
-    expect(items[1]).toMatchObject({
-      kind: "project-asset",
-      sourceRecordId: "asset-1",
-      mediaUrl: asset.primaryImageUrl,
-    });
+    expect(items.map((item) => item.id)).toEqual(["image:image-1"]);
   });
 
   it("writes ownership columns on create and scopes read/update/delete by project", async () => {

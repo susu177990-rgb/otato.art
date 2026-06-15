@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Artifact, Settings } from "@/lib/types";
 import { auditBibleVsCast } from "@/lib/bible-audit";
 import { downloadSeriesBibleMarkdownFile, downloadCreativeBriefMarkdownFile } from "@/lib/export-artifacts";
+import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
 import ArtifactSlotEditor from "./ArtifactSlotEditor";
 import shellStyles from "@/app/shared/shell.module.css";
 
@@ -58,6 +59,7 @@ export default function StudioBibleDrawer({
 }: Props) {
   const [llmBibleLoading, setLlmBibleLoading] = useState(false);
   const [localeGenLoading, setLocaleGenLoading] = useState(false);
+  const routeOptions = useProjectScriptRouteOptions();
 
   const auditIssues = hasProject ? auditBibleVsCast(seriesBible, artifacts) : [];
   const bibleEmpty = !seriesBible.trim();
@@ -66,6 +68,7 @@ export default function StudioBibleDrawer({
     hasProject && bibleEmpty && hasBrief && Boolean(settings.apiKey);
   const canLlmRewriteBible = hasProject && !bibleEmpty && hasBrief && Boolean(settings.apiKey);
   const hasApiKey = Boolean(settings.apiKey?.trim());
+  const onboardingHref = routeOptions?.onboardingHref ?? `/project/${projectId}/onboarding`;
 
   async function handleLlmGenerateBible() {
     if (!canLlmFillBible || !projectId) return;
@@ -216,7 +219,7 @@ export default function StudioBibleDrawer({
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               {projectId ? (
                 <Link
-                  href={`/project/${projectId}/onboarding`}
+                  href={onboardingHref}
                   className={shellStyles.navLink}
                   onClick={onClose}
                 >

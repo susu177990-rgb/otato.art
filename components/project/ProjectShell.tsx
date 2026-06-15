@@ -15,7 +15,7 @@ const WORKSPACE_PRESET_EVENTS: Record<string, string> = {
 };
 
 export function ProjectShell({ children }: { children: ReactNode }) {
-  const { project, projectId, loading, error } = useProjectWorkspace();
+  const { project, projectId, loading, error, refreshProject } = useProjectWorkspace();
   const pathname = usePathname();
   const router = useRouter();
   const [assetsOpen, setAssetsOpen] = useState(false);
@@ -41,7 +41,14 @@ export function ProjectShell({ children }: { children: ReactNode }) {
             <span>{loading ? "PROJECT LOADING" : "PROJECT UNAVAILABLE"}</span>
             <h1>{loading ? "正在加载项目" : error || "项目不可用"}</h1>
             <p>{loading ? "正在确认项目归属和工作区权限。" : "请返回项目列表，选择有权限访问的项目。"}</p>
-            {!loading ? <Link href="/projects">返回项目列表</Link> : null}
+            {!loading ? (
+              <div className={styles.stateActions}>
+                <button type="button" onClick={() => void refreshProject()}>
+                  重新加载项目
+                </button>
+                <Link href="/projects">返回项目列表</Link>
+              </div>
+            ) : null}
           </section>
         ) : (
           children
@@ -56,13 +63,7 @@ export function ProjectShell({ children }: { children: ReactNode }) {
             aria-label="项目素材与画廊"
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className={styles.drawerHead}>
-              <span>项目共享资源</span>
-              <button type="button" onClick={() => setAssetsOpen(false)} aria-label="关闭素材与画廊">
-                ×
-              </button>
-            </div>
-            <ProjectAssetLibrary projectId={projectId} />
+            <ProjectAssetLibrary projectId={projectId} onClose={() => setAssetsOpen(false)} />
           </aside>
         </div>
       ) : null}

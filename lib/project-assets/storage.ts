@@ -12,6 +12,10 @@ function extensionForMime(mime: string): string {
   if (normalized.includes("webp")) return "webp";
   if (normalized.includes("gif")) return "gif";
   if (normalized.includes("bmp")) return "bmp";
+  if (normalized.includes("quicktime")) return "mov";
+  if (normalized.includes("webm")) return "webm";
+  if (normalized.includes("mp4") || normalized.includes("m4v")) return "mp4";
+  if (normalized.includes("ogg")) return "ogv";
   return "png";
 }
 
@@ -43,8 +47,9 @@ export async function copyProjectAssetImage(
   },
 ): Promise<string> {
   const { bytes, contentType } = await resolveImageBytes(input.sourceUrl);
-  if (!contentType.toLowerCase().startsWith("image/")) {
-    throw new Error("项目素材只支持图片媒体");
+  const normalizedType = contentType.toLowerCase();
+  if (!normalizedType.startsWith("image/") && !normalizedType.startsWith("video/")) {
+    throw new Error("项目素材只支持图片或视频媒体");
   }
   const path = projectAssetStoragePath({
     ...input,

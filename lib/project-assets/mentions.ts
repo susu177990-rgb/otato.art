@@ -7,19 +7,26 @@ const TYPE_LABELS: Record<ProjectAsset["type"], string> = {
   scene: "场景",
 };
 
+function isVideoUrl(value: string): boolean {
+  return /^data:video\//i.test(value) || /\.(mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i.test(value);
+}
+
 export function projectAssetsToMentionCandidates(
   assets: ProjectAsset[],
 ): AssetMentionCandidate[] {
-  return assets.map((asset) => ({
-    id: asset.id,
-    label: asset.name,
-    type: "project-asset",
-    role: "image_reference",
-    groupLabel: TYPE_LABELS[asset.type],
-    description: asset.description || asset.tags.join(" / "),
-    thumbnailUrl: asset.primaryImageUrl,
-    url: asset.primaryImageUrl,
-    referenceUrls: asset.referenceImageUrls,
-    nodeType: "image",
-  }));
+  return assets.map((asset) => {
+    const isVideo = isVideoUrl(asset.primaryImageUrl);
+    return {
+      id: asset.id,
+      label: asset.name,
+      type: "project-asset",
+      role: isVideo ? "video_reference" : "image_reference",
+      groupLabel: TYPE_LABELS[asset.type],
+      description: asset.description || asset.tags.join(" / "),
+      thumbnailUrl: asset.primaryImageUrl,
+      url: asset.primaryImageUrl,
+      referenceUrls: [],
+      nodeType: isVideo ? "video" : "image",
+    };
+  });
 }

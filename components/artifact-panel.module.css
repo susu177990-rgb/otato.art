@@ -110,6 +110,13 @@
   backdrop-filter: none;
 }
 
+.panel,
+.header,
+.body,
+.empty {
+  background: var(--otato-bg, #faf7ef);
+}
+
 .header {
   border-bottom: 3px solid #050505;
 }

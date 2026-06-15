@@ -8,8 +8,11 @@ import {
 export const PROJECT_ASSET_REFERENCE_LIMIT = 8;
 export const PROJECT_ASSET_TAG_LIMIT = 24;
 export const PROJECT_ASSET_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+export const PROJECT_ASSET_VIDEO_MAX_BYTES = 80 * 1024 * 1024;
 
 const PROJECT_ASSET_IMAGE_MIME_RE = /^image\/(?:png|jpe?g|webp|gif|bmp|avif)$/i;
+const PROJECT_ASSET_VIDEO_MIME_RE = /^video\/(?:mp4|webm|quicktime|x-m4v|ogg)$/i;
+const PROJECT_ASSET_MEDIA_MIME_RE = /^(?:image\/(?:png|jpe?g|webp|gif|bmp|avif)|video\/(?:mp4|webm|quicktime|x-m4v|ogg))$/i;
 
 export class ProjectAssetValidationError extends Error {
   constructor(message: string) {
@@ -32,6 +35,27 @@ function optionalText(value: unknown, label: string, maxLength: number): string 
   const normalized = typeof value === "string" ? value.trim() : "";
   if (normalized.length > maxLength) {
     throw new ProjectAssetValidationError(`${label}不能超过 ${maxLength} 个字符`);
+  }
+  return normalized;
+}
+
+function mediaUrl(value: unknown, label: string): string {
+  const normalized = requiredText(value, label, PROJECT_ASSET_VIDEO_MAX_BYTES * 2);
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+
+  const match = normalized.match(/^data:([^;,]+)(?:;[^,]*)?,(.*)$/i);
+  if (!match) {
+    throw new ProjectAssetValidationError(`${label}必须是图片或视频 URL`);
+  }
+  const mime = match[1]?.trim() ?? "";
+  if (!PROJECT_ASSET_MEDIA_MIME_RE.test(mime)) {
+    throw new ProjectAssetValidationError(`${label}只支持图片或 MP4、WebM、MOV 视频`);
+  }
+  const payload = match[2]?.replace(/\s/g, "") ?? "";
+  const approxBytes = Math.floor((payload.length * 3) / 4);
+  const limit = PROJECT_ASSET_VIDEO_MIME_RE.test(mime) ? PROJECT_ASSET_VIDEO_MAX_BYTES : PROJECT_ASSET_IMAGE_MAX_BYTES;
+  if (approxBytes > limit) {
+    throw new ProjectAssetValidationError(`${label}不能超过 ${Math.floor(limit / 1024 / 1024)}MB`);
   }
   return normalized;
 }
@@ -99,7 +123,7 @@ export function parseProjectAssetInput(value: unknown): ProjectAssetInput {
     name: requiredText(input.name, "素材名称", 120),
     description: optionalText(input.description, "素材描述", 4000),
     tags: normalizeProjectAssetTags(input.tags),
-    primaryImageUrl: imageUrl(input.primaryImageUrl, "主图"),
+    primaryImageUrl: mediaUrl(input.primaryImageUrl, "媒体文件"),
     referenceImageUrls: normalizeProjectAssetReferences(input.referenceImageUrls),
   };
 }
@@ -114,7 +138,7 @@ export function parseProjectAssetPatch(value: unknown): ProjectAssetPatch {
   if ("name" in input) patch.name = requiredText(input.name, "素材名称", 120);
   if ("description" in input) patch.description = optionalText(input.description, "素材描述", 4000);
   if ("tags" in input) patch.tags = normalizeProjectAssetTags(input.tags);
-  if ("primaryImageUrl" in input) patch.primaryImageUrl = imageUrl(input.primaryImageUrl, "主图");
+  if ("primaryImageUrl" in input) patch.primaryImageUrl = mediaUrl(input.primaryImageUrl, "媒体文件");
   if ("referenceImageUrls" in input) {
     patch.referenceImageUrls = normalizeProjectAssetReferences(input.referenceImageUrls);
   }

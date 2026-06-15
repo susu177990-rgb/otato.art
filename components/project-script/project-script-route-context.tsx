@@ -5,6 +5,8 @@ import { createContext, type ReactNode, useContext } from "react";
 export type ProjectScriptRouteOptions = {
   projectId: string;
   backHref: string;
+  onboardingHref?: string;
+  onRestartOnboarding?: () => Promise<void> | void;
   requireOnboarding: boolean;
 };
 

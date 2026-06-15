@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PROJECT_ASSET_IMAGE_MAX_BYTES,
-  PROJECT_ASSET_REFERENCE_LIMIT,
+  PROJECT_ASSET_VIDEO_MAX_BYTES,
   PROJECT_ASSET_TYPES,
   projectAssetsToMentionCandidates,
   type ProjectAsset,
@@ -12,7 +12,13 @@ import {
   type ProjectGalleryItem,
 } from "@/lib/project-assets";
 import type { AssetMentionCandidate } from "@/lib/asset-mentions";
-import { ProjectGallery } from "./ProjectGallery";
+import {
+  DeleteIcon,
+  DownloadIcon,
+  downloadMediaUrl,
+  ProjectGallery,
+  safeMediaDownloadName,
+} from "./ProjectGallery";
 import styles from "./project-assets.module.css";
 
 const TYPE_LABELS: Record<ProjectAssetType, string> = {
@@ -21,38 +27,61 @@ const TYPE_LABELS: Record<ProjectAssetType, string> = {
   scene: "场景",
 };
 
-const ACCEPTED_IMAGE_MIME_RE = /^image\/(?:png|jpe?g|webp|gif|bmp|avif)$/i;
+const ACCEPTED_MEDIA_MIME_RE = /^(?:image\/(?:png|jpe?g|webp|gif|bmp|avif)|video\/(?:mp4|webm|quicktime|x-m4v|ogg))$/i;
+const VIDEO_MIME_RE = /^video\//i;
 
 type Draft = ProjectAssetInput & {
-  id?: string;
-  sourceGalleryRecordId?: string;
-};
-
-const EMPTY_DRAFT: Draft = {
-  type: "character",
-  name: "",
-  description: "",
-  tags: [],
-  primaryImageUrl: "",
-  referenceImageUrls: [],
+  id: string;
 };
 
 export type ProjectAssetLibraryProps = {
   projectId: string;
+  onClose?: () => void;
   onMentionCandidatesChange?: (candidates: AssetMentionCandidate[]) => void;
 };
 
-async function readFileDataUrl(file: File): Promise<string> {
-  if (!ACCEPTED_IMAGE_MIME_RE.test(file.type)) {
-    throw new Error("素材图片只支持 PNG、JPEG、WebP、GIF、BMP 或 AVIF");
+function isVideoUrl(value: string): boolean {
+  return /^data:video\//i.test(value) || /\.(mp4|webm|mov|m4v|ogv)(?:[?#]|$)/i.test(value);
+}
+
+function assetMediaLabel(url: string): string {
+  return isVideoUrl(url) ? "视频" : "图片";
+}
+
+function assetDownloadKind(url: string): "image" | "video" {
+  return isVideoUrl(url) ? "video" : "image";
+}
+
+function fileNameWithoutExtension(file: File): string {
+  return file.name.replace(/\.[^.]+$/, "").trim() || "未命名素材";
+}
+
+function fileNameFromMediaUrl(url: string, fallback: string): string {
+  try {
+    const parsed = new URL(url, window.location.href);
+    const segment = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    const decoded = decodeURIComponent(segment).trim();
+    const name = decoded.replace(/\.[^.]+$/, "").trim();
+    return name || fallback || "未命名素材";
+  } catch {
+    const segment = url.split(/[?#]/)[0]?.split("/").filter(Boolean).at(-1) ?? "";
+    const name = decodeURIComponent(segment).replace(/\.[^.]+$/, "").trim();
+    return name || fallback || "未命名素材";
   }
-  if (file.size > PROJECT_ASSET_IMAGE_MAX_BYTES) {
-    throw new Error("单张素材图片不能超过 20MB");
+}
+
+async function readFileDataUrl(file: File): Promise<string> {
+  if (!ACCEPTED_MEDIA_MIME_RE.test(file.type)) {
+    throw new Error("素材只支持图片或 MP4、WebM、MOV 视频");
+  }
+  const limit = VIDEO_MIME_RE.test(file.type) ? PROJECT_ASSET_VIDEO_MAX_BYTES : PROJECT_ASSET_IMAGE_MAX_BYTES;
+  if (file.size > limit) {
+    throw new Error(`单个素材不能超过 ${Math.floor(limit / 1024 / 1024)}MB`);
   }
   return await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("读取图片失败"));
+    reader.onerror = () => reject(reader.error ?? new Error("读取素材失败"));
     reader.readAsDataURL(file);
   });
 }
@@ -65,16 +94,18 @@ async function responseJson<T>(response: Response): Promise<T> {
 
 export function ProjectAssetLibrary({
   projectId,
+  onClose,
   onMentionCandidatesChange,
 }: ProjectAssetLibraryProps) {
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [galleryItems, setGalleryItems] = useState<ProjectGalleryItem[]>([]);
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [activeType, setActiveType] = useState<ProjectAssetType | "all">("all");
   const [view, setView] = useState<"assets" | "gallery">("assets");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,6 +133,10 @@ export function ProjectAssetLibrary({
   }, [load]);
 
   useEffect(() => {
+    setDraft(null);
+  }, [projectId]);
+
+  useEffect(() => {
     onMentionCandidatesChange?.(projectAssetsToMentionCandidates(assets));
   }, [assets, onMentionCandidatesChange]);
 
@@ -110,7 +145,7 @@ export function ProjectAssetLibrary({
     [activeType, assets],
   );
 
-  const resetDraft = useCallback(() => setDraft(EMPTY_DRAFT), []);
+  const resetDraft = useCallback(() => setDraft(null), []);
 
   const editAsset = useCallback((asset: ProjectAsset) => {
     setDraft({
@@ -120,39 +155,123 @@ export function ProjectAssetLibrary({
       description: asset.description,
       tags: asset.tags,
       primaryImageUrl: asset.primaryImageUrl,
-      referenceImageUrls: asset.referenceImageUrls,
+      referenceImageUrls: [],
     });
     setView("assets");
   }, []);
 
-  const convertGalleryImage = useCallback(
-    (item: Extract<ProjectGalleryItem, { kind: "image" }>) => {
-      setDraft({
-        ...EMPTY_DRAFT,
-        name: item.name,
-        description: item.description,
-        primaryImageUrl: item.mediaUrl,
-        sourceGalleryRecordId: item.sourceRecordId,
+  const createAsset = useCallback(
+    async (input: ProjectAssetInput): Promise<ProjectAsset> => {
+      const response = await fetch(`/api/projects/${projectId}/assets`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
       });
-      setView("assets");
+      const { asset } = await responseJson<{ asset: ProjectAsset }>(response);
+      return asset;
     },
-    [],
+    [projectId],
+  );
+
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const fileList = Array.from(files);
+      if (fileList.length === 0) return;
+      setSaving(true);
+      setError("");
+      try {
+        let lastCreated: ProjectAsset | null = null;
+        for (const file of fileList) {
+          const primaryImageUrl = await readFileDataUrl(file);
+          lastCreated = await createAsset({
+            type: activeType === "all" ? "character" : activeType,
+            name: fileNameWithoutExtension(file),
+            description: "",
+            tags: [],
+            primaryImageUrl,
+            referenceImageUrls: [],
+          });
+        }
+        setView("assets");
+        await load();
+        if (lastCreated) editAsset(lastCreated);
+      } catch (uploadError) {
+        setError(uploadError instanceof Error ? uploadError.message : "上传素材失败");
+      } finally {
+        setSaving(false);
+        if (uploadInputRef.current) uploadInputRef.current.value = "";
+      }
+    },
+    [activeType, createAsset, editAsset, load],
+  );
+
+  const convertGalleryItem = useCallback(
+    async (item: Extract<ProjectGalleryItem, { kind: "image" | "video" }>) => {
+      setSaving(true);
+      setError("");
+      try {
+        const asset = await createAsset({
+          type: activeType === "all" ? "character" : activeType,
+          name: fileNameFromMediaUrl(item.mediaUrl, item.name),
+          description: "",
+          tags: [],
+          primaryImageUrl: item.mediaUrl,
+          referenceImageUrls: [],
+        });
+        setView("assets");
+        await load();
+        editAsset(asset);
+      } catch (convertError) {
+        setError(convertError instanceof Error ? convertError.message : "转为素材失败");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [activeType, createAsset, editAsset, load],
+  );
+
+  const deleteGalleryItem = useCallback(
+    async (item: Extract<ProjectGalleryItem, { kind: "image" | "video" }>) => {
+      setSaving(true);
+      setError("");
+      try {
+        const response = await fetch(`/api/projects/${projectId}/gallery`, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: item.kind,
+            sourceRecordId: item.sourceRecordId,
+          }),
+        });
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error || "删除生成记录失败");
+        }
+        setGalleryItems((current) => current.filter((entry) => entry.id !== item.id));
+      } catch (deleteError) {
+        setError(deleteError instanceof Error ? deleteError.message : "删除生成记录失败");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [projectId],
   );
 
   const save = useCallback(async () => {
+    if (!draft) return;
     setSaving(true);
     setError("");
     try {
-      const response = await fetch(
-        draft.id
-          ? `/api/projects/${projectId}/assets/${draft.id}`
-          : `/api/projects/${projectId}/assets`,
-        {
-          method: draft.id ? "PATCH" : "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(draft),
-        },
-      );
+      const response = await fetch(`/api/projects/${projectId}/assets/${draft.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: draft.type,
+          name: draft.name,
+          description: "",
+          tags: [],
+        }),
+      });
       await responseJson<{ asset: ProjectAsset }>(response);
       resetDraft();
       await load();
@@ -174,37 +293,63 @@ export function ProjectAssetLibrary({
           const body = (await response.json().catch(() => ({}))) as { error?: string };
           throw new Error(body.error || "删除素材失败");
         }
-        if (draft.id === assetId) resetDraft();
+        if (draft?.id === assetId) resetDraft();
         await load();
       } catch (removeError) {
         setError(removeError instanceof Error ? removeError.message : "删除素材失败");
       }
     },
-    [draft.id, load, projectId, resetDraft],
+    [draft?.id, load, projectId, resetDraft],
   );
 
   return (
     <section className={styles.library}>
       <header className={styles.header}>
-        <div>
-          <p>PROJECT MEDIA</p>
-          <h2>项目素材与画廊</h2>
-        </div>
         <div className={styles.viewTabs}>
           <button
             type="button"
             aria-pressed={view === "assets"}
             onClick={() => setView("assets")}
           >
-            素材库
+            素材
           </button>
           <button
             type="button"
             aria-pressed={view === "gallery"}
             onClick={() => setView("gallery")}
           >
-            统一画廊
+            生成记录
           </button>
+        </div>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.uploadAction}
+            disabled={saving}
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            {saving ? "处理中..." : "上传素材"}
+          </button>
+          <input
+            ref={uploadInputRef}
+            className={styles.hiddenUpload}
+            type="file"
+            accept="image/*,video/mp4,video/webm,video/quicktime,video/x-m4v,video/ogg"
+            multiple
+            onChange={(event) => {
+              if (event.target.files) void uploadFiles(event.target.files);
+            }}
+          />
+          {onClose ? (
+            <button
+              type="button"
+              className={styles.closeAction}
+              onClick={onClose}
+              aria-label="关闭素材与画廊"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -214,7 +359,8 @@ export function ProjectAssetLibrary({
         <ProjectGallery
           items={galleryItems}
           loading={loading}
-          onConvertImage={convertGalleryImage}
+          onConvertItem={convertGalleryItem}
+          onDeleteItem={deleteGalleryItem}
         />
       ) : (
         <div className={styles.assetLayout}>
@@ -243,167 +389,108 @@ export function ProjectAssetLibrary({
               <p className={styles.empty}>该分类还没有素材。</p>
             ) : null}
             <div className={styles.assetGrid}>
-              {visibleAssets.map((asset) => (
-                <article className={styles.assetCard} key={asset.id}>
-                  <button
-                    type="button"
-                    className={styles.assetPreview}
-                    style={{
-                      backgroundImage: `url(${JSON.stringify(asset.primaryImageUrl)})`,
-                    }}
-                    onClick={() => editAsset(asset)}
-                    aria-label={`编辑 ${asset.name}`}
-                  />
+              {visibleAssets.map((asset) => {
+                const isEditing = draft?.id === asset.id;
+                return (
+                <article
+                  className={`${styles.assetCard} ${isEditing ? styles.assetCardEditing : ""}`}
+                  key={asset.id}
+                >
+                  <button type="button" className={styles.assetPreview} onClick={() => editAsset(asset)} aria-label={`编辑 ${asset.name}`}>
+                    {isVideoUrl(asset.primaryImageUrl) ? (
+                      <video src={asset.primaryImageUrl} preload="metadata" muted playsInline />
+                    ) : (
+                      <span style={{ backgroundImage: `url(${JSON.stringify(asset.primaryImageUrl)})` }} />
+                    )}
+                    <em>{assetMediaLabel(asset.primaryImageUrl)}</em>
+                  </button>
                   <div className={styles.cardBody}>
-                    <span>{TYPE_LABELS[asset.type]}</span>
-                    <strong>{asset.name}</strong>
-                    {asset.description ? <p>{asset.description}</p> : null}
-                    <div className={styles.tags}>
-                      {asset.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                    </div>
-                    <div className={styles.cardActions}>
-                      <button type="button" onClick={() => editAsset(asset)}>编辑</button>
-                      <button type="button" onClick={() => void remove(asset.id)}>删除</button>
-                    </div>
+                    {isEditing && draft ? (
+                      <form
+                        className={styles.inlineEditor}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void save();
+                        }}
+                      >
+                        <label>
+                          <span>类型</span>
+                          <select
+                            aria-label="分类"
+                            value={draft.type}
+                            onChange={(event) =>
+                              setDraft((current) =>
+                                current ? { ...current, type: event.target.value as ProjectAssetType } : current,
+                              )
+                            }
+                          >
+                            {PROJECT_ASSET_TYPES.map((type) => (
+                              <option value={type} key={type}>{TYPE_LABELS[type]}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>名称</span>
+                          <input
+                            aria-label="名称"
+                            value={draft.name}
+                            maxLength={120}
+                            required
+                            onChange={(event) =>
+                              setDraft((current) =>
+                                current ? { ...current, name: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </label>
+                      </form>
+                    ) : (
+                        <>
+                          <span>{TYPE_LABELS[asset.type]}</span>
+                          <strong>{asset.name}</strong>
+                          <div className={styles.galleryIconActions}>
+                            <button
+                              type="button"
+                              className={styles.iconAction}
+                              aria-label="下载素材"
+                              title="下载"
+                              onClick={() =>
+                                downloadMediaUrl(
+                                  asset.primaryImageUrl,
+                                  safeMediaDownloadName(asset.name, assetDownloadKind(asset.primaryImageUrl)),
+                                )
+                              }
+                            >
+                              <DownloadIcon />
+                            </button>
+                            <button
+                              type="button"
+                              className={[styles.iconAction, styles.deleteIconAction].join(" ")}
+                              aria-label="删除素材"
+                              title="删除"
+                              onClick={() => void remove(asset.id)}
+                            >
+                              <DeleteIcon />
+                            </button>
+                          </div>
+                      </>
+                    )}
+                    {isEditing ? (
+                      <button
+                        type="button"
+                        className={styles.saveAction}
+                        disabled={saving || !draft?.name.trim()}
+                        onClick={() => void save()}
+                      >
+                        {saving ? "保存中..." : "保存"}
+                      </button>
+                    ) : null}
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           </div>
-
-          <form
-            className={styles.form}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
-            <h3>{draft.id ? "编辑素材" : draft.sourceGalleryRecordId ? "画廊转素材" : "新增素材"}</h3>
-            <label>
-              分类
-              <select
-                value={draft.type}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    type: event.target.value as ProjectAssetType,
-                  }))
-                }
-              >
-                {PROJECT_ASSET_TYPES.map((type) => (
-                  <option value={type} key={type}>{TYPE_LABELS[type]}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              名称
-              <input
-                value={draft.name}
-                maxLength={120}
-                required
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, name: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              描述
-              <textarea
-                value={draft.description}
-                maxLength={4000}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, description: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              标签
-              <input
-                value={(draft.tags ?? []).join(", ")}
-                placeholder="服装, 年龄, 风格"
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean),
-                  }))
-                }
-              />
-            </label>
-            <label>
-              主图
-              <input
-                type="file"
-                accept="image/*"
-                required={!draft.primaryImageUrl}
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    const primaryImageUrl = await readFileDataUrl(file);
-                    setDraft((current) => ({ ...current, primaryImageUrl }));
-                    setError("");
-                  } catch (readError) {
-                    setError(readError instanceof Error ? readError.message : "读取主图失败");
-                  }
-                }}
-              />
-            </label>
-            {draft.primaryImageUrl ? (
-              <div
-                className={styles.formPreview}
-                style={{
-                  backgroundImage: `url(${JSON.stringify(draft.primaryImageUrl)})`,
-                }}
-              />
-            ) : null}
-            <label>
-              参考图（最多 {PROJECT_ASSET_REFERENCE_LIMIT} 张）
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={async (event) => {
-                  try {
-                    const files = Array.from(event.target.files ?? []).slice(
-                      0,
-                      PROJECT_ASSET_REFERENCE_LIMIT,
-                    );
-                    const referenceImageUrls = await Promise.all(files.map(readFileDataUrl));
-                    setDraft((current) => ({ ...current, referenceImageUrls }));
-                    setError("");
-                  } catch (readError) {
-                    setError(readError instanceof Error ? readError.message : "读取参考图失败");
-                  }
-                }}
-              />
-            </label>
-            <div className={styles.referenceGrid}>
-              {(draft.referenceImageUrls ?? []).map((url, index) => (
-                <button
-                  type="button"
-                  key={`${url.slice(0, 32)}-${index}`}
-                  style={{ backgroundImage: `url(${JSON.stringify(url)})` }}
-                  aria-label={`移除参考图 ${index + 1}`}
-                  onClick={() =>
-                    setDraft((current) => ({
-                      ...current,
-                      referenceImageUrls: (current.referenceImageUrls ?? []).filter(
-                        (_, itemIndex) => itemIndex !== index,
-                      ),
-                    }))
-                  }
-                />
-              ))}
-            </div>
-            <div className={styles.formActions}>
-              <button type="submit" disabled={saving || !draft.primaryImageUrl || !draft.name.trim()}>
-                {saving ? "保存中..." : "保存素材"}
-              </button>
-              {(draft.id || draft.sourceGalleryRecordId || draft.name) ? (
-                <button type="button" onClick={resetDraft}>取消</button>
-              ) : null}
-            </div>
-          </form>
         </div>
       )}
     </section>
