@@ -111,12 +111,30 @@ http://localhost:4000
 ```bash
 npm run lint
 npx tsc --noEmit
+npm test
 ```
+
+端到端 smoke：
+
+```bash
+npm run dev
+E2E_BASE_URL=http://localhost:4000 E2E_EMAIL=you@example.com E2E_PASSWORD=your-password npm run e2e:smoke
+```
+
+这条回归会检查未登录跳转、公共提示词预设加载、提示词页搜索入口、登录态项目创建/读取/清理，以及预设收藏/取消收藏。没有测试账号时可临时设置 `E2E_ALLOW_AUTH_SKIP=1` 只跑公共链路。
 
 更多项目约定：
 
 - [DESIGN.md](./DESIGN.md)：界面和产品设计规范
 - [AGENTS.md](./AGENTS.md)：仓库内 Agent 工作约定
+
+## 发布边界
+
+- **代码许可**：项目源码使用 [MIT License](./LICENSE)，允许复制、修改、分发、二次开发和商用。
+- **品牌素材**：仓库里的 oTATo Art 名称、Logo、截图和展示文案可随源码保留用于说明项目来源；如果你发布自己的产品版本，建议替换成自己的品牌资产，避免用户混淆。
+- **模型与 API 费用**：本项目不包含第三方模型额度。OpenAI、Claude、Gemini、DeepSeek、Seedance、Veo、Nano Banana 等模型的 API Key、调用费用、内容安全和服务条款由部署者自行负责。
+- **密钥与数据**：不要提交真实 `.env.local`、Supabase service role key、个人 API Key 或用户数据。生产环境应通过部署平台环境变量管理密钥。
+- **自部署责任**：数据库迁移、Supabase 权限、存储桶策略、邮件回调域名和模型网关配置需要由部署者在自己的环境中确认。
 
 ## Contributing
 
@@ -124,4 +142,4 @@ npx tsc --noEmit
 
 ## License
 
-仓库当前未单独声明定制许可证。用于团队内部部署、二次开发或商业场景前，建议先补充明确的许可证与使用策略。
+MIT License. See [LICENSE](./LICENSE).
