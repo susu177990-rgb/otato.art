@@ -18,7 +18,7 @@ interface Props {
 
 type StageId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-export default function StudioStageStrip({
+export default function ProjectScriptStageStrip({
   artifacts,
   currentStage,
   viewStage,

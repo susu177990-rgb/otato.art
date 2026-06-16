@@ -380,6 +380,246 @@
   color: #050505;
 }
 
+/* Final /me migration: align account page with project UI. */
+
+.mePage {
+  background: var(--otato-paper-background, #faf7ef) !important;
+  color: #050505;
+}
+
+.meTopbar {
+  position: sticky;
+  top: var(--otato-floating-bar-margin-top, 12px);
+  z-index: 80;
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 76px;
+  margin: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  padding: 12px 18px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
+}
+
+.mePage :global(.topbarLeft) {
+  grid-column: 1;
+}
+
+.mePage :global(.topnav) {
+  grid-column: 2;
+}
+
+.mePage :global(.body) {
+  padding: 12px 24px 24px;
+}
+
+.mePage :global(.shell) {
+  max-width: 1280px;
+  gap: 18px;
+}
+
+.heroCard,
+.flexCard,
+.accountFormCard {
+  border: 3px solid #050505 !important;
+  border-radius: 28px !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  backdrop-filter: none !important;
+  padding: 20px !important;
+}
+
+.heroCard h1,
+.heroCard h2,
+.flexCard h1,
+.flexCard h2,
+.accountFormCard h1,
+.accountFormCard h2 {
+  color: #050505 !important;
+  font-weight: 950 !important;
+  letter-spacing: 0;
+}
+
+.heroCard p,
+.flexCard p,
+.accountFormCard p {
+  color: #5f5f5a;
+  font-weight: 800;
+}
+
+.heroHeader {
+  align-items: center;
+}
+
+.heroMeta {
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.heroMetaPill,
+.kvCard,
+.statCard {
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  box-shadow: none !important;
+}
+
+.heroMetaPill {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.kvCard {
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.kvLabel,
+.statLabel,
+.dataLegend {
+  color: #5f5f5a !important;
+  font-weight: 900;
+}
+
+.kvValue,
+.statNumber {
+  color: #050505 !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.kvValue {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.statCard {
+  min-height: 92px;
+  padding: 14px 10px;
+}
+
+.statCard:hover,
+.kvCard:hover,
+.heroMetaPill:hover {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  transform: none !important;
+}
+
+.statNumber {
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.accountForm {
+  gap: 18px;
+}
+
+.mePage input {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  min-height: 48px;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  padding: 0 18px !important;
+  font: inherit;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  outline: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.mePage input:hover,
+.mePage input:focus,
+.mePage input:focus-visible {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.mePage button {
+  min-height: 42px;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  padding: 0 20px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 950 !important;
+  line-height: 1;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.mePage button:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.mePage button:active:not(:disabled) {
+  background: var(--otato-yellow, #ffd86b) !important;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
+}
+
+.mePage .logoutBtn,
+.formFooter button {
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
+}
+
+.mePage .logoutBtn:hover:not(:disabled),
+.formFooter button:hover:not(:disabled) {
+  background: #ff6b5d !important;
+  color: #ffffff !important;
+}
+
+.formFooter {
+  justify-content: flex-end;
+}
+
+.inlineStatus {
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  font-weight: 900;
+}
+
+@media (max-width: 980px) {
+  .meTopbar {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 10px 12px 0;
+    padding: 10px 14px;
+    overflow-x: auto;
+  }
+
+  .mePage :global(.topbarLeft),
+  .mePage :global(.topnav) {
+    grid-column: 1;
+  }
+}
+
 .accountForm :global(input:focus),
 .accountForm :global(input:focus-visible) {
   outline: none;

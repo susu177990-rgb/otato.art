@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
 import type { PromptPresetKind } from "@/lib/db/prompt-preset-store";
 import { normalizePromptTags } from "@/lib/prompt-tags";
 import styles from "./prompt-preset-card.module.css";
@@ -49,9 +48,6 @@ export function PromptPresetCard({
   const normalizedTags = normalizePromptTags(tags);
   const labels = modelLabels?.filter((label) => label.trim()) ?? [KIND_LABELS[kind]];
   const coverUrl = coverImageUrl?.trim();
-  const [naturalAspect, setNaturalAspect] = useState<number | null>(null);
-  const rawCoverAspect = naturalAspect && Number.isFinite(naturalAspect) && naturalAspect > 0 ? naturalAspect : 16 / 9;
-  const coverAspect = Math.min(2.15, Math.max(0.75, rawCoverAspect));
   const desc = description?.trim() || "无描述";
   const isChat = kind === "chat";
 
@@ -73,22 +69,10 @@ export function PromptPresetCard({
         aria-label={selectLabel ?? `选择 ${title}`}
       >
         {isChat ? null : (
-          <span
-            className={styles.cover}
-            style={{ "--preset-cover-aspect": coverAspect } as CSSProperties}
-          >
+          <span className={styles.cover}>
             {coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={coverUrl}
-                alt=""
-                onLoad={(event) => {
-                  const img = event.currentTarget;
-                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                    setNaturalAspect(img.naturalWidth / img.naturalHeight);
-                  }
-                }}
-              />
+              <img src={coverUrl} alt="" />
             ) : (
               <span className={styles.coverFallback}>{title}</span>
             )}

@@ -135,7 +135,7 @@
   min-height: 46px;
 }
 
-.enterStudioGroup {
+.enterProjectGroup {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -326,7 +326,7 @@
     flex-direction: column;
   }
 
-  .enterStudioGroup {
+  .enterProjectGroup {
     justify-content: space-between;
   }
 

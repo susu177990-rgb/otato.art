@@ -87,4 +87,13 @@ describe("project-owned persistence schema", () => {
       expect(source).toMatch(/\.(or|range|lt)\s*\(/);
     }
   });
+
+  it("keeps generated video metadata queryable outside large JSON payloads", () => {
+    expect(sql).toMatch(
+      /alter\s+table\s+public\.video_gallery_records[\s\S]*?add\s+column\s+if\s+not\s+exists\s+status\s+text[\s\S]*?add\s+column\s+if\s+not\s+exists\s+video_url\s+text/,
+    );
+    expect(sql).toMatch(/create\s+or\s+replace\s+function\s+public\.sync_video_gallery_metadata/);
+    expect(sql).toMatch(/create\s+trigger\s+video_gallery_records_sync_metadata/);
+    expect(sql).toMatch(/video_gallery_project_status_created_idx/);
+  });
 });

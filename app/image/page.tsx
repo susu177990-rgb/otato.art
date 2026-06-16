@@ -77,6 +77,8 @@ const FREE_MODE = { id: "free", label: "自由模式" } as const;
 type RefSlot = { previewUrl: string; file: File } | null;
 type MenuAnchor = { left: number; top: number; width: number; height: number };
 type RefUploadMenuState = { index: number; anchor: MenuAnchor } | null;
+type ToolbarPickerKind = "model" | "ratio" | "size" | "quality";
+type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ImagePromptPresetCard = SitePromptPreset & {
   promptModelProviders: Array<"gpt-image" | "nano-banana">;
 };
@@ -329,37 +331,6 @@ function mergeCachedReferenceImages(records: ImageGalleryRecord[]): ImageGallery
   });
 }
 
-/** 原生 select 的固有宽度往往按「最宽的 option」计算，短文案也会显得很空；按当前选中项测宽收紧 pill。 */
-function measuredWidthForNativeSelect(select: HTMLSelectElement): number {
-  const opt = select.options[select.selectedIndex];
-  const text = opt?.text ?? "";
-  const cs = getComputedStyle(select);
-  const span = document.createElement("span");
-  span.setAttribute("aria-hidden", "true");
-  span.style.position = "absolute";
-  span.style.left = "-9999px";
-  span.style.top = "0";
-  span.style.visibility = "hidden";
-  span.style.whiteSpace = "nowrap";
-  span.style.font = cs.font;
-  span.style.letterSpacing = cs.letterSpacing;
-  span.textContent = text;
-  document.body.appendChild(span);
-  const textWidth = span.getBoundingClientRect().width;
-  document.body.removeChild(span);
-  const padL = parseFloat(cs.paddingLeft) || 0;
-  const padR = parseFloat(cs.paddingRight) || 0;
-  const borderL = parseFloat(cs.borderLeftWidth) || 0;
-  const borderR = parseFloat(cs.borderRightWidth) || 0;
-  const minWidthPx = parseFloat(cs.minWidth) || 0;
-  const maxWidthPx = parseFloat(cs.maxWidth);
-  let widthPx = Math.max(minWidthPx, Math.ceil(textWidth + padL + padR + borderL + borderR));
-  if (Number.isFinite(maxWidthPx) && maxWidthPx > 0) {
-    widthPx = Math.min(widthPx, Math.ceil(maxWidthPx));
-  }
-  return widthPx;
-}
-
 function normalizeSlotInputsToLength(slots: string[] | undefined, len: number): string[] {
   return Array.from({ length: len }, (_, i) => slots?.[i] ?? "");
 }
@@ -455,6 +426,7 @@ export default function ImagePage() {
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
   const [presetLibraryOpen, setPresetLibraryOpen] = useState(false);
   const [refUploadMenu, setRefUploadMenu] = useState<RefUploadMenuState>(null);
+  const [toolbarPickerMenu, setToolbarPickerMenu] = useState<ToolbarPickerMenuState>(null);
   const [assetPickerSlot, setAssetPickerSlot] = useState<number | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
@@ -551,15 +523,16 @@ export default function ImagePage() {
   }, []);
 
   useEffect(() => {
-    if (!previewOpen && !promptPreviewOpen && !presetLibraryOpen) return;
+    if (!previewOpen && !promptPreviewOpen && !presetLibraryOpen && !toolbarPickerMenu) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setPreviewOpen(false);
       if (e.key === "Escape") setPromptPreviewOpen(false);
       if (e.key === "Escape") setPresetLibraryOpen(false);
+      if (e.key === "Escape") setToolbarPickerMenu(null);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [previewOpen, promptPreviewOpen, presetLibraryOpen]);
+  }, [previewOpen, promptPreviewOpen, presetLibraryOpen, toolbarPickerMenu]);
 
   useEffect(() => {
     if (!promptPreviewOpen) setPromptCopied(false);
@@ -573,25 +546,6 @@ export default function ImagePage() {
       document.body.style.overflow = prev;
     };
   }, [previewOpen, presetLibraryOpen]);
-
-  const ratioSelectRef = useRef<HTMLSelectElement>(null);
-  const sizeSelectRef = useRef<HTMLSelectElement>(null);
-  const qualitySelectRef = useRef<HTMLSelectElement>(null);
-
-  useLayoutEffect(() => {
-    function applyComposerSelectWidths() {
-      const ratioEl = ratioSelectRef.current;
-      const sizeEl = sizeSelectRef.current;
-      const qualityEl = qualitySelectRef.current;
-      if (ratioEl) ratioEl.style.width = `${measuredWidthForNativeSelect(ratioEl)}px`;
-      if (sizeEl) sizeEl.style.width = `${measuredWidthForNativeSelect(sizeEl)}px`;
-      if (qualityEl) qualityEl.style.width = `${measuredWidthForNativeSelect(qualityEl)}px`;
-    }
-    applyComposerSelectWidths();
-    window.addEventListener("resize", applyComposerSelectWidths);
-    void document.fonts?.ready.then(applyComposerSelectWidths);
-    return () => window.removeEventListener("resize", applyComposerSelectWidths);
-  }, [aspectRatio, imageSize, settings.gptImageQuality, selectedModelId]);
 
   useEffect(() => {
     if (workspaceReady) setSettings(imageWorkspace);
@@ -676,6 +630,12 @@ export default function ImagePage() {
     [promptTemplate],
   );
   const composerSlotCount = composerSlotCountForTemplate(promptTemplate, selectedModeId);
+
+  useEffect(() => {
+    if (selectedModel.provider !== "gpt-image" && toolbarPickerMenu?.kind === "quality") {
+      setToolbarPickerMenu(null);
+    }
+  }, [selectedModel.provider, toolbarPickerMenu]);
 
   useEffect(() => {
     setSlotInputs((prev) => normalizeSlotInputsToLength(prev, composerSlotCount));
@@ -1100,6 +1060,35 @@ export default function ImagePage() {
   const historyRailVisibleCount = Math.min(Math.max(sidebarHistoryRecords.length, 1), 5);
   const modeRailStyle = { "--rail-visible-count": modeRailVisibleCount } as CSSProperties;
   const historyRailStyle = { "--rail-visible-count": historyRailVisibleCount } as CSSProperties;
+  const toolbarPickerOptions = toolbarPickerMenu
+    ? toolbarPickerMenu.kind === "model"
+      ? IMAGE_MODEL_ORDER.map((id) => ({
+          id,
+          label: settings.models[id].label,
+          active: selectedModelId === id,
+          onSelect: () => setSelectedModelId(id),
+        }))
+      : toolbarPickerMenu.kind === "ratio"
+        ? ASPECT_RATIOS.map((ratio) => ({
+            id: ratio,
+            label: ratio === "auto" ? "自适应" : ratio,
+            active: aspectRatio === ratio,
+            onSelect: () => setAspectRatio(ratio),
+          }))
+        : toolbarPickerMenu.kind === "size"
+          ? IMAGE_SIZES.map((size) => ({
+              id: size,
+              label: size,
+              active: imageSize === size,
+              onSelect: () => setImageSize(size),
+            }))
+          : GPT_IMAGE_QUALITY_ORDER.map((quality) => ({
+              id: quality,
+              label: `细节程度：${GPT_IMAGE_QUALITY_LABELS[quality]}`,
+              active: settings.gptImageQuality === quality,
+              onSelect: () => persistGptImageQuality(quality),
+            }))
+    : [];
 
   return (
     <main className={[shellStyles.page, projectId ? styles.projectWorkspacePage : ""].filter(Boolean).join(" ")}>
@@ -1400,63 +1389,60 @@ export default function ImagePage() {
               ))}
             </div>
             <div className={styles.toolbar}>
-              <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
-                {IMAGE_MODEL_ORDER.map((id) => {
-                  const model = settings.models[id];
-                  const active = selectedModelId === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setSelectedModelId(id)}
-                      className={[shellStyles.segmentedItem, active ? shellStyles.segmentedItemActive : ""].join(" ")}
-                    >
-                      {model.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <select
-                ref={ratioSelectRef}
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value as ImageAspectRatio)}
-                className={[styles.composerSelect, styles.composerSelectRatio].join(" ")}
-                aria-label="比例"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerSelectModel].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "model"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "model" ? null : { kind: "model", anchor });
+                }}
               >
-                {ASPECT_RATIOS.map((ratio) => (
-                  <option key={ratio} value={ratio}>
-                    {ratio === "auto" ? "自适应" : ratio}
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{selectedModel.label}</span>
+              </button>
 
-              <select
-                ref={sizeSelectRef}
-                value={imageSize}
-                onChange={(e) => setImageSize(e.target.value as ImageSizeTier)}
-                className={[styles.composerSelect, styles.composerSelectSize].join(" ")}
-                aria-label="清晰度"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerSelectRatio].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "ratio"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
+                }}
               >
-                {IMAGE_SIZES.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{aspectRatio === "auto" ? "自适应" : aspectRatio}</span>
+              </button>
+
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerSelectSize].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "size"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "size" ? null : { kind: "size", anchor });
+                }}
+              >
+                <span className={styles.composerPickerLabel}>{imageSize}</span>
+              </button>
 
               {selectedModel.provider === "gpt-image" ? (
-                <select
-                  ref={qualitySelectRef}
-                  value={settings.gptImageQuality}
-                  onChange={(e) => persistGptImageQuality(e.target.value as GptImageQuality)}
-                  className={[styles.composerSelect, styles.composerSelectQuality].join(" ")}
-                  aria-label="细节程度"
+                <button
+                  type="button"
+                  className={[styles.composerPickerButton, styles.composerSelectQuality].join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={toolbarPickerMenu?.kind === "quality"}
+                  onClick={(event) => {
+                    const anchor = menuAnchorFromElement(event.currentTarget);
+                    setToolbarPickerMenu((current) => current?.kind === "quality" ? null : { kind: "quality", anchor });
+                  }}
                 >
-                  {GPT_IMAGE_QUALITY_ORDER.map((q) => (
-                    <option key={q} value={q}>{`细节程度：${GPT_IMAGE_QUALITY_LABELS[q]}`}</option>
-                  ))}
-                </select>
+                  <span className={styles.composerPickerLabel}>
+                    {`细节程度：${GPT_IMAGE_QUALITY_LABELS[settings.gptImageQuality]}`}
+                  </span>
+                </button>
               ) : null}
 
               <button
@@ -1561,6 +1547,43 @@ export default function ImagePage() {
           if (preset.kind === "image") loadImagePromptPresets();
         }}
       />
+      {portalMounted && toolbarPickerMenu
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className={styles.toolbarPickerBackdrop}
+                aria-label="关闭选项菜单"
+                onClick={() => setToolbarPickerMenu(null)}
+              />
+              <div
+                className={styles.toolbarPickerMenu}
+                style={{
+                  left: toolbarPickerMenu.anchor.left + toolbarPickerMenu.anchor.width / 2,
+                  top: toolbarPickerMenu.anchor.top,
+                } as CSSProperties}
+                role="menu"
+              >
+                {toolbarPickerOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={[styles.toolbarPickerOption, option.active ? styles.toolbarPickerOptionActive : ""].filter(Boolean).join(" ")}
+                    role="menuitemradio"
+                    aria-checked={option.active}
+                    onClick={() => {
+                      option.onSelect();
+                      setToolbarPickerMenu(null);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
       {portalMounted && refUploadMenu && !refSlots[refUploadMenu.index]
         ? createPortal(
             <div

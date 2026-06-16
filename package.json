@@ -52,7 +52,7 @@
     "lexical": "^0.45.0",
     "mammoth": "^1.12.0",
     "nanoid": "^5.1.7",
-    "next": "16.2.3",
+    "next": "16.2.9",
     "pdf-parse": "^1.1.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -70,10 +70,13 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.3",
+    "eslint-config-next": "16.2.9",
     "pg": "^8.21.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }

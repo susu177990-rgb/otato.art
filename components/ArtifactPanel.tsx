@@ -2,7 +2,7 @@
 
 import type { Artifact } from "@/lib/types";
 import { STAGES, STAGE_LABELS } from "@/lib/types";
-import { getStudioAutoStageUserMessage } from "@/lib/studio-auto-kickoff";
+import { getProjectScriptAutoStageUserMessage } from "@/lib/project-script-auto-kickoff";
 import type { PipelineProgress } from "@/lib/stage5-pipeline";
 import StageGroup from "./StageGroup";
 import shellStyles from "@/app/shared/shell.module.css";
@@ -123,10 +123,10 @@ export default function ArtifactPanel({
     artifacts.filter((a) => a.stage === stageId);
 
   const viewStageSafe = Math.min(7, Math.max(1, viewStage)) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
-  /** STAGE 6/7 由流水线自建 user 消息，不得依赖 studio-auto-kickoff 文案是否存在，否则「连续大纲」会被误禁用 */
+  /** STAGE 6/7 由流水线自建 user 消息，不得依赖 project-script-auto-kickoff 文案是否存在，否则「连续大纲」会被误禁用 */
   const isPipelineKickoffStage = viewStageSafe === 6 || viewStageSafe === 7;
   const kickoffReady =
-    isPipelineKickoffStage || Boolean(getStudioAutoStageUserMessage(viewStageSafe)?.trim());
+    isPipelineKickoffStage || Boolean(getProjectScriptAutoStageUserMessage(viewStageSafe)?.trim());
   const startDisabled =
     !hasProject || !hasApiKey || chatLoading || !kickoffReady || !onStartThisStage;
   const startLabel =

@@ -53,7 +53,6 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const isPublicAuthPath =
     pathname === "/" ||
-    pathname === "/studio" ||
     pathname === "/prompt" ||
     pathname === "/login" ||
     pathname === "/reset-password" ||

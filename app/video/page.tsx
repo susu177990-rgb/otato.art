@@ -64,6 +64,8 @@ type ReferenceUploadMenuState = {
   projectAssetKind: ProjectAssetMediaKind | null;
   anchor: MenuAnchor;
 } | null;
+type ToolbarPickerKind = "model" | "ratio" | "duration" | "resolution";
+type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
 type PresetRailItem = {
   id: string;
@@ -264,6 +266,7 @@ export default function VideoPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [referenceUploadMenu, setReferenceUploadMenu] = useState<ReferenceUploadMenuState>(null);
+  const [toolbarPickerMenu, setToolbarPickerMenu] = useState<ToolbarPickerMenuState>(null);
   const [projectAssetPicker, setProjectAssetPicker] = useState<ProjectAssetPickerState>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -277,7 +280,7 @@ export default function VideoPage() {
   const safeModelId = VIDEO_UI_MODEL_ORDER.includes(selectedModelId)
     ? selectedModelId
     : videoWorkspace.uiDefaults.defaultModelId;
-  const capabilities = getVideoCapabilities(safeModelId);
+  const capabilities = useMemo(() => getVideoCapabilities(safeModelId), [safeModelId]);
   const { modeId: effectiveModeId, error: modeError } = useMemo(
     () => effectiveModeFromUi(selectedUiModeId, references),
     [selectedUiModeId, references],
@@ -356,14 +359,15 @@ export default function VideoPage() {
   }, []);
 
   useEffect(() => {
-    if (!presetLibraryOpen && !promptPreviewOpen) return;
+    if (!presetLibraryOpen && !promptPreviewOpen && !toolbarPickerMenu) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setPresetLibraryOpen(false);
       if (e.key === "Escape") setPromptPreviewOpen(false);
+      if (e.key === "Escape") setToolbarPickerMenu(null);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [presetLibraryOpen, promptPreviewOpen]);
+  }, [presetLibraryOpen, promptPreviewOpen, toolbarPickerMenu]);
 
   useEffect(() => {
     if (!promptPreviewOpen) setPromptCopied(false);
@@ -474,6 +478,7 @@ export default function VideoPage() {
     if (selectedUiModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
       setSelectedUiModeId("start_end_frame");
     }
+    setToolbarPickerMenu(null);
   }, [capabilities, safeModelId, selectedUiModeId]);
 
   useEffect(() => {
@@ -797,6 +802,36 @@ export default function VideoPage() {
     setSlotInputs(slots);
   }
 
+  const toolbarPickerOptions = toolbarPickerMenu
+    ? toolbarPickerMenu.kind === "model"
+      ? VIDEO_UI_MODEL_ORDER.map((id) => ({
+          id,
+          label: getVideoModelDefinition(id).label,
+          active: safeModelId === id,
+          onSelect: () => setSelectedModelId(id),
+        }))
+      : toolbarPickerMenu.kind === "ratio"
+        ? capabilities.aspectRatios.map((ratio) => ({
+            id: ratio,
+            label: ratio,
+            active: selectedAspectRatio === ratio,
+            onSelect: () => setSelectedAspectRatio(ratio),
+          }))
+        : toolbarPickerMenu.kind === "duration"
+          ? capabilities.durations.map((duration) => ({
+              id: String(duration),
+              label: `${duration}s`,
+              active: selectedDuration === duration,
+              onSelect: () => setSelectedDuration(duration),
+            }))
+          : capabilities.resolutions.map((resolution) => ({
+              id: resolution,
+              label: resolution,
+              active: selectedResolution === resolution,
+              onSelect: () => setSelectedResolution(resolution),
+            }))
+    : [];
+
   return (
     <main className={[shellStyles.page, projectId ? styles.projectWorkspacePage : ""].filter(Boolean).join(" ")}>
       {!projectId ? <header className={shellStyles.topbar}>
@@ -1089,57 +1124,57 @@ export default function VideoPage() {
                 ))}
               </div>
 
-              <select
-                value={safeModelId}
-                onChange={(e) => setSelectedModelId(e.target.value as VideoModelId)}
-                className={styles.composerSelect}
-                aria-label="模型"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerPickerModel].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "model"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "model" ? null : { kind: "model", anchor });
+                }}
               >
-                {VIDEO_UI_MODEL_ORDER.map((id) => (
-                  <option key={id} value={id}>
-                    {getVideoModelDefinition(id).label}
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{getVideoModelDefinition(safeModelId).label}</span>
+              </button>
 
-              <select
-                value={selectedAspectRatio}
-                onChange={(e) => setSelectedAspectRatio(e.target.value as VideoAspectRatio)}
-                className={styles.composerSelect}
-                aria-label="比例"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerPickerRatio].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "ratio"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
+                }}
               >
-                {capabilities.aspectRatios.map((ratio) => (
-                  <option key={ratio} value={ratio}>
-                    {ratio}
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{selectedAspectRatio}</span>
+              </button>
 
-              <select
-                value={selectedDuration}
-                onChange={(e) => setSelectedDuration(Number(e.target.value))}
-                className={styles.composerSelect}
-                aria-label="时长"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerPickerDuration].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "duration"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "duration" ? null : { kind: "duration", anchor });
+                }}
               >
-                {capabilities.durations.map((duration) => (
-                  <option key={duration} value={duration}>
-                    {duration}s
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{selectedDuration}s</span>
+              </button>
 
-              <select
-                value={selectedResolution}
-                onChange={(e) => setSelectedResolution(e.target.value as VideoResolution)}
-                className={styles.composerSelect}
-                aria-label="分辨率"
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerPickerResolution].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "resolution"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "resolution" ? null : { kind: "resolution", anchor });
+                }}
               >
-                {capabilities.resolutions.map((resolution) => (
-                  <option key={resolution} value={resolution}>
-                    {resolution}
-                  </option>
-                ))}
-              </select>
+                <span className={styles.composerPickerLabel}>{selectedResolution}</span>
+              </button>
 
               <div className={styles.toolbarActions}>
                 <button
@@ -1221,6 +1256,43 @@ export default function VideoPage() {
           if (preset.kind === "video") loadVideoPromptPresets();
         }}
       />
+      {portalMounted && toolbarPickerMenu
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className={styles.toolbarPickerBackdrop}
+                aria-label="关闭选项菜单"
+                onClick={() => setToolbarPickerMenu(null)}
+              />
+              <div
+                className={styles.toolbarPickerMenu}
+                style={{
+                  left: toolbarPickerMenu.anchor.left + toolbarPickerMenu.anchor.width / 2,
+                  top: toolbarPickerMenu.anchor.top,
+                } as CSSProperties}
+                role="menu"
+              >
+                {toolbarPickerOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={[styles.toolbarPickerOption, option.active ? styles.toolbarPickerOptionActive : ""].filter(Boolean).join(" ")}
+                    role="menuitemradio"
+                    aria-checked={option.active}
+                    onClick={() => {
+                      option.onSelect();
+                      setToolbarPickerMenu(null);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
       {portalMounted && referenceUploadMenu
         ? createPortal(
             <div

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import type { ChatAttachment } from "@/lib/chat/types";
 import type { ChatMode } from "@/lib/chat/types";
 import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } from "@/lib/image-workspace";
@@ -9,6 +10,20 @@ import imageStyles from "@/app/image/image-page.module.css";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-composer.module.css";
+
+type MenuAnchor = { left: number; top: number; width: number; height: number };
+type ModelPickerKind = "llm" | "image";
+type ModelPickerMenuState = { kind: ModelPickerKind; anchor: MenuAnchor } | null;
+
+function menuAnchorFromElement(element: HTMLElement): MenuAnchor {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
 
 export function ChatComposer({
   inputText,
@@ -55,6 +70,8 @@ export function ChatComposer({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLElement>(null);
+  const [modelPickerMenu, setModelPickerMenu] = useState<ModelPickerMenuState>(null);
+  const [portalMounted, setPortalMounted] = useState(false);
 
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
@@ -73,7 +90,38 @@ export function ChatComposer({
     return () => window.removeEventListener("paste", handlePaste);
   }, [onAddFiles]);
 
+  useEffect(() => {
+    setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!modelPickerMenu) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setModelPickerMenu(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [modelPickerMenu]);
+
   const canSend = Boolean(inputText.trim() || pendingAttachments.length > 0);
+  const enabledLlmModels = Object.values(llmSettings.models).filter((model) => model.enabled);
+  const selectedLlmModelLabel = enabledLlmModels.find((model) => model.id === selectedLlmModelId)?.label ?? selectedLlmModelId;
+  const selectedImageModelLabel = imageWorkspace.models[selectedImageModelId]?.label ?? selectedImageModelId;
+  const modelPickerOptions = modelPickerMenu
+    ? modelPickerMenu.kind === "llm"
+      ? enabledLlmModels.map((model) => ({
+          id: model.id,
+          label: model.label,
+          active: selectedLlmModelId === model.id,
+          onSelect: () => onLlmModelChange(model.id),
+        }))
+      : IMAGE_MODEL_ORDER.map((id) => ({
+          id,
+          label: imageWorkspace.models[id].label,
+          active: selectedImageModelId === id,
+          onSelect: () => onImageModelChange(id),
+        }))
+    : [];
 
   return (
     <section ref={wrapRef} className={[imageStyles.composerWrap, className ?? ""].join(" ")}>
@@ -179,34 +227,34 @@ export function ChatComposer({
             </div>
           ) : null}
           <div className={styles.modelGroup}>
-            <select
-              value={selectedLlmModelId}
+            <button
+              type="button"
               disabled={isSending}
               aria-label="对话模型"
-              className={[imageStyles.composerSelect, styles.modelSelect].join(" ")}
-              onChange={(e) => onLlmModelChange(e.target.value)}
+              aria-haspopup="menu"
+              aria-expanded={modelPickerMenu?.kind === "llm"}
+              className={styles.modelPickerButton}
+              onClick={(event) => {
+                const anchor = menuAnchorFromElement(event.currentTarget);
+                setModelPickerMenu((current) => current?.kind === "llm" ? null : { kind: "llm", anchor });
+              }}
             >
-              {Object.values(llmSettings.models)
-                .filter((model) => model.enabled)
-                .map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-            </select>
-            <select
-              value={selectedImageModelId}
+              <span className={styles.modelPickerLabel}>{selectedLlmModelLabel}</span>
+            </button>
+            <button
+              type="button"
               disabled={isSending}
               aria-label="生图模型"
-              className={[imageStyles.composerSelect, styles.modelSelect].join(" ")}
-              onChange={(e) => onImageModelChange(e.target.value as ImageModelId)}
+              aria-haspopup="menu"
+              aria-expanded={modelPickerMenu?.kind === "image"}
+              className={styles.modelPickerButton}
+              onClick={(event) => {
+                const anchor = menuAnchorFromElement(event.currentTarget);
+                setModelPickerMenu((current) => current?.kind === "image" ? null : { kind: "image", anchor });
+              }}
             >
-              {IMAGE_MODEL_ORDER.map((id) => (
-                <option key={id} value={id}>
-                  {imageWorkspace.models[id].label}
-                </option>
-              ))}
-            </select>
+              <span className={styles.modelPickerLabel}>{selectedImageModelLabel}</span>
+            </button>
           </div>
           <div className={styles.toolbarSpacer} />
           {extraActions}
@@ -220,6 +268,43 @@ export function ChatComposer({
           </button>
         </div>
       </div>
+      {portalMounted && modelPickerMenu
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className={styles.modelPickerBackdrop}
+                aria-label="关闭模型菜单"
+                onClick={() => setModelPickerMenu(null)}
+              />
+              <div
+                className={styles.modelPickerMenu}
+                style={{
+                  left: modelPickerMenu.anchor.left + modelPickerMenu.anchor.width / 2,
+                  top: modelPickerMenu.anchor.top,
+                } as CSSProperties}
+                role="menu"
+              >
+                {modelPickerOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={[styles.modelPickerOption, option.active ? styles.modelPickerOptionActive : ""].filter(Boolean).join(" ")}
+                    role="menuitemradio"
+                    aria-checked={option.active}
+                    onClick={() => {
+                      option.onSelect();
+                      setModelPickerMenu(null);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

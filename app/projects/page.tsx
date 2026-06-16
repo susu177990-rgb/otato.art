@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, type MouseEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type FocusEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProjectWorkspace } from "@/components/project/ProjectProvider";
@@ -10,26 +10,34 @@ import shellStyles from "../shared/shell.module.css";
 import styles from "./projects-page.module.css";
 
 type SortKey = "updated" | "stage" | "name";
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: "updated", label: "按更新时间" },
+  { value: "stage", label: "按项目进度" },
+  { value: "name", label: "按名称" },
+];
 
-function formatUpdated(iso: string) {
+function formatDate(iso: string) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString("zh-CN", { year: "numeric", month: "numeric", day: "numeric" });
   } catch {
     return "";
   }
 }
 
-function projectStatusLabel(project: ProjectSummary) {
-  if (project.onboardingStatus === "pending_setup") return "待立项";
-  if (project.onboardingStatus === "planning") return "策划中";
-  return "项目中";
-}
-
-function projectModeLabel(project: ProjectSummary) {
-  if (project.originMode === "adaptation") return "改编项目";
-  return "原创项目";
+function PencilIcon() {
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"
+        stroke="currentColor"
+        strokeWidth="3.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function ProjectsHubInner() {
@@ -41,8 +49,11 @@ function ProjectsHubInner() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("updated");
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminChecked, setAdminChecked] = useState(false);
+  const [savingProjectId, setSavingProjectId] = useState<string | null>(null);
+  const [projectNameError, setProjectNameError] = useState<{ id: string; message: string } | null>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -107,8 +118,59 @@ function ProjectsHubInner() {
     return sorted;
   }, [projects, query, sortKey]);
 
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === sortKey)?.label ?? "按更新时间";
+
   function handleOpen(id: string) {
     router.push(projectModeHref(id, "workspace"));
+  }
+
+  async function handleSaveProjectName(project: ProjectSummary, rawName: string) {
+    const name = rawName.trim();
+    if (!name) {
+      setProjectNameError({ id: project.id, message: "项目名称不能为空" });
+      return;
+    }
+    if (name === project.name.trim()) {
+      setProjectNameError(null);
+      return;
+    }
+    setSavingProjectId(project.id);
+    setProjectNameError(null);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "项目保存失败");
+      }
+      await fetchProjects();
+    } catch (error) {
+      setProjectNameError({ id: project.id, message: error instanceof Error ? error.message : "项目保存失败" });
+    } finally {
+      setSavingProjectId(null);
+    }
+  }
+
+  function handleProjectNameBlur(e: FocusEvent<HTMLInputElement>, project: ProjectSummary) {
+    void handleSaveProjectName(project, e.currentTarget.value);
+  }
+
+  function handleProjectNameKeyDown(e: KeyboardEvent<HTMLInputElement>, project: ProjectSummary) {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.currentTarget.value = project.name;
+      setProjectNameError(null);
+      e.currentTarget.blur();
+    }
   }
 
   function handleDelete(e: MouseEvent, project: ProjectSummary) {
@@ -188,27 +250,69 @@ function ProjectsHubInner() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索项目名称…"
-                className={[shellStyles.input, styles.search].join(" ")}
+                className={styles.search}
               />
-              <label className={styles.sortField}>
-                <span className={shellStyles.fieldLabel}>排序</span>
-                <select
-                  value={sortKey}
-                  onChange={(e) => setSortKey(e.target.value as SortKey)}
-                  className={[shellStyles.select, shellStyles.inputCompact].join(" ")}
+              <div
+                className={styles.sortField}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSortMenuOpen(false);
+                }}
+              >
+                <span className={styles.sortLabel}>排序</span>
+                <button
+                  type="button"
+                  className={styles.sortButton}
+                  aria-haspopup="menu"
+                  aria-expanded={sortMenuOpen}
+                  onClick={() => setSortMenuOpen((open) => !open)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSortMenuOpen(false);
+                  }}
                 >
-                  <option value="updated">按更新时间</option>
-                  <option value="stage">按项目进度</option>
-                  <option value="name">按名称</option>
-                </select>
-              </label>
+                  <span>{sortLabel}</span>
+                  <span className={styles.sortChevron} aria-hidden>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="m6 9 6 6 6-6"
+                        stroke="currentColor"
+                        strokeWidth="3.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                </button>
+                {sortMenuOpen ? (
+                  <div className={styles.sortMenu} role="menu">
+                    {SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={sortKey === option.value}
+                        className={[styles.sortOption, sortKey === option.value ? styles.sortOptionActive : ""].filter(Boolean).join(" ")}
+                        onClick={() => {
+                          setSortKey(option.value);
+                          setSortMenuOpen(false);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div> : null}
 
           {!needsLogin && visible.length > 0 ? (
             <div className={styles.grid}>
               {visible.map((p) => {
-                const updated = formatUpdated(p.updatedAt);
+                const created = formatDate(p.createdAt);
+                const isSaving = savingProjectId === p.id;
+                const nameError = projectNameError?.id === p.id ? projectNameError.message : "";
+                const assetCounts = p.assetCounts ?? { character: 0, prop: 0, scene: 0 };
+                const generationCounts = p.generationCounts ?? { image: 0, video: 0 };
                 return (
                   <article
                     key={p.id}
@@ -224,34 +328,61 @@ function ProjectsHubInner() {
                     className={styles.projectCard}
                   >
                     <div className={styles.projectCardHead}>
-                      <span className={styles.projectStatus}>{projectStatusLabel(p)}</span>
-                      <span className={styles.projectMode}>{projectModeLabel(p)}</span>
+                      <span className={styles.projectCreated}>{created ? `创建 ${created}` : "创建日期未知"}</span>
                     </div>
                     <div className={styles.projectBody}>
-                      <h2 className={styles.projectTitle}>{p.name}</h2>
-                      <p className={styles.projectSummary}>
-                        总项目空间，统一承接对话策划、剧本推进、图片视频、画布整理和资产沉淀。
-                      </p>
-                      <div className={styles.projectModules} aria-label="项目模块">
-                        <span>工作台</span>
-                        <span>剧本</span>
-                        <span>画布</span>
-                        <span>素材</span>
+                      <label
+                        className={styles.projectNameField}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className={styles.projectNameAssist}>
+                          {isSaving ? "保存中" : "项目名称"}
+                        </span>
+                        <span className={styles.projectNameControl}>
+                          <input
+                            key={`${p.id}:${p.name}`}
+                            defaultValue={p.name}
+                            className={styles.projectNameInput}
+                            disabled={isSaving}
+                            aria-label="项目名称"
+                            onBlur={(e) => handleProjectNameBlur(e, p)}
+                            onKeyDown={(e) => handleProjectNameKeyDown(e, p)}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span className={styles.projectNameIcon}>
+                            <PencilIcon />
+                          </span>
+                        </span>
+                      </label>
+                      {nameError ? <p className={styles.projectNameError}>{nameError}</p> : null}
+                      <div className={styles.projectCountBlock} aria-label="项目资源统计">
+                        <span className={styles.projectCountTitle}>素材</span>
+                        <div className={styles.projectCountChips}>
+                          <span>角色 {assetCounts.character}</span>
+                          <span>道具 {assetCounts.prop}</span>
+                          <span>场景 {assetCounts.scene}</span>
+                        </div>
+                      </div>
+                      <div className={styles.projectCountBlock} aria-label="项目生成记录统计">
+                        <span className={styles.projectCountTitle}>生成记录</span>
+                        <div className={styles.projectCountChips}>
+                          <span>图片 {generationCounts.image}</span>
+                          <span>视频 {generationCounts.video}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className={styles.projectFoot}>
-                      <span>{updated ? `更新 ${updated}` : "\u00a0"}</span>
-                      <span className={styles.projectEnter}>进入项目</span>
+                    <div className={styles.projectCardActions}>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(e, p)}
+                        className={styles.removeBtn}
+                        title="删除项目"
+                        aria-label="删除项目"
+                      >
+                        ×
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDelete(e, p)}
-                      className={styles.removeBtn}
-                      title="删除项目"
-                      aria-label="删除项目"
-                    >
-                      ×
-                    </button>
                   </article>
                 );
               })}

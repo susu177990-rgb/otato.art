@@ -6,7 +6,7 @@ import type { Artifact, Settings } from "@/lib/types";
 import { auditBibleVsCast } from "@/lib/bible-audit";
 import { downloadSeriesBibleMarkdownFile, downloadCreativeBriefMarkdownFile } from "@/lib/export-artifacts";
 import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
-import ArtifactSlotEditor from "./ArtifactSlotEditor";
+import ArtifactSlotEditor from "@/components/ArtifactSlotEditor";
 import shellStyles from "@/app/shared/shell.module.css";
 
 export type BibleDrawerTab = "brief" | "bible" | "locale";
@@ -26,7 +26,7 @@ interface Props {
   seriesBible: string;
   settings: Settings;
   /** 编剧室是否已有对话或产物（须传 allowWithProgress 才能生成） */
-  hasStudioProgress?: boolean;
+  hasProjectScriptProgress?: boolean;
   onOpenSettings?: () => void;
   artifacts: Artifact[];
   onSeriesBibleChange: (next: string) => void;
@@ -37,7 +37,7 @@ interface Props {
   localeBriefGenerateEnabled: boolean;
 }
 
-export default function StudioBibleDrawer({
+export default function ProjectScriptBibleDrawer({
   open,
   onClose,
   drawerTab,
@@ -48,7 +48,7 @@ export default function StudioBibleDrawer({
   creativeBrief,
   onCreativeBriefChange,
   settings,
-  hasStudioProgress = false,
+  hasProjectScriptProgress = false,
   onOpenSettings,
   seriesBible,
   artifacts,
@@ -79,7 +79,7 @@ export default function StudioBibleDrawer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          allowWithProgress: hasStudioProgress,
+          allowWithProgress: hasProjectScriptProgress,
         }),
       });
       const data = (await res.json()) as { error?: string; project?: { seriesBible?: string } };

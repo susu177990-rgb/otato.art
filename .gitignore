@@ -33,6 +33,9 @@ yarn-error.log*
 *.log
 npm-debug.log*
 
+# Local visual QA/debug output
+output/
+
 # Local app data (user projects; do not publish)
 data/projects/*.json
 

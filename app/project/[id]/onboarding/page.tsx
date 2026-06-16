@@ -44,7 +44,7 @@ type OnboardingPageProps = {
   projectId?: string;
   embedded?: boolean;
   backHref?: string;
-  studioHref?: string;
+  completionHref?: string;
   onCompleted?: () => void | Promise<void>;
 };
 
@@ -78,13 +78,13 @@ export default function OnboardingPage({
   projectId,
   embedded = false,
   backHref = "/projects",
-  studioHref,
+  completionHref,
   onCompleted,
 }: OnboardingPageProps = {}) {
   const params = useParams<{ id?: string }>();
   const router = useRouter();
   const id = projectId ?? params.id ?? "";
-  const finalStudioHref = studioHref ?? `/studio/${id}`;
+  const finalCompletionHref = completionHref ?? (id ? `/projects/${encodeURIComponent(id)}/script` : "/projects");
 
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -656,7 +656,7 @@ export default function OnboardingPage({
   }
 
   /** 进入编剧室前最终保存 — 原创/改编合用 */
-  async function handleFinalizeAndEnterStudio() {
+  async function handleFinalizeAndEnterProjectScript() {
     if (!meta.seriesTitle.trim()) {
       alert("请先在「基本信息」tab 填写剧名");
       setActiveTab("meta");
@@ -704,7 +704,7 @@ export default function OnboardingPage({
 
       if ((saved.seriesBible ?? "").trim()) {
         await onCompleted?.();
-        router.push(finalStudioHref);
+        router.push(finalCompletionHref);
         return;
       }
 
@@ -725,7 +725,7 @@ export default function OnboardingPage({
         setGeneratingBible(false);
       }
       await onCompleted?.();
-      router.push(finalStudioHref);
+      router.push(finalCompletionHref);
     } catch (e) {
       alert(e instanceof Error ? e.message : "保存失败");
     } finally {
@@ -892,7 +892,7 @@ export default function OnboardingPage({
                 <span className={styles.adaptHint}>（已存为改编）</span>
               ) : null}
             </div>
-            <div className={styles.enterStudioGroup}>
+            <div className={styles.enterProjectGroup}>
               {!finalizeReady ? (
                 <span className={shellStyles.helpText}>
                   需先填写剧名 / 创作思路 / 系列圣经
@@ -900,7 +900,7 @@ export default function OnboardingPage({
               ) : null}
               <button
                 type="button"
-                onClick={() => void handleFinalizeAndEnterStudio()}
+                onClick={() => void handleFinalizeAndEnterProjectScript()}
                 disabled={saving || generatingBible || generatingLocaleBrief || !finalizeReady}
                 className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
               >

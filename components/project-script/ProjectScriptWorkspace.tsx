@@ -1,8 +1,8 @@
 "use client";
 
 import OnboardingPage from "@/app/project/[id]/onboarding/page";
-import StudioPage from "@/app/studio/[id]/page";
 import { useProjectWorkspace } from "@/components/project/ProjectProvider";
+import { ProjectScriptEditor } from "./ProjectScriptEditor";
 import { ProjectScriptRouteProvider } from "./project-script-route-context";
 
 type ProjectScriptWorkspaceProps = {
@@ -22,7 +22,7 @@ export function ProjectScriptWorkspace({ projectId }: ProjectScriptWorkspaceProp
         projectId={projectId}
         embedded
         backHref="/projects"
-        studioHref={scriptHref}
+        completionHref={scriptHref}
         onCompleted={refreshProject}
       />
     );
@@ -38,7 +38,7 @@ export function ProjectScriptWorkspace({ projectId }: ProjectScriptWorkspaceProp
         requireOnboarding: true,
       }}
     >
-      <StudioPage />
+      <ProjectScriptEditor />
     </ProjectScriptRouteProvider>
   );
 }

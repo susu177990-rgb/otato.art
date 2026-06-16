@@ -51,13 +51,12 @@
   position: relative;
   display: block;
   align-self: start;
-  width: min(calc(var(--preset-cover-aspect, 1.777) * var(--preset-cover-height)), 238px);
-  height: min(var(--preset-cover-height), calc(238px / var(--preset-cover-aspect, 1.777)));
-  aspect-ratio: var(--preset-cover-aspect, 1.777);
+  width: min(192px, 42vw);
+  aspect-ratio: 16 / 9;
   min-width: 0;
   border: 2px solid #050505;
   border-radius: 15px;
-  background: #f3f3ef;
+  background: #ffffff;
   overflow: hidden;
 }
 
@@ -67,7 +66,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #ffffff;
 }
 
@@ -204,7 +203,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 0 0 auto;
   gap: 10px;
-  padding: 8px 16px 18px 8px;
+  padding: 8px 16px 12px 8px;
   border-top: 2px solid #050505;
   border-radius: 0 0 18px 18px;
   overflow: visible;
@@ -266,13 +265,13 @@
 }
 
 .favoriteActive {
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
 }
 
 .favoriteActive:hover:not(:disabled),
 .favoriteActive:active:not(:disabled) {
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
 }
 
@@ -286,7 +285,7 @@
     width: 100%;
     max-width: none;
     height: auto;
-    aspect-ratio: var(--preset-cover-aspect, 1.777);
+    aspect-ratio: 16 / 9;
   }
 
   .title {

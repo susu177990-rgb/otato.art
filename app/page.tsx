@@ -69,7 +69,7 @@ function HomeContent() {
             <Link className={[styles.btn, styles.ghost].join(" ")} href={GITHUB_URL} target="_blank" rel="noreferrer">
               查看仓库
             </Link>
-            <Link className={[styles.btn, styles.primary].join(" ")} href="/studio">
+            <Link className={[styles.btn, styles.primary].join(" ")} href="/projects">
               进入工作台
             </Link>
           </div>
@@ -89,7 +89,7 @@ function HomeContent() {
               oTATo Art 把对话、图片、视频、剧本、画布、画廊、模型配置和提示词预设放在同一个流程里。你可以绑定自己的 API 密钥直接使用，也可以在没有密钥时充值积分继续创作。
             </p>
             <div className={styles.heroActions}>
-              <Link className={[styles.btn, styles.red].join(" ")} href="/studio">
+              <Link className={[styles.btn, styles.red].join(" ")} href="/projects">
                 立即访问网站
               </Link>
               <Link className={styles.btn} href={GITHUB_URL} target="_blank" rel="noreferrer">
@@ -286,7 +286,7 @@ function HomeContent() {
             <h2>从一个灵感开始，把完整项目沉淀下来。</h2>
             <p>进入 oTATo Art，绑定自己的 API 密钥，或者直接使用积分。把你的对话、提示词、剧本、图片、视频、画布和画廊放进同一个创作系统。</p>
           </div>
-          <Link className={styles.btn} href="/studio">进入工作台</Link>
+          <Link className={styles.btn} href="/projects">进入工作台</Link>
         </div>
       </section>
 

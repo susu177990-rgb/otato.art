@@ -217,9 +217,6 @@ function PromptPageInner() {
     }
   }
 
-  const statusText = loading
-    ? "加载中"
-    : `${filteredPresets.length} / ${presets.length} 条预设`;
   const activeKind = filter === "image" || filter === "video" || filter === "chat" ? filter : null;
   const secondaryTags = activeKind ? PROMPT_TAG_GROUPS[activeKind] : [];
 
@@ -227,10 +224,9 @@ function PromptPageInner() {
     <main className={[shellStyles.page, styles.promptPage].join(" ")}>
       <header className={styles.promptTopbar}>
         <div className={styles.promptTopbarIdentity}>
-          <Link href="/projects" className={styles.promptTopbarBack}>
-            项目
+          <Link href="/" className={styles.promptTopbarBack}>
+            首页
           </Link>
-          <span className={styles.promptTopbarTitle}>预设</span>
         </div>
 
         <nav className={styles.promptTopbarModes} aria-label="提示词预设导航">
@@ -244,7 +240,6 @@ function PromptPageInner() {
           <button type="button" className={styles.promptTopbarAction} onClick={() => setUploadOpen(true)}>
             投稿提示词
           </button>
-          <span className={styles.promptTopbarStatus}>{statusText}</span>
         </div>
       </header>
 
@@ -254,37 +249,31 @@ function PromptPageInner() {
             <span>{uploadSuccess}</span>
           </div>
         ) : null}
-        <section className={styles.promptHero}>
-          <div>
-            <p className={styles.eyebrow}>Prompt Presets</p>
-            <h1>提示词预设</h1>
-            <p>搜索、收藏并复制现有预设，快速带走可复用的创作提示词。</p>
+        <div className={styles.filterBar}>
+          <div className={styles.filterButtons} role="tablist" aria-label="提示词预设分类">
+            {FILTERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={[styles.filterButton, filter === item.id ? styles.filterButtonActive : ""].filter(Boolean).join(" ")}
+                onClick={() => setFilter(item.id)}
+                role="tab"
+                aria-selected={filter === item.id}
+              >
+                <span>{item.label}</span>
+                <strong>{counts[item.id]}</strong>
+              </button>
+            ))}
           </div>
           <label className={styles.searchBox}>
-            <span>搜索</span>
+            <span className={styles.visuallyHidden}>搜索</span>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="输入标题、描述或提示词内容"
+              placeholder="搜索提示词"
               spellCheck={false}
             />
           </label>
-        </section>
-
-        <div className={styles.filterBar} role="tablist" aria-label="提示词预设分类">
-          {FILTERS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={[styles.filterButton, filter === item.id ? styles.filterButtonActive : ""].filter(Boolean).join(" ")}
-              onClick={() => setFilter(item.id)}
-              role="tab"
-              aria-selected={filter === item.id}
-            >
-              <span>{item.label}</span>
-              <strong>{counts[item.id]}</strong>
-            </button>
-          ))}
         </div>
 
         {activeKind ? (

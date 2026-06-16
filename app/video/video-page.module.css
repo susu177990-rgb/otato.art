@@ -101,12 +101,25 @@
   padding: 8px 14px 10px;
 }
 
-.projectWorkspacePage .composerSelect,
+.projectWorkspacePage .composerPickerButton,
 .projectWorkspacePage .generate,
 .projectWorkspacePage .freeModeToggle {
   height: 34px;
+}
+
+.projectWorkspacePage .generate,
+.projectWorkspacePage .freeModeToggle {
   font-size: 12px;
   font-weight: 800;
+}
+
+.projectWorkspacePage .composerPickerButton,
+.projectWorkspacePage .composerPickerButton:hover,
+.projectWorkspacePage .composerPickerButton:focus,
+.projectWorkspacePage .composerPickerButton:focus-visible,
+.projectWorkspacePage .composerPickerButton:active {
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .canvas {
@@ -567,7 +580,7 @@
 .refSlot video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .refMediaGlyph {
@@ -745,33 +758,144 @@
   display: none;
 }
 
-.composerSelect {
+.composerPickerButton {
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   height: 34px;
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  background-color: rgba(255, 255, 255, 0.035);
-  padding: 0 24px 0 10px;
-  color: #e4e4e7;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
   line-height: 1.2;
   outline: none;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 9px center;
-  background-size: 9px 9px;
+  box-shadow: var(--otato-switch-shadow, 3px 3px 0 #050505);
+  background-clip: padding-box;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.composerSelect:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background-color: rgba(255, 255, 255, 0.05);
+.composerPickerButton:hover {
+  border-color: #050505;
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.composerPickerButton:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.composerPickerButton:focus-visible {
+  outline: 3px solid rgba(255, 77, 61, 0.55);
+  outline-offset: 3px;
+}
+
+.composerPickerLabel {
+  display: inline-block;
+  flex: 0 0 auto;
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  font: inherit;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  will-change: auto;
+}
+
+.composerPickerModel {
+  width: 10.75rem;
+  min-width: 10.75rem;
+  padding: 0 10px;
+}
+
+.composerPickerRatio {
+  width: 4rem;
+  min-width: 4rem;
+  padding: 0 9px;
+}
+
+.composerPickerDuration {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  padding: 0 9px;
+}
+
+.composerPickerResolution {
+  width: 5rem;
+  min-width: 5rem;
+  padding: 0 10px;
+}
+
+.toolbarPickerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4990;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.toolbarPickerMenu {
+  position: fixed;
+  z-index: 5000;
+  display: grid;
+  gap: 8px;
+  min-width: 96px;
+  transform: translate(-50%, calc(-100% - 8px));
+  padding: 10px;
+  border: 3px solid #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.toolbarPickerOption {
+  min-height: 40px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.toolbarPickerOption:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.toolbarPickerOption:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.toolbarPickerOptionActive,
+.toolbarPickerOptionActive:hover {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
 }
 
 .warning {
@@ -1423,7 +1547,7 @@
 .modePanel,
 .historyPanel,
 .composer,
-.composerSelect,
+.composerPickerButton,
 .generate,
 .freeModeToggle,
 .promptPreviewPanel,
@@ -1567,14 +1691,14 @@
   box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
-.composerSelect,
-.composerSelect:hover,
-.composerSelect:focus,
-.composerSelect:focus-visible,
-.composerSelect:active {
+.composerPickerButton,
+.composerPickerButton:hover,
+.composerPickerButton:focus,
+.composerPickerButton:focus-visible,
+.composerPickerButton:active {
   border: 3px solid #050505 !important;
   border-radius: 15px;
-  background-color: #ffffff !important;
+  background: #ffffff !important;
   background-clip: padding-box;
   color: #050505 !important;
   outline: none !important;
@@ -1585,13 +1709,14 @@
   transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
-.composerSelect:hover {
+.composerPickerButton:hover {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
   transform: var(--otato-control-hover-transform, translate(-1px, -1px));
   box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
 }
 
-.composerSelect:active {
-  background-color: var(--otato-yellow, #ffd86b) !important;
+.composerPickerButton:active {
+  background: var(--otato-yellow, #ffd86b) !important;
   transform: var(--otato-control-press-transform, translate(2px, 2px));
   box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
 }
@@ -1729,6 +1854,7 @@
   background: #ffffff;
   color: #050505;
   font-weight: 900;
+  text-shadow: none;
 }
 
 .loadingSpinner,

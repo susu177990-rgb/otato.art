@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import type {
   Message,
   Project,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/creative-directions";
 import { downloadArtifactsZip } from "@/lib/export-artifacts";
 import { SOURCE_ANALYSIS_CONTEXT_CHARS } from "@/lib/source-materials";
-import { getStudioAutoStageUserMessage, STUDIO_AUTO_STAGE1_USER_MESSAGE } from "@/lib/studio-auto-kickoff";
+import { getProjectScriptAutoStageUserMessage, PROJECT_SCRIPT_AUTO_STAGE1_USER_MESSAGE } from "@/lib/project-script-auto-kickoff";
 import {
   parseTargetEpisodeCount,
   maxExistingEpisodeNum,
@@ -52,11 +51,11 @@ import {
 import ChatWindow, { type ChatWindowHandle } from "@/components/ChatWindow";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import ArtifactPanel from "@/components/ArtifactPanel";
-import StudioStageStrip from "@/components/StudioStageStrip";
-import StudioBibleDrawer, { type BibleDrawerTab } from "@/components/StudioBibleDrawer";
+import ProjectScriptStageStrip from "./ProjectScriptStageStrip";
+import ProjectScriptBibleDrawer, { type BibleDrawerTab } from "./ProjectScriptBibleDrawer";
 import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
-import shellStyles from "../../shared/shell.module.css";
-import styles from "./studio-page.module.css";
+import shellStyles from "@/app/shared/shell.module.css";
+import styles from "./project-script-editor.module.css";
 
 function normalizeMeta(p: Project): ProjectMeta {
   const m = p.meta;
@@ -70,10 +69,9 @@ function normalizeMeta(p: Project): ProjectMeta {
   };
 }
 
-function StudioInner() {
-  const params = useParams<{ id?: string }>();
+function ProjectScriptEditorInner() {
   const routeOptions = useProjectScriptRouteOptions();
-  const projectId = routeOptions?.projectId ?? params.id ?? "";
+  const projectId = routeOptions?.projectId ?? "";
   const backHref = routeOptions?.backHref ?? "/projects";
   const onboardingHref = routeOptions?.onboardingHref ?? `/project/${projectId}/onboarding`;
   const onRestartOnboarding = routeOptions?.onRestartOnboarding;
@@ -129,12 +127,12 @@ function StudioInner() {
     artifactsRef.current = artifacts;
   }, [artifacts]);
 
-  const studioAutoKickoffMessage = useMemo(() => {
+  const projectScriptAutoKickoffMessage = useMemo(() => {
     if (!initialLoadComplete) return null;
     if (messages.length > 0) return null;
     if (!settings.apiKey) return null;
     if (!projectReady) return null;
-    return STUDIO_AUTO_STAGE1_USER_MESSAGE;
+    return PROJECT_SCRIPT_AUTO_STAGE1_USER_MESSAGE;
   }, [initialLoadComplete, messages.length, settings.apiKey, projectReady]);
 
   const projectContext = useMemo(() => {
@@ -564,7 +562,7 @@ function StudioInner() {
         "点击「取消」可先回 STAGE 4 补全集数范围后再用流水线。"
       );
       if (!fallback) return;
-      const text = getStudioAutoStageUserMessage(6);
+      const text = getProjectScriptAutoStageUserMessage(6);
       if (text) {
         setViewStage(6);
         void chatRef.current?.sendUserMessage(text);
@@ -680,7 +678,7 @@ function StudioInner() {
       setViewStage(stage);
 
       if (stage <= 5) {
-        const text = getStudioAutoStageUserMessage(stage);
+        const text = getProjectScriptAutoStageUserMessage(stage);
         if (!text) continue;
         pipelineStageOverrideRef.current = stage;
         const reply = await chatRef.current.sendUserMessage(text);
@@ -713,7 +711,7 @@ function StudioInner() {
       } else if (stage === 6) {
         const batches = buildEventBatches(artifactsRef.current);
         if (batches.length === 0) {
-          const text = getStudioAutoStageUserMessage(6);
+          const text = getProjectScriptAutoStageUserMessage(6);
           if (text) {
             pipelineStageOverrideRef.current = 6;
             await chatRef.current.sendUserMessage(text);
@@ -787,7 +785,7 @@ function StudioInner() {
         handleStartOutlinePipeline();
         return;
       }
-      const text = getStudioAutoStageUserMessage(stage);
+      const text = getProjectScriptAutoStageUserMessage(stage);
       if (text) void chatRef.current?.sendUserMessage(text);
     },
     [handleStartPipeline, handleStartOutlinePipeline]
@@ -1096,7 +1094,7 @@ function StudioInner() {
               <span>简报</span>
             </button>
           </div>
-          <StudioStageStrip
+          <ProjectScriptStageStrip
             key={projectId || "none"}
             artifacts={artifacts}
             currentStage={currentStage}
@@ -1190,7 +1188,7 @@ function StudioInner() {
             onOpenSettings={openSettings}
             onMessagesChange={handleMessagesChange}
             onAssistantDone={handleAssistantDone}
-            autoKickoffUserMessage={studioAutoKickoffMessage}
+            autoKickoffUserMessage={projectScriptAutoKickoffMessage}
             onLoadingChange={setChatLoading}
           />
         </aside>
@@ -1215,7 +1213,7 @@ function StudioInner() {
         </div>
       </section>
 
-      <StudioBibleDrawer
+      <ProjectScriptBibleDrawer
         open={bibleDrawerOpen}
         onClose={() => setBibleDrawerOpen(false)}
         drawerTab={bibleDrawerTab}
@@ -1226,7 +1224,7 @@ function StudioInner() {
         creativeBrief={creativeBrief}
         onCreativeBriefChange={handleCreativeBriefChange}
         settings={settings}
-        hasStudioProgress={messages.length > 0 || artifacts.length > 0}
+        hasProjectScriptProgress={messages.length > 0 || artifacts.length > 0}
         onOpenSettings={openSettings}
         seriesBible={seriesBible}
         artifacts={artifacts}
@@ -1239,10 +1237,10 @@ function StudioInner() {
   );
 }
 
-export default function StudioPage() {
+export function ProjectScriptEditor() {
   return (
     <Suspense fallback={<div className={shellStyles.empty}>加载中…</div>}>
-      <StudioInner />
+      <ProjectScriptEditorInner />
     </Suspense>
   );
 }

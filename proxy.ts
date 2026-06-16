@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const PROJECT_LIST_REDIRECTS = new Set([
-  "/studio",
   "/chat",
   "/image",
   "/video",
@@ -16,18 +15,11 @@ export function proxy(request: NextRequest) {
   if (pathname === "/") {
     const projectId = request.nextUrl.searchParams.get("project")?.trim();
     if (projectId) {
-      url.pathname = `/studio/${encodeURIComponent(projectId)}`;
+      url.pathname = `/projects/${encodeURIComponent(projectId)}/script`;
       url.search = "";
       return NextResponse.redirect(url);
     }
     return NextResponse.next();
-  }
-
-  const studioMatch = pathname.match(/^\/studio\/([^/]+)$/);
-  if (studioMatch) {
-    url.pathname = `/projects/${studioMatch[1]}/script`;
-    url.search = "";
-    return NextResponse.redirect(url);
   }
 
   const onboardingMatch = pathname.match(/^\/project\/([^/]+)\/onboarding$/);
@@ -49,8 +41,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/",
-    "/studio",
-    "/studio/:path*",
     "/project/:path*/onboarding",
     "/chat",
     "/image",

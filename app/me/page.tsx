@@ -135,8 +135,8 @@ export default function MePage() {
   }
 
   return (
-    <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}>
+    <main className={[shellStyles.page, styles.mePage].join(" ")}>
+      <header className={[shellStyles.topbar, styles.meTopbar].join(" ")}>
         <div className={shellStyles.topbarLeft}>
           <div className={shellStyles.topbarTagline}>
             <Link href="/projects" className={shellStyles.navLink}>
@@ -210,7 +210,7 @@ export default function MePage() {
                     <div className={shellStyles.cardHead}>
                       <div>
                         <h2 className={shellStyles.cardTitle}>账号概览</h2>
-                        <p className={shellStyles.cardSubtitle}>当前账号信息直接读取自 Supabase Auth，没有再维护第二套个人资料表。</p>
+                        <p className={shellStyles.cardSubtitle}>查看当前登录信息与账号状态。</p>
                       </div>
                     </div>
 
@@ -271,9 +271,7 @@ export default function MePage() {
                         <span className={styles.statLabel}>画布数</span>
                       </div>
                     </div>
-                    <p className={styles.dataLegend}>
-                      这里是账户视角的使用概览，不承担项目运营后台或账单面板的职责。
-                    </p>
+                    <p className={styles.dataLegend}>这里只统计当前账号自己的创作数据。</p>
                   </section>
 
                 </div>

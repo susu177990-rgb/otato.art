@@ -113,6 +113,7 @@ export interface Project {
 export interface ProjectSummary {
   id: string;
   name: string;
+  createdAt: string;
   updatedAt: string;
   creativeDirectionId?: string;
   creativeDirectionLabel?: string;
@@ -125,6 +126,17 @@ export interface ProjectSummary {
   episodeCount?: string;
   /** 是否已有非空系列圣经 */
   seriesBibleFilled?: boolean;
+  /** 项目素材按类型计数 */
+  assetCounts?: {
+    character: number;
+    prop: number;
+    scene: number;
+  };
+  /** 项目生成记录按媒体类型计数 */
+  generationCounts?: {
+    image: number;
+    video: number;
+  };
 }
 
 export interface MeSnapshot {

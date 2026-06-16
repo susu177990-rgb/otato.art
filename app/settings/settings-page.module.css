@@ -1379,3 +1379,167 @@
     flex-direction: column;
   }
 }
+
+/* Final settings visual migration: align live controls with project UI. */
+
+.settingsPage {
+  background: var(--otato-paper-background, #faf7ef) !important;
+  color: #050505;
+}
+
+.settingsPage .floatCard,
+.settingsPage .llmModelCard,
+.settingsPage .apiModeNotice {
+  border: 3px solid #050505;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+}
+
+.settingsPage .apiModeNotice {
+  font-weight: 950;
+}
+
+.settingsPage .apiModeNotice span:last-child {
+  color: #5f5f5a;
+  font-weight: 850;
+}
+
+.settingsPage .llmModelCardTopBar {
+  border-bottom: 3px solid #050505;
+}
+
+.settingsContent input,
+.settingsContent select,
+.settingsContent textarea,
+.promptModeLabelInput,
+.promptModeTextarea,
+.llmModelCardFieldsCompact input,
+.llmModelCardFieldsCompact select,
+.llmModelCardFieldsCompact textarea {
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  padding: 0 14px !important;
+  font: inherit;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  outline: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.settingsContent textarea,
+.promptModeTextarea {
+  min-height: 120px;
+  padding: 12px 14px !important;
+  line-height: 1.45 !important;
+}
+
+.settingsContent input:focus,
+.settingsContent select:focus,
+.settingsContent textarea:focus,
+.promptModeLabelInput:focus,
+.promptModeTextarea:focus,
+.llmModelCardFieldsCompact input:focus,
+.llmModelCardFieldsCompact select:focus,
+.llmModelCardFieldsCompact textarea:focus {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.settingsContent input::placeholder,
+.settingsContent textarea::placeholder {
+  color: #8a8a82 !important;
+  font-weight: 850;
+}
+
+.settingsContent label span,
+.settingsContent code {
+  color: #5f5f5a;
+  font-weight: 950;
+}
+
+.defaultBadge,
+.setDefaultBtn,
+.deleteModelBtn,
+.toggleSwitchSlider,
+.settingsContent button:not(.promptModeCoverDelete),
+.saveButton {
+  min-height: 38px;
+  border: 3px solid #050505 !important;
+  border-radius: var(--otato-control-radius, 15px) !important;
+  background: #ffffff !important;
+  color: #050505 !important;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950 !important;
+  line-height: 1;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.setDefaultBtn:hover:not(:disabled),
+.deleteModelBtn:hover:not(:disabled),
+.settingsContent button:not(.promptModeCoverDelete):hover:not(:disabled),
+.saveButton:hover:not(:disabled) {
+  border-color: #050505 !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.toggleSwitch:hover .toggleSwitchSlider {
+  border-color: #050505 !important;
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505) !important;
+}
+
+.setDefaultBtn:active:not(:disabled),
+.deleteModelBtn:active:not(:disabled),
+.settingsContent button:not(.promptModeCoverDelete):active:not(:disabled),
+.saveButton:active:not(:disabled),
+.toggleSwitch:active .toggleSwitchSlider {
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505) !important;
+}
+
+.toggleSwitch:active .toggleSwitchSlider {
+  background: var(--otato-yellow, #ffd86b) !important;
+  color: #050505 !important;
+}
+
+.defaultBadge,
+.toggleSwitchInput:checked + .toggleSwitchSlider {
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
+}
+
+.toggleSwitch:hover .toggleSwitchInput:checked + .toggleSwitchSlider {
+  background: var(--otato-yellow-soft, #fff1a8) !important;
+  color: #050505 !important;
+}
+
+.toggleSwitch:active .toggleSwitchInput:checked + .toggleSwitchSlider {
+  background: var(--otato-yellow, #ffd86b) !important;
+  color: #050505 !important;
+}
+
+.toggleSwitchSlider {
+  width: auto;
+  min-width: 68px;
+  justify-content: center;
+}
+
+.deleteModelBtn:hover:not(:disabled) {
+  background: #b42318 !important;
+  color: #ffffff !important;
+}

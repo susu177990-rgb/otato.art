@@ -2853,6 +2853,115 @@
   opacity: 1;
 }
 
+.generatorPill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 3.75rem;
+  max-width: 11rem;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0;
+  font-family: inherit;
+  appearance: none;
+  background-image: none !important;
+}
+
+.generatorPillLabel {
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.generatorPill:disabled {
+  cursor: not-allowed;
+  background: #f3f3ef !important;
+  color: #5f5f5a !important;
+  transform: none !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
+}
+
+.generatorPillLabelText {
+  display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  letter-spacing: 0;
+  will-change: auto;
+}
+
+.canvasPickerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5200;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.canvasPickerMenu {
+  position: fixed;
+  z-index: 5201;
+  display: grid;
+  gap: 8px;
+  transform: translate(-50%, calc(-100% - 8px));
+  padding: 10px;
+  border: 3px solid #050505;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.canvasPickerOption {
+  min-height: 40px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  padding: 0 18px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.canvasPickerOption:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.canvasPickerOption:active {
+  background: var(--otato-yellow, #ffd86b);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.canvasPickerOptionActive,
+.canvasPickerOptionActive:hover {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+}
+
 /* Canvas node cleanup: one border owner, no dark-glass leftovers. */
 .textChatBox,
 .nodeVisual {

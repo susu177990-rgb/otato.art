@@ -60,6 +60,7 @@ import {
   makeCanvasConnection,
 } from "@/lib/canvas/connection-rules";
 import { DEFAULT_CANVAS_VIEWPORT } from "@/lib/canvas/types";
+import { CanvasAudioPlayer, CanvasIcon, type CanvasIconName } from "./canvas-ui";
 import styles from "../canvas-page.module.css";
 
 // ─── Interaction state types ───────────────────────────────────────────────────
@@ -77,25 +78,23 @@ type DragState = {
 type PanState = { startX: number; startY: number; initial: CanvasViewport };
 type MinimapPanState = { startX: number; startY: number; initial: CanvasViewport; moved: boolean };
 type UploadKind = "image" | "video" | "audio";
-type CanvasIconName =
-  | "text"
-  | "image"
-  | "video"
-  | "audio"
-  | "preset"
-  | "group"
-  | "ungroup"
-  | "copy"
-  | "paste"
-  | "delete"
-  | "generate"
-  | "play"
-  | "pause";
 type MenuState =
   | { kind: "canvas"; x: number; y: number; world: CanvasPosition }
   | { kind: "node"; x: number; y: number; nodeId: string }
   | { kind: "connection"; x: number; y: number; connectionId: string }
   | null;
+
+type CanvasPickerOption = {
+  id: string;
+  label: string;
+  active: boolean;
+  onSelect: () => void;
+};
+
+type CanvasPickerMenuState = {
+  anchor: { left: number; top: number; width: number; height: number };
+  options: CanvasPickerOption[];
+} | null;
 
 
 type CanvasImageGenerateResponse = {
@@ -150,6 +149,16 @@ const GRID_SIZE = 32;
 
 // ─── Pure utilities ────────────────────────────────────────────────────────────
 
+function menuAnchorFromElement(element: HTMLElement): { left: number; top: number; width: number; height: number } {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
 function readImageSize(url: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -175,169 +184,6 @@ function readAudioDuration(url: string): Promise<number | undefined> {
     audio.onerror = () => resolve(undefined);
     audio.src = url;
   });
-}
-
-function formatAudioTime(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0:00";
-  const total = Math.floor(value);
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function CanvasAudioPlayer({ src }: { src: string }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const progress = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
-
-  const togglePlayback = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      void audio.play().catch(() => setPlaying(false));
-    } else {
-      audio.pause();
-    }
-  };
-
-  const seek = (value: string) => {
-    const audio = audioRef.current;
-    const nextTime = Number(value);
-    if (!audio || !Number.isFinite(nextTime)) return;
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
-  };
-
-  return (
-    <div
-      className={styles.audioPlayer}
-      data-canvas-no-zoom
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <audio
-        ref={audioRef}
-        src={src}
-        preload="metadata"
-        onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-      />
-      <button
-        type="button"
-        className={styles.audioPlayButton}
-        aria-label={playing ? "暂停音频" : "播放音频"}
-        onClick={togglePlayback}
-      >
-        <CanvasIcon name={playing ? "pause" : "play"} />
-      </button>
-      <span className={styles.audioTime}>{formatAudioTime(currentTime)}</span>
-      <input
-        className={styles.audioProgress}
-        type="range"
-        min="0"
-        max={duration || 0}
-        step="0.01"
-        value={Math.min(currentTime, duration || currentTime)}
-        onChange={(e) => seek(e.currentTarget.value)}
-        style={{ "--audio-progress": `${progress}%` } as CSSProperties}
-        aria-label="音频播放进度"
-      />
-      <span className={styles.audioTime}>{formatAudioTime(duration)}</span>
-    </div>
-  );
-}
-
-function CanvasIcon({ name }: { name: CanvasIconName }) {
-  const common = { vectorEffect: "non-scaling-stroke" as const };
-  return (
-    <svg className={styles.canvasSvgIcon} viewBox="0 0 24 24" aria-hidden>
-      {name === "text" ? (
-        <>
-          <path {...common} d="M5 6h14" />
-          <path {...common} d="M8 6v12" />
-          <path {...common} d="M16 6v12" />
-          <path {...common} d="M7 18h10" />
-        </>
-      ) : name === "image" ? (
-        <>
-          <rect {...common} x="4" y="5" width="16" height="14" rx="3" />
-          <path {...common} d="m7 16 4-4 3 3 2-2 3 3" />
-          <circle {...common} cx="15.5" cy="9.5" r="1.5" />
-        </>
-      ) : name === "video" ? (
-        <>
-          <rect {...common} x="4" y="6" width="13" height="12" rx="3" />
-          <path {...common} d="m17 10 4-2v8l-4-2" />
-        </>
-      ) : name === "audio" ? (
-        <>
-          <path {...common} d="M9 18V6l9-2v12" />
-          <circle {...common} cx="7" cy="18" r="3" />
-          <circle {...common} cx="16" cy="16" r="3" />
-        </>
-      ) : name === "preset" ? (
-        <>
-          <path {...common} d="M12 3l1.4 4.2L18 8.6l-4.1 2.2L12 15l-1.9-4.2L6 8.6l4.6-1.4L12 3z" />
-          <path {...common} d="M5 15h5" />
-          <path {...common} d="M14 18h5" />
-          <path {...common} d="M6 20h9" />
-        </>
-      ) : name === "group" ? (
-        <>
-          <rect {...common} x="4" y="5" width="7" height="7" rx="2" />
-          <rect {...common} x="13" y="5" width="7" height="7" rx="2" />
-          <rect {...common} x="4" y="14" width="7" height="5" rx="2" />
-          <rect {...common} x="13" y="14" width="7" height="5" rx="2" />
-        </>
-      ) : name === "ungroup" ? (
-        <>
-          <rect {...common} x="4" y="5" width="7" height="7" rx="2" />
-          <rect {...common} x="13" y="12" width="7" height="7" rx="2" />
-          <path {...common} d="M14 5h4v4" />
-          <path {...common} d="M10 19H6v-4" />
-        </>
-      ) : name === "copy" ? (
-        <>
-          <rect {...common} x="8" y="8" width="11" height="11" rx="2" />
-          <path {...common} d="M5 15V6a1 1 0 0 1 1-1h9" />
-        </>
-      ) : name === "paste" ? (
-        <>
-          <path {...common} d="M9 5h6l1 3H8l1-3z" />
-          <rect {...common} x="5" y="7" width="14" height="13" rx="3" />
-          <path {...common} d="M9 13h6" />
-          <path {...common} d="M9 16h4" />
-        </>
-      ) : name === "delete" ? (
-        <>
-          <path {...common} d="M5 7h14" />
-          <path {...common} d="M10 7V5h4v2" />
-          <path {...common} d="M8 10v8" />
-          <path {...common} d="M12 10v8" />
-          <path {...common} d="M16 10v8" />
-          <path {...common} d="M7 7l1 14h8l1-14" />
-        </>
-      ) : name === "generate" ? (
-        <>
-          <path {...common} d="M12 3l1.2 4.2L17 9l-3.8 1.8L12 15l-1.2-4.2L7 9l3.8-1.8L12 3z" />
-          <path {...common} d="M5 17h5" />
-          <path {...common} d="M14 19h5" />
-        </>
-      ) : name === "pause" ? (
-        <>
-          <path {...common} d="M9 7v10" />
-          <path {...common} d="M15 7v10" />
-        </>
-      ) : (
-        <path {...common} d="M9 7v10l8-5-8-5z" />
-      )}
-    </svg>
-  );
 }
 
 function clampViewport(vp: CanvasViewport): CanvasViewport {
@@ -731,6 +577,7 @@ export default function CanvasBoardPage() {
   const [dirty, setDirty] = useState(false);
   const [, setUploading] = useState(false);
   const [menu, setMenu] = useState<MenuState>(null);
+  const [canvasPickerMenu, setCanvasPickerMenu] = useState<CanvasPickerMenuState>(null);
   const [selectBox, setSelectBox] = useState<SelectBoxScreen>(null);
   const [quickAddBar, setQuickAddBar] = useState<QuickAddBar>(null);
   const [editingNodeTitleId, setEditingNodeTitleId] = useState<string | null>(null);
@@ -849,6 +696,7 @@ export default function CanvasBoardPage() {
 
   const dismissOverlays = useCallback(() => {
     setMenu(null);
+    setCanvasPickerMenu(null);
     setQuickAddBar(null);
     setEditingNodeTitleId(null);
     setEditingTextNodeId(null);
@@ -2147,6 +1995,34 @@ export default function CanvasBoardPage() {
     markDirty();
   }, [markDirty, setViewportBoth]);
 
+  const renderCanvasPickerButton = (
+    label: string,
+    options: CanvasPickerOption[],
+    ariaLabel: string,
+    disabled = false,
+  ) => (
+    <button
+      type="button"
+      className={styles.generatorPill}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      aria-haspopup="menu"
+      aria-expanded={Boolean(canvasPickerMenu)}
+      onClick={(event) => {
+        if (disabled) return;
+        event.stopPropagation();
+        const anchor = menuAnchorFromElement(event.currentTarget);
+        setCanvasPickerMenu((current) =>
+          current?.anchor.left === anchor.left && current.anchor.top === anchor.top
+            ? null
+            : { anchor, options },
+        );
+      }}
+    >
+      <span className={styles.generatorPillLabelText}>{label}</span>
+    </button>
+  );
+
   // ── Early returns ───────────────────────────────────────────────────────────
   if (loading) return <main className={shellStyles.page}><div className={shellStyles.empty}>正在加载画布...</div></main>;
   if (loadError) return (
@@ -2624,61 +2500,60 @@ export default function CanvasBoardPage() {
                           }}
                         />
                         <div className={styles.generatorToolbar}>
-                          <select
-                            className={styles.generatorPill}
-                            value={node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId}
-                            disabled={node.metadata?.chatStatus === "running"}
-                            aria-label="画布对话模型"
-                            onChange={(e) => {
-                              const nextId = e.target.value;
-                              patchNode(node.id, (item) => ({
-                                ...item,
-                                metadata: { ...item.metadata, chatPreferredLlmModelId: nextId },
-                              }));
-                              const convId = node.metadata?.chatConversationId?.trim();
-                              if (!convId) return;
-                              void fetch(`/api/chat/conversations/${convId}`, { cache: "no-store" })
-                                .then((res) => res.json())
-                                .then((data: { conversation?: ChatConversation }) => {
-                                  const conversation = data.conversation;
-                                  if (!conversation) return;
-                                  return fetch(`/api/chat/conversations/${convId}`, {
-                                    method: "PUT",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      ...conversation,
-                                      preferredLlmModelId: nextId,
-                                      updatedAt: Date.now(),
-                                    }),
-                                  });
-                                })
-                                .catch(() => {});
-                            }}
-                          >
-                            {Object.values(llmSettings.models)
+                          {renderCanvasPickerButton(
+                            llmSettings.models[node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId]?.label ??
+                              node.metadata?.chatPreferredLlmModelId ??
+                              llmSettings.defaultModelId,
+                            Object.values(llmSettings.models)
                               .filter((model) => model.enabled)
-                              .map((model) => (
-                                <option key={model.id} value={model.id}>
-                                  {model.label}
-                                </option>
-                              ))}
-                          </select>
-                          <select
-                            className={styles.generatorPill}
-                            value={node.metadata?.chatPreferredImageModelId ?? "gpt-image-2"}
-                            disabled={node.metadata?.chatStatus === "running"}
-                            aria-label="画布对话生图模型"
-                            onChange={(e) => patchNode(node.id, (item) => ({
-                              ...item,
-                              metadata: { ...item.metadata, chatPreferredImageModelId: e.target.value as ImageModelId },
-                            }))}
-                          >
-                            {IMAGE_MODEL_ORDER.map((id) => (
-                              <option key={id} value={id}>
-                                {imageSettings.models[id]?.label ?? id}
-                              </option>
-                            ))}
-                          </select>
+                              .map((model) => ({
+                                id: model.id,
+                                label: model.label,
+                                active: model.id === (node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId),
+                                onSelect: () => {
+                                  patchNode(node.id, (item) => ({
+                                    ...item,
+                                    metadata: { ...item.metadata, chatPreferredLlmModelId: model.id },
+                                  }));
+                                  const convId = node.metadata?.chatConversationId?.trim();
+                                  if (!convId) return;
+                                  void fetch(`/api/chat/conversations/${convId}`, { cache: "no-store" })
+                                    .then((res) => res.json())
+                                    .then((data: { conversation?: ChatConversation }) => {
+                                      const conversation = data.conversation;
+                                      if (!conversation) return;
+                                      return fetch(`/api/chat/conversations/${convId}`, {
+                                        method: "PUT",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          ...conversation,
+                                          preferredLlmModelId: model.id,
+                                          updatedAt: Date.now(),
+                                        }),
+                                      });
+                                    })
+                                    .catch(() => {});
+                                },
+                              })),
+                            "画布对话模型",
+                            node.metadata?.chatStatus === "running",
+                          )}
+                          {renderCanvasPickerButton(
+                            imageSettings.models[node.metadata?.chatPreferredImageModelId ?? "gpt-image-2"]?.label ??
+                              node.metadata?.chatPreferredImageModelId ??
+                              "gpt-image-2",
+                            IMAGE_MODEL_ORDER.map((id) => ({
+                              id,
+                              label: imageSettings.models[id]?.label ?? id,
+                              active: id === (node.metadata?.chatPreferredImageModelId ?? "gpt-image-2"),
+                              onSelect: () => patchNode(node.id, (item) => ({
+                                ...item,
+                                metadata: { ...item.metadata, chatPreferredImageModelId: id },
+                              })),
+                            })),
+                            "画布对话生图模型",
+                            node.metadata?.chatStatus === "running",
+                          )}
                           <span className={styles.generatorPillLabel}>常规对话</span>
                           <button
                             type="button"
@@ -2779,140 +2654,114 @@ export default function CanvasBoardPage() {
                         <div className={styles.generatorToolbar}>
                           {node.type === "image" ? (
                             <>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.imageModelId ?? "gpt-image-2"}
-                                onChange={(e) =>
-                                  updateImageGenNodeSettings(node.id, {
-                                    imageModelId: e.target.value as ImageModelId,
-                                    gptImageQuality:
-                                      e.target.value === "gpt-image-2" ? (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality) : undefined,
-                                  })
-                                }
-                              >
-                                {IMAGE_MODEL_ORDER.map((id) => (
-                                  <option key={id} value={id}>
-                                    {imageSettings.models[id]?.label ?? id}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.aspectRatio ?? "4:3"}
-                                onChange={(e) => updateImageGenNodeSettings(node.id, { aspectRatio: e.target.value as ImageAspectRatio })}
-                              >
-                                {["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"].map((ratio) => (
-                                  <option key={ratio} value={ratio}>
-                                    {ratio === "auto" ? "自适应" : ratio}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.imageSize ?? "1K"}
-                                onChange={(e) => updateImageGenNodeSettings(node.id, { imageSize: e.target.value as ImageSizeTier })}
-                              >
-                                {["1K", "2K", "4K"].map((size) => (
-                                  <option key={size} value={size}>{size}</option>
-                                ))}
-                              </select>
+                              {renderCanvasPickerButton(
+                                imageSettings.models[node.metadata?.imageModelId ?? "gpt-image-2"]?.label ??
+                                  node.metadata?.imageModelId ??
+                                  "gpt-image-2",
+                                IMAGE_MODEL_ORDER.map((id) => ({
+                                  id,
+                                  label: imageSettings.models[id]?.label ?? id,
+                                  active: id === (node.metadata?.imageModelId ?? "gpt-image-2"),
+                                  onSelect: () =>
+                                    updateImageGenNodeSettings(node.id, {
+                                      imageModelId: id,
+                                      gptImageQuality:
+                                        id === "gpt-image-2" ? (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality) : undefined,
+                                    }),
+                                })),
+                                "画布生图模型",
+                              )}
+                              {renderCanvasPickerButton(
+                                (node.metadata?.aspectRatio ?? "4:3") === "auto" ? "自适应" : (node.metadata?.aspectRatio ?? "4:3"),
+                                (["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"] as ImageAspectRatio[]).map((ratio) => ({
+                                  id: ratio,
+                                  label: ratio === "auto" ? "自适应" : ratio,
+                                  active: ratio === (node.metadata?.aspectRatio ?? "4:3"),
+                                  onSelect: () => updateImageGenNodeSettings(node.id, { aspectRatio: ratio }),
+                                })),
+                                "画布生图比例",
+                              )}
+                              {renderCanvasPickerButton(
+                                node.metadata?.imageSize ?? "1K",
+                                (["1K", "2K", "4K"] as ImageSizeTier[]).map((size) => ({
+                                  id: size,
+                                  label: size,
+                                  active: size === (node.metadata?.imageSize ?? "1K"),
+                                  onSelect: () => updateImageGenNodeSettings(node.id, { imageSize: size }),
+                                })),
+                                "画布生图尺寸",
+                              )}
                               {(node.metadata?.imageModelId ?? "gpt-image-2") === "gpt-image-2" ? (
-                                <select
-                                  className={styles.generatorPill}
-                                  value={node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality}
-                                  onChange={(e) =>
-                                    updateImageGenNodeSettings(node.id, { gptImageQuality: e.target.value as GptImageQuality })
-                                  }
-                                >
-                                  {GPT_IMAGE_QUALITY_ORDER.map((quality) => (
-                                    <option key={quality} value={quality}>
-                                      {GPT_IMAGE_QUALITY_LABELS[quality]}
-                                    </option>
-                                  ))}
-                                </select>
+                                renderCanvasPickerButton(
+                                  GPT_IMAGE_QUALITY_LABELS[node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality],
+                                  GPT_IMAGE_QUALITY_ORDER.map((quality) => ({
+                                    id: quality,
+                                    label: GPT_IMAGE_QUALITY_LABELS[quality],
+                                    active: quality === (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality),
+                                    onSelect: () => updateImageGenNodeSettings(node.id, { gptImageQuality: quality }),
+                                  })),
+                                  "画布生图质量",
+                                )
                               ) : null}
                             </>
                           ) : (
                             <>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId}
-                                onChange={(e) =>
-                                  updateVideoGenNodeSettings(node.id, {
-                                    videoModelId: e.target.value as VideoModelId,
-                                  })
-                                }
-                              >
-                                {VIDEO_MODEL_ORDER.map((id) => (
-                                  <option key={id} value={id}>
-                                    {videoSettings.models[id]?.label ?? id}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={
-                                  node.metadata?.videoModeId === "multi_image_reference"
-                                    ? "multi_image_reference"
-                                    : "start_end_frame"
-                                }
-                                onChange={(e) =>
-                                  updateVideoGenNodeSettings(node.id, {
-                                    videoModeId: e.target.value as VideoGenerationModeId,
-                                  })
-                                }
-                              >
-                                {UI_VIDEO_MODES.map((mode) => (
-                                  <option key={mode.id} value={mode.id}>
-                                    {mode.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.videoAspectRatio ?? "16:9"}
-                                onChange={(e) =>
-                                  updateVideoGenNodeSettings(node.id, {
-                                    videoAspectRatio: e.target.value as VideoAspectRatio,
-                                  })
-                                }
-                              >
-                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).aspectRatios.map((ratio) => (
-                                  <option key={ratio} value={ratio}>
-                                    {ratio}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.videoDurationSeconds ?? 5}
-                                onChange={(e) =>
-                                  updateVideoGenNodeSettings(node.id, {
-                                    videoDurationSeconds: Number(e.target.value),
-                                  })
-                                }
-                              >
-                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).durations.map((duration) => (
-                                  <option key={duration} value={duration}>
-                                    {duration}s
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                className={styles.generatorPill}
-                                value={node.metadata?.videoResolution ?? "1080p"}
-                                onChange={(e) =>
-                                  updateVideoGenNodeSettings(node.id, {
-                                    videoResolution: e.target.value as VideoResolution,
-                                  })
-                                }
-                              >
-                                {getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).resolutions.map((resolution) => (
-                                  <option key={resolution} value={resolution}>
-                                    {resolution}
-                                  </option>
-                                ))}
-                              </select>
+                              {renderCanvasPickerButton(
+                                videoSettings.models[node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId]?.label ??
+                                  node.metadata?.videoModelId ??
+                                  videoSettings.uiDefaults.defaultModelId,
+                                VIDEO_MODEL_ORDER.map((id) => ({
+                                  id,
+                                  label: videoSettings.models[id]?.label ?? id,
+                                  active: id === (node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId),
+                                  onSelect: () => updateVideoGenNodeSettings(node.id, { videoModelId: id }),
+                                })),
+                                "画布视频模型",
+                              )}
+                              {renderCanvasPickerButton(
+                                UI_VIDEO_MODES.find((mode) => mode.id === (
+                                  node.metadata?.videoModeId === "multi_image_reference" ? "multi_image_reference" : "start_end_frame"
+                                ))?.label ?? "首尾帧",
+                                UI_VIDEO_MODES.map((mode) => ({
+                                  id: mode.id,
+                                  label: mode.label,
+                                  active: mode.id === (
+                                    node.metadata?.videoModeId === "multi_image_reference" ? "multi_image_reference" : "start_end_frame"
+                                  ),
+                                  onSelect: () => updateVideoGenNodeSettings(node.id, { videoModeId: mode.id as VideoGenerationModeId }),
+                                })),
+                                "画布视频模式",
+                              )}
+                              {renderCanvasPickerButton(
+                                node.metadata?.videoAspectRatio ?? "16:9",
+                                getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).aspectRatios.map((ratio) => ({
+                                  id: ratio,
+                                  label: ratio,
+                                  active: ratio === (node.metadata?.videoAspectRatio ?? "16:9"),
+                                  onSelect: () => updateVideoGenNodeSettings(node.id, { videoAspectRatio: ratio as VideoAspectRatio }),
+                                })),
+                                "画布视频比例",
+                              )}
+                              {renderCanvasPickerButton(
+                                `${node.metadata?.videoDurationSeconds ?? 5}s`,
+                                getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).durations.map((duration) => ({
+                                  id: String(duration),
+                                  label: `${duration}s`,
+                                  active: duration === (node.metadata?.videoDurationSeconds ?? 5),
+                                  onSelect: () => updateVideoGenNodeSettings(node.id, { videoDurationSeconds: duration }),
+                                })),
+                                "画布视频时长",
+                              )}
+                              {renderCanvasPickerButton(
+                                node.metadata?.videoResolution ?? "1080p",
+                                getVideoCapabilities(node.metadata?.videoModelId ?? videoSettings.uiDefaults.defaultModelId).resolutions.map((resolution) => ({
+                                  id: resolution,
+                                  label: resolution,
+                                  active: resolution === (node.metadata?.videoResolution ?? "1080p"),
+                                  onSelect: () => updateVideoGenNodeSettings(node.id, { videoResolution: resolution as VideoResolution }),
+                                })),
+                                "画布视频分辨率",
+                              )}
                             </>
                           )}
                           <button
@@ -3229,6 +3078,48 @@ export default function CanvasBoardPage() {
               </div>
             </div>
           )}
+
+          {portalMounted && canvasPickerMenu
+            ? createPortal(
+                <>
+                  <button
+                    type="button"
+                    className={styles.canvasPickerBackdrop}
+                    aria-label="关闭画布选项菜单"
+                    onClick={() => setCanvasPickerMenu(null)}
+                  />
+                  <div
+                    className={styles.canvasPickerMenu}
+                    style={{
+                      left: canvasPickerMenu.anchor.left + canvasPickerMenu.anchor.width / 2,
+                      top: canvasPickerMenu.anchor.top,
+                      minWidth: canvasPickerMenu.anchor.width,
+                    } as CSSProperties}
+                    role="menu"
+                  >
+                    {canvasPickerMenu.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={[
+                          styles.canvasPickerOption,
+                          option.active ? styles.canvasPickerOptionActive : "",
+                        ].filter(Boolean).join(" ")}
+                        role="menuitemradio"
+                        aria-checked={option.active}
+                        onClick={() => {
+                          option.onSelect();
+                          setCanvasPickerMenu(null);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </>,
+                document.body,
+              )
+            : null}
 
           <PromptPresetLibraryDialog
             open={portalMounted && presetLibraryOpen}

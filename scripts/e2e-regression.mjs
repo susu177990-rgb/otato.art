@@ -8,6 +8,7 @@ const baseUrl = (process.env.E2E_BASE_URL || "http://localhost:4000").replace(/\
 const email = process.env.E2E_EMAIL?.trim();
 const password = process.env.E2E_PASSWORD ?? "";
 const allowAuthSkip = process.env.E2E_ALLOW_AUTH_SKIP === "1";
+const allowEmptyPresets = process.env.E2E_ALLOW_EMPTY_PRESETS === "1";
 
 const failures = [];
 const notes = [];
@@ -98,11 +99,18 @@ async function smokePublicRoutes() {
 
   const presets = await request("/api/site-prompt-presets?kind=all");
   expectStatus("public prompt presets API", presets.res.status, 200);
-  if (Array.isArray(presets.body?.presets)) pass(`public prompt presets API: ${presets.body.presets.length} presets`);
-  else fail("public prompt presets API: missing presets array");
+  if (Array.isArray(presets.body?.presets)) {
+    pass(`public prompt presets API: ${presets.body.presets.length} presets`);
+    if (presets.body.presets.length === 0) {
+      if (allowEmptyPresets) note("public prompt presets API returned no presets and E2E_ALLOW_EMPTY_PRESETS=1");
+      else fail("public prompt presets API returned no presets");
+    }
+  } else {
+    fail("public prompt presets API: missing presets array");
+  }
 
   const promptPage = await request("/prompt");
-  if (promptPage.text.includes("输入标题、描述或提示词内容")) pass("prompt page search control is rendered");
+  if (promptPage.text.includes("搜索提示词")) pass("prompt page search control is rendered");
   else fail("prompt page search control was not found");
 }
 
@@ -135,8 +143,9 @@ async function smokeAuthenticatedRoutes(cookie) {
 
   const me = await request("/api/me", { headers: authHeaders });
   expectStatus("authenticated /api/me", me.res.status, 200);
-  if (me.body?.email === email) pass("authenticated /api/me returns the expected user");
-  else fail(`authenticated /api/me returned unexpected email: ${me.body?.email ?? "(none)"}`);
+  const meEmail = me.body?.user?.email ?? me.body?.email;
+  if (meEmail === email) pass("authenticated /api/me returns the expected user");
+  else fail(`authenticated /api/me returned unexpected email: ${meEmail ?? "(none)"}`);
 
   const projectName = `e2e-regression-${new Date().toISOString()}`;
   let projectId = null;

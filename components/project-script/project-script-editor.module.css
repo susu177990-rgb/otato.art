@@ -1,4 +1,4 @@
-/* /studio/[id]：编剧室 shell + 顶栏。复用 shell.module.css 的 page / topbar / navLink / canvasStage /
+/* 项目剧本页：编剧室 shell + 顶栏。复用 shell.module.css 的 page / topbar / navLink / canvasStage /
  * canvasCard / stageStrip 系列；这里只放编剧室特有的 auto pipeline 开关 + 警示横条等局部细节。 */
 
 .titleStack {
