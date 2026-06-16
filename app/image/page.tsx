@@ -75,7 +75,8 @@ const OPEN_IMAGE_PROMPT_PRESETS_EVENT = "otato:open-image-prompt-presets";
 const FREE_MODE = { id: "free", label: "自由模式" } as const;
 
 type RefSlot = { previewUrl: string; file: File } | null;
-type RefUploadMenuState = { index: number } | null;
+type MenuAnchor = { left: number; top: number; width: number; height: number };
+type RefUploadMenuState = { index: number; anchor: MenuAnchor } | null;
 type ImagePromptPresetCard = SitePromptPreset & {
   promptModelProviders: Array<"gpt-image" | "nano-banana">;
 };
@@ -156,6 +157,16 @@ function revokeRefPreview(slot: RefSlot | null) {
 
 function refSlotFromFile(file: File): NonNullable<RefSlot> {
   return { file, previewUrl: URL.createObjectURL(file) };
+}
+
+function menuAnchorFromElement(element: HTMLElement): MenuAnchor {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 function mediaFileNameFromUrl(url: string, fallback: string): string {
@@ -1326,7 +1337,10 @@ export default function ImagePage() {
                     type="button"
                     className={styles.refSlotButton}
                     aria-label={`图${index + 1}${refSlotHintsLines[index]?.trim() ? ` ${refSlotHintsLines[index].trim()}` : ""}，选择参考图来源`}
-                    onClick={() => setRefUploadMenu((current) => current?.index === index ? null : { index })}
+                    onClick={(event) => {
+                      const anchor = menuAnchorFromElement(event.currentTarget);
+                      setRefUploadMenu((current) => current?.index === index ? null : { index, anchor });
+                    }}
                   >
                     {slot ? (
                       <>
@@ -1342,29 +1356,6 @@ export default function ImagePage() {
                       </span>
                     )}
                   </button>
-                  {refUploadMenu?.index === index && !slot ? (
-                    <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRefUploadMenu(null);
-                          refFileInputRefs.current[index]?.click();
-                        }}
-                      >
-                        本地上传
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!projectId}
-                        onClick={() => {
-                          setRefUploadMenu(null);
-                          setAssetPickerSlot(index);
-                        }}
-                      >
-                        项目素材
-                      </button>
-                    </div>
-                  ) : null}
                   {slot ? (
                     <button
                       type="button"
@@ -1570,6 +1561,41 @@ export default function ImagePage() {
           if (preset.kind === "image") loadImagePromptPresets();
         }}
       />
+      {portalMounted && refUploadMenu && !refSlots[refUploadMenu.index]
+        ? createPortal(
+            <div
+              className={styles.refUploadMenu}
+              style={{
+                left: refUploadMenu.anchor.left + refUploadMenu.anchor.width / 2,
+                top: refUploadMenu.anchor.top,
+              } as CSSProperties}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  const { index } = refUploadMenu;
+                  setRefUploadMenu(null);
+                  refFileInputRefs.current[index]?.click();
+                }}
+              >
+                本地上传
+              </button>
+              <button
+                type="button"
+                disabled={!projectId}
+                onClick={() => {
+                  const { index } = refUploadMenu;
+                  setRefUploadMenu(null);
+                  setAssetPickerSlot(index);
+                }}
+              >
+                项目素材
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
       {portalMounted && projectId && assetPickerSlot !== null
         ? createPortal(
             <ProjectAssetPickerDialog

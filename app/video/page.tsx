@@ -56,7 +56,14 @@ type ReferenceState = {
   frames: [ReferenceSlot, ReferenceSlot];
   allPurpose: ReferenceCollections;
 };
-type ReferenceUploadMenuState = { kind: ReferenceKind; index: number } | null;
+type MenuAnchor = { left: number; top: number; width: number; height: number };
+type ReferenceUploadMenuState = {
+  kind: ReferenceKind;
+  index: number;
+  inputKey: string;
+  projectAssetKind: ProjectAssetMediaKind | null;
+  anchor: MenuAnchor;
+} | null;
 type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
 type PresetRailItem = {
   id: string;
@@ -111,6 +118,16 @@ function assetPickerKindsForReference(kind: ReferenceKind): ProjectAssetMediaKin
   if (kind === "image") return ["image"];
   if (kind === "video") return ["video"];
   return [];
+}
+
+function menuAnchorFromElement(element: HTMLElement): MenuAnchor {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 function mimeTypeFromAssetUrl(url: string, kind: Extract<ReferenceKind, "image" | "video">): string {
@@ -918,9 +935,20 @@ export default function VideoPage() {
                       type="button"
                       className={styles.refSlotButton}
                       aria-label={`${slotLabel(selectedUiModeId, index)}，选择参考图来源`}
-                      onClick={() => setReferenceUploadMenu((current) =>
-                        current?.kind === "image" && current.index === index ? null : { kind: "image", index },
-                      )}
+                      onClick={(event) => {
+                        const anchor = menuAnchorFromElement(event.currentTarget);
+                        setReferenceUploadMenu((current) =>
+                          current?.kind === "image" && current.index === index && current.inputKey === `frame:${index}`
+                            ? null
+                            : {
+                                kind: "image",
+                                index,
+                                inputKey: `frame:${index}`,
+                                projectAssetKind: "image",
+                                anchor,
+                              },
+                        );
+                      }}
                     >
                       {slot ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -931,29 +959,6 @@ export default function VideoPage() {
                         </span>
                       )}
                     </button>
-                    {referenceUploadMenu?.kind === "image" && referenceUploadMenu.index === index && !slot ? (
-                      <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReferenceUploadMenu(null);
-                            fileInputRefs.current[`frame:${index}`]?.click();
-                          }}
-                        >
-                          本地上传
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!projectId}
-                          onClick={() => {
-                            setReferenceUploadMenu(null);
-                            setProjectAssetPicker({ kind: "image", index });
-                          }}
-                        >
-                          项目素材
-                        </button>
-                      </div>
-                    ) : null}
                     {slot ? (
                       <button type="button" onClick={() => clearReference("image", index)} className={styles.deleteRef} aria-label="移除参考图">
                         ×
@@ -990,9 +995,22 @@ export default function VideoPage() {
                           type="button"
                           className={styles.refSlotButton}
                           aria-label={`${kindSlotLabel(kind, index)}，选择${kindGroupLabel(kind)}素材来源`}
-                          onClick={() => setReferenceUploadMenu((current) =>
-                            current?.kind === kind && current.index === index ? null : { kind, index },
-                          )}
+                          onClick={(event) => {
+                            const anchor = menuAnchorFromElement(event.currentTarget);
+                            const [projectAssetKind] = assetPickerKindsForReference(kind);
+                            const inputKey = `${kind}:${index}`;
+                            setReferenceUploadMenu((current) =>
+                              current?.kind === kind && current.index === index && current.inputKey === inputKey
+                                ? null
+                                : {
+                                    kind,
+                                    index,
+                                    inputKey,
+                                    projectAssetKind: projectAssetKind ?? null,
+                                    anchor,
+                                  },
+                            );
+                          }}
                         >
                           {slot ? (
                             kind === "image" ? (
@@ -1009,31 +1027,6 @@ export default function VideoPage() {
                             </span>
                           )}
                         </button>
-                        {referenceUploadMenu?.kind === kind && referenceUploadMenu.index === index && !slot ? (
-                          <div className={styles.refUploadMenu} onClick={(event) => event.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReferenceUploadMenu(null);
-                                fileInputRefs.current[`${kind}:${index}`]?.click();
-                              }}
-                            >
-                              本地上传
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!projectId || assetPickerKindsForReference(kind).length === 0}
-                              onClick={() => {
-                                const [assetKind] = assetPickerKindsForReference(kind);
-                                if (!assetKind) return;
-                                setReferenceUploadMenu(null);
-                                setProjectAssetPicker({ kind: assetKind, index });
-                              }}
-                            >
-                              项目素材
-                            </button>
-                          </div>
-                        ) : null}
                         {slot ? (
                           <button type="button" onClick={() => clearReference(kind, index)} className={styles.deleteRef} aria-label={`移除${kindGroupLabel(kind)}素材`}>
                             ×
@@ -1228,6 +1221,42 @@ export default function VideoPage() {
           if (preset.kind === "video") loadVideoPromptPresets();
         }}
       />
+      {portalMounted && referenceUploadMenu
+        ? createPortal(
+            <div
+              className={styles.refUploadMenu}
+              style={{
+                left: referenceUploadMenu.anchor.left + referenceUploadMenu.anchor.width / 2,
+                top: referenceUploadMenu.anchor.top,
+              } as CSSProperties}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  const { inputKey } = referenceUploadMenu;
+                  setReferenceUploadMenu(null);
+                  fileInputRefs.current[inputKey]?.click();
+                }}
+              >
+                本地上传
+              </button>
+              <button
+                type="button"
+                disabled={!projectId || !referenceUploadMenu.projectAssetKind}
+                onClick={() => {
+                  const { projectAssetKind, index } = referenceUploadMenu;
+                  if (!projectAssetKind) return;
+                  setReferenceUploadMenu(null);
+                  setProjectAssetPicker({ kind: projectAssetKind, index });
+                }}
+              >
+                项目素材
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
       {portalMounted && projectId && projectAssetPicker
         ? createPortal(
             <ProjectAssetPickerDialog
