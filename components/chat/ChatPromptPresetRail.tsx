@@ -25,6 +25,7 @@ export function ChatPromptPresetRail({
       <div className={[imageStyles.modeColumn, railStyles.railColumn].join(" ")} style={railStyle}>
         <div className={[imageStyles.modeRail, railStyles.railRail].join(" ")}>
           <div className={[imageStyles.modeRailFrame, railStyles.railRailFrame].join(" ")}>
+            <div className={imageStyles.railLabel}>收藏的预设</div>
             <div
               className={[
                 imageStyles.modeScrollWrap,

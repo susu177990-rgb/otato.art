@@ -2006,6 +2006,7 @@
   --thumb: 96px;
   --gap: 14px;
   --visible: 5;
+  position: relative !important;
   width: var(--rail-outer-width) !important;
   max-width: var(--rail-outer-width) !important;
   height: min(var(--rail-outer-height), var(--rail-window-height)) !important;
@@ -2014,6 +2015,33 @@
   justify-content: center !important;
   align-items: center !important;
   overflow: visible !important;
+}
+
+.railLabel {
+  --rail-label-height: 38px;
+  position: absolute;
+  left: 50%;
+  top: calc(-1 * (var(--rail-label-height) + 14px));
+  z-index: 2;
+  box-sizing: border-box;
+  width: var(--rail-outer-width, 166px);
+  min-height: var(--rail-label-height);
+  padding: 8px 12px;
+  border: 4px solid #050505;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #050505;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
 .rail {

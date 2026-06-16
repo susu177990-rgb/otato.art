@@ -857,6 +857,7 @@ export default function VideoPage() {
           <div className={styles.modeColumn}>
             <div className={styles.rail}>
               <div className={styles.railFrame}>
+                <div className={styles.railLabel}>收藏的预设</div>
                 <div className={styles.scrollWrap}>
                   <div className={styles.scroll}>
                     <div className={styles.list}>
@@ -916,6 +917,7 @@ export default function VideoPage() {
           <div className={styles.historyColumn}>
             <div className={styles.rail}>
               <div className={styles.railFrame}>
+                <div className={styles.railLabel}>生成记录</div>
                 <div className={[styles.scrollWrap, sidebarHistoryRecords.length > 7 ? styles.scrollWrapFaded : ""].filter(Boolean).join(" ")}>
                   <div ref={historyScrollRef} className={styles.scroll}>
                     <div className={styles.list}>

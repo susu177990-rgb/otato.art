@@ -1115,6 +1115,7 @@ export default function ImagePage() {
           <div className={styles.modeColumn}>
             <div className={styles.modeRail}>
               <div className={styles.modeRailFrame}>
+                <div className={styles.railLabel}>收藏的预设</div>
                 <div
                   className={[
                     styles.modeScrollWrap,
@@ -1225,6 +1226,7 @@ export default function ImagePage() {
           <div className={styles.historyColumn}>
             <div className={styles.historyRail}>
               <div className={styles.historyRailFrame}>
+                <div className={styles.railLabel}>生成记录</div>
                 <div
                   className={[
                     styles.historyScrollWrap,

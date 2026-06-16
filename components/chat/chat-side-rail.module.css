@@ -20,6 +20,7 @@
   );
   --rail-frame-height: calc(var(--rail-content-height) + (var(--rail-frame-padding, 12px) * 2) + 6px);
   --rail-outer-height: calc(var(--rail-frame-height) + var(--rail-shadow-outset, 10px));
+  position: relative !important;
   width: var(--rail-outer-width, 164px) !important;
   max-width: var(--rail-outer-width, 164px) !important;
   min-height: 0;
