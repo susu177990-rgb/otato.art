@@ -34,22 +34,6 @@ export interface SkillDocument {
   markdown: string;
 }
 
-export type SkillJsonSchema = Record<string, unknown>;
-
-export interface SkillFormRunResult {
-  master_prompt?: string;
-  /** 与 master_prompt 相同；兼容 output.json 使用 master_prompt_markdown 的 Skill */
-  master_prompt_markdown?: string;
-  image_generation_status?: "awaiting_confirmation" | "ready" | "failed";
-  confirmation_action?: {
-    label?: string;
-    generation_mode?: "generate_image";
-    uses_prompt_field?: string;
-  } | null;
-  generated_image_url?: string;
-  error?: string;
-}
-
 export interface SkillPackRecord {
   id: string;
   /** ZIP 文件名（管理用，不可在设置页修改） */
@@ -60,12 +44,6 @@ export interface SkillPackRecord {
   chatUsageHint?: string;
   importedAt: number;
   skills: SkillDocument[];
-  /** interface/input.json — 存在则 /chat 切换为表单模式 */
-  inputSchema?: SkillJsonSchema | null;
-  /** interface/output.json */
-  outputSchema?: SkillJsonSchema | null;
-  /** agent_core/optimized_system_prompt.md — 表单 One-Shot 系统提示词 */
-  optimizedSystemPrompt?: string | null;
 }
 
 export type ChatMode = "skill" | "prompt";

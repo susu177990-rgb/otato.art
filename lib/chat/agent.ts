@@ -8,7 +8,11 @@ import type {
   ImageSizeTier,
   ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
-import { buildAttachmentsById, compactMessagesForAgentApi } from "@/lib/chat/attachments";
+import {
+  buildAttachmentsById,
+  compactAllAttachmentsForTextOnlyApi,
+  compactMessagesForAgentApi,
+} from "@/lib/chat/attachments";
 import { parseAssistantChoice, sendChatCompletionRaw, validateMessagesForSend } from "@/lib/chat/completion";
 import { executeAgentTool, type AgentToolContext } from "@/lib/chat/agent-tools";
 import {
@@ -113,6 +117,10 @@ function latestUserPlainText(messages: ChatMessage[]): string {
   return "";
 }
 
+function hasAttachmentParts(messages: ChatMessage[]): boolean {
+  return messages.some((m) => m.parts.some((p) => p.type === "attachment"));
+}
+
 function buildAgentDecisionSystemText(params: {
   skillBlocks: string[];
   imageWorkspace: ImageWorkspaceSettings;
@@ -137,6 +145,7 @@ JSON 结构二选一：
 决策规则：
 - 用户要求“生成图片 / 生图 / 画图 / 出图 / 做海报 / 画分镜图 / 改图 / 根据上传图片生成或重绘”时，选择 generate_image。
 - Skill 指令或用户命令的最终交付物是图片时，选择 generate_image，即使用户没有明确说“调用 API”。
+- 用户只上传图片、要求分析图片/识别图片/按图片回答文字问题时，选择 reply；图片附件只是上下文，不等于生图指令。
 - 用户只是问怎么做、要提示词、要文字方案、要修改文案，或明确说不要图时，选择 reply。
 - 如果选择 generate_image，prompt 必须是可直接发给作图 API 的完整提示词，不要只复述“帮我生成图片”。
 - 如果用户上传了参考图并要求参考/改图/图生图，把对应附件 id 填到 ref_image_urls；不要填不存在的 id。
@@ -329,16 +338,17 @@ export async function runAgentChatTurn(params: {
   const slashWantsImage = slashCommandRequiresGenerateImage(slashCmd);
   const slashBooster = extractSlashCommandBoosterFromMessages(conversationMessages);
   const imageIntent = detectImageGenerationIntent(conversationMessages);
-  const compacted = compactMessagesForAgentApi(conversationMessages.filter((m) => m.role !== "system"));
-  const withSlash = applySlashBoosterToLastUser(compacted, slashBooster);
+  const sourceHistory = conversationMessages.filter((m) => m.role !== "system");
+  const withSlash = applySlashBoosterToLastUser(sourceHistory, slashBooster);
   const imageBooster = imageIntent?.active ? buildImageIntentBooster(imageIntent) : null;
   const history = applyImageIntentBoosterToLastUser(withSlash, imageBooster);
+  const decisionHistory = compactAllAttachmentsForTextOnlyApi(compactMessagesForAgentApi(history));
 
   let decision: AgentDecision | null = null;
   try {
     decision = await decideAgentAction({
       chatApiConfig,
-      history,
+      history: decisionHistory,
       skillMarkdownBlocks,
       imageWorkspace,
       defaultImageModelId: resolvedModelId,
@@ -349,8 +359,11 @@ export async function runAgentChatTurn(params: {
     console.warn("[chat/agent decision]", e);
   }
 
+  const allowDecisionImageGeneration = !imageIntent.hasReferenceImages || imageIntent.active;
   const runGenerateImage =
-    slashWantsImage || decision?.action === "generate_image" || Boolean(imageIntent?.active);
+    slashWantsImage ||
+    Boolean(imageIntent.active) ||
+    (allowDecisionImageGeneration && decision?.action === "generate_image");
   const inferredImageSize = resolveImageSizeFromUserRequest({ texts: [latestUserText] });
 
   const systemMsg: ChatMessage = {
@@ -423,7 +436,15 @@ export async function runAgentChatTurn(params: {
 
   validateMessagesForSend(llmContext);
 
-  const raw = await sendChatCompletionRaw(chatApiConfig, llmContext);
+  let raw: Record<string, unknown>;
+  try {
+    raw = await sendChatCompletionRaw(chatApiConfig, llmContext);
+  } catch (error) {
+    if (!hasAttachmentParts(llmContext)) throw error;
+    console.warn("[chat/agent vision input failed]", error);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`当前 LLM API 没有成功接收图片输入：${reason}`);
+  }
   const { contentText } = parseAssistantChoice(raw);
   let finalText = contentText?.trim() || null;
 

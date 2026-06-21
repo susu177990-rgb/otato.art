@@ -9,7 +9,6 @@ import { ChatPromptPresetRail } from "@/components/chat/ChatPromptPresetRail";
 import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
-import { SkillFormPanel } from "@/components/skill-form/SkillFormPanel";
 import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/completion";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import type {
@@ -19,7 +18,6 @@ import type {
   ChatConversation,
   ChatConversationSummary,
   ChatMessage,
-  SkillFormRunResult,
   SkillPackRecord,
 } from "@/lib/chat/types";
 import {
@@ -31,9 +29,8 @@ import {
   sendChatAgentTurn,
 } from "@/lib/chat-api-client";
 import { buildChatEmptyGuideMarkdown, buildChatPromptPresetGuideMarkdown } from "@/lib/chat/chat-empty-guide";
-import { skillPackHasFormInterface } from "@/lib/chat/skill-pack";
 import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
-import { fetchSiteSkillPacks, runSkillFormApi } from "@/lib/skill-packs-api-client";
+import { fetchSiteSkillPacks } from "@/lib/skill-packs-api-client";
 import type { ImageModelId } from "@/lib/image-workspace";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-workspace.module.css";
@@ -116,6 +113,29 @@ function ToolResultBody({ text }: { text: string }) {
   return <pre className={styles.toolJson}>{text}</pre>;
 }
 
+function MessageAttachment({ attachment }: { attachment: ChatAttachment }) {
+  if (attachment.kind === "image" || attachment.mime.startsWith("image/")) {
+    return (
+      <figure className={styles.messageAttachment}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- Chat attachments are user-provided data/blob URLs. */}
+        <img src={attachment.dataUrl} alt={attachment.name} className={styles.messageAttachmentMedia} loading="lazy" />
+        <figcaption className={styles.messageAttachmentCaption}>{attachment.name}</figcaption>
+      </figure>
+    );
+  }
+
+  if (attachment.kind === "video" || attachment.mime.startsWith("video/")) {
+    return (
+      <figure className={styles.messageAttachment}>
+        <video src={attachment.dataUrl} controls className={styles.messageAttachmentMedia} />
+        <figcaption className={styles.messageAttachmentCaption}>{attachment.name}</figcaption>
+      </figure>
+    );
+  }
+
+  return <p className={styles.attachMeta}>附件：{attachment.name}</p>;
+}
+
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
@@ -127,9 +147,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
                 {p.text}
               </p>
             ) : (
-              <p key={i} className={styles.attachMeta}>
-                📎 {p.attachment.name}
-              </p>
+              <MessageAttachment key={i} attachment={p.attachment} />
             ),
           )}
         </div>
@@ -204,9 +222,6 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   const [selectedLlmModelId, setSelectedLlmModelId] = useState<string>(llmSettings.defaultModelId);
   const [isSavingSkill, setIsSavingSkill] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
-  const [skillRunResult, setSkillRunResult] = useState<SkillFormRunResult | null>(null);
-  const [isRunningSkillForm, setIsRunningSkillForm] = useState(false);
-  const [lastSkillPayload, setLastSkillPayload] = useState<unknown>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<string | null>(null);
 
@@ -354,10 +369,6 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   const selectedChatPresetId = conversationMatchesActive ? (conversation?.selectedChatPresetId ?? null) : null;
   const chatMode: ChatMode = conversationMatchesActive ? conversation?.chatMode ?? "prompt" : "prompt";
 
-  const selectedPack = useMemo(
-    () => skillPacks.find((p) => p.id === selectedSkillPackId) ?? null,
-    [skillPacks, selectedSkillPackId],
-  );
   const selectedPromptPreset = useMemo(
     () => chatPromptPresets.find((preset) => preset.id === selectedChatPresetId) ?? null,
     [chatPromptPresets, selectedChatPresetId],
@@ -367,7 +378,6 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
     [chatPromptPresets],
   );
   const isSkillMode = chatMode === "skill";
-  const isFormMode = Boolean(isSkillMode && selectedPack && skillPackHasFormInterface(selectedPack));
 
   const emptyGuideMarkdown = useMemo(() => {
     if (isSkillMode) {
@@ -379,7 +389,6 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   }, [isSkillMode, selectedSkillPackId, skillPacks, selectedPromptPreset]);
 
   useEffect(() => {
-    setSkillRunResult(null);
     setError(null);
   }, [selectedSkillPackId, selectedChatPresetId, chatMode, activeId]);
 
@@ -390,42 +399,6 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
     window.addEventListener(OPEN_CHAT_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
     return () => window.removeEventListener(OPEN_CHAT_PROMPT_PRESETS_EVENT, openPromptPresetLibrary);
   }, []);
-
-  const handleSkillFormSubmit = async (payload: unknown) => {
-    if (!selectedPack?.inputSchema || isRunningSkillForm) return;
-    setError(null);
-    setIsRunningSkillForm(true);
-    try {
-      const result = await runSkillFormApi(selectedPack.id, payload, selectedImageModelId, { projectId });
-      setLastSkillPayload(payload);
-      setSkillRunResult(result);
-    } catch (e) {
-      setSkillRunResult(null);
-      setError(e instanceof Error ? e.message : "生成分镜失败");
-    } finally {
-      setIsRunningSkillForm(false);
-    }
-  };
-
-  const handleSkillFormConfirmImage = async () => {
-    if (!selectedPack?.inputSchema || isRunningSkillForm || !lastSkillPayload) return;
-    const masterPrompt = skillRunResult?.master_prompt_markdown ?? skillRunResult?.master_prompt;
-    if (!masterPrompt?.trim()) return;
-    setError(null);
-    setIsRunningSkillForm(true);
-    try {
-      const result = await runSkillFormApi(selectedPack.id, lastSkillPayload, selectedImageModelId, {
-        action: "generate",
-        masterPrompt,
-        projectId,
-      });
-      setSkillRunResult(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "生成分镜失败");
-    } finally {
-      setIsRunningSkillForm(false);
-    }
-  };
 
   const selectSkillPack = async (packId: string | null) => {
     if (isSavingSkill) return;
@@ -720,21 +693,8 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
         />
       )}
 
-      <div ref={scrollRef} className={[styles.messages, isFormMode ? styles.messagesForm : ""].filter(Boolean).join(" ")}>
-        {isFormMode && selectedPack ? (
-          conversationMatchesActive ? (
-            <SkillFormPanel
-              pack={selectedPack}
-              result={skillRunResult}
-              loading={isRunningSkillForm}
-              error={error}
-              onSubmit={(payload) => void handleSkillFormSubmit(payload)}
-              onConfirmImage={() => void handleSkillFormConfirmImage()}
-            />
-          ) : activeId ? (
-            <p className={styles.sending}>加载会话…</p>
-          ) : null
-        ) : isLoadingConversation && activeId && !threadVisible ? (
+      <div ref={scrollRef} className={styles.messages}>
+        {isLoadingConversation && activeId && !threadVisible ? (
           <p className={styles.sending}>加载会话…</p>
         ) : !threadVisible ? (
           <div className={styles.emptyState}>
@@ -759,67 +719,65 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
             ))}
           </div>
         )}
-        {isSending && threadVisible && !isFormMode ? <p className={styles.sending}>思考中…</p> : null}
+        {isSending && threadVisible ? <p className={styles.sending}>思考中…</p> : null}
       </div>
 
-      {!isFormMode ? (
-        <ChatComposer
-          className={styles.workspaceComposerWrap}
-          inputText={inputText}
-          onInputTextChange={setInputText}
-          pendingAttachments={pendingAttachments}
-          onAddFiles={addAttachments}
-          onRemoveAttachment={(i) => setPendingAttachments((p) => p.filter((_, j) => j !== i))}
-          isSending={isSending}
-          onSend={handleSend}
-          error={error}
-          imageWorkspace={imageWorkspace}
-          selectedImageModelId={selectedImageModelId}
-          onImageModelChange={handleImageModelChange}
-          llmSettings={llmSettings}
-          selectedLlmModelId={selectedLlmModelId}
-          onLlmModelChange={handleLlmModelChange}
-          chatMode={chatMode}
-          onSetChatMode={(mode) =>
-            void setChatModeValue(mode).catch((e) =>
-              setError(e instanceof Error ? e.message : "切换对话模式失败"),
-            )
-          }
-          extraActions={
-            chatMode === "prompt" ? (
-              <button
-                type="button"
-                className={[styles.presetModeToggle, selectedChatPresetId ? styles.presetModeToggleActive : ""]
-                  .filter(Boolean)
-                  .join(" ")}
-                aria-pressed={Boolean(selectedChatPresetId)}
-                title={selectedChatPresetId ? "不使用对话提示词预设" : "启用对话提示词预设"}
-                onClick={() => {
-                  if (selectedChatPresetId) {
-                    void selectChatPromptPreset(null).catch((e) =>
-                      setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
-                    );
-                    return;
-                  }
-                  const nextPreset = favoriteChatPromptPresets[0];
-                  if (nextPreset) {
-                    void selectChatPromptPreset(nextPreset.id).catch((e) =>
-                      setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
-                    );
-                    return;
-                  }
-                  setPromptPresetLibraryOpen(true);
-                }}
-              >
-                <span className={styles.presetSwitchTrack} aria-hidden>
-                  <span className={styles.presetSwitchThumb} />
-                </span>
-                <span>预设</span>
-              </button>
-            ) : null
-          }
-        />
-      ) : null}
+      <ChatComposer
+        className={styles.workspaceComposerWrap}
+        inputText={inputText}
+        onInputTextChange={setInputText}
+        pendingAttachments={pendingAttachments}
+        onAddFiles={addAttachments}
+        onRemoveAttachment={(i) => setPendingAttachments((p) => p.filter((_, j) => j !== i))}
+        isSending={isSending}
+        onSend={handleSend}
+        error={error}
+        imageWorkspace={imageWorkspace}
+        selectedImageModelId={selectedImageModelId}
+        onImageModelChange={handleImageModelChange}
+        llmSettings={llmSettings}
+        selectedLlmModelId={selectedLlmModelId}
+        onLlmModelChange={handleLlmModelChange}
+        chatMode={chatMode}
+        onSetChatMode={(mode) =>
+          void setChatModeValue(mode).catch((e) =>
+            setError(e instanceof Error ? e.message : "切换对话模式失败"),
+          )
+        }
+        extraActions={
+          chatMode === "prompt" ? (
+            <button
+              type="button"
+              className={[styles.presetModeToggle, selectedChatPresetId ? styles.presetModeToggleActive : ""]
+                .filter(Boolean)
+                .join(" ")}
+              aria-pressed={Boolean(selectedChatPresetId)}
+              title={selectedChatPresetId ? "不使用对话提示词预设" : "启用对话提示词预设"}
+              onClick={() => {
+                if (selectedChatPresetId) {
+                  void selectChatPromptPreset(null).catch((e) =>
+                    setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
+                  );
+                  return;
+                }
+                const nextPreset = favoriteChatPromptPresets[0];
+                if (nextPreset) {
+                  void selectChatPromptPreset(nextPreset.id).catch((e) =>
+                    setError(e instanceof Error ? e.message : "保存对话提示词预设失败"),
+                  );
+                  return;
+                }
+                setPromptPresetLibraryOpen(true);
+              }}
+            >
+              <span className={styles.presetSwitchTrack} aria-hidden>
+                <span className={styles.presetSwitchThumb} />
+              </span>
+              <span>预设</span>
+            </button>
+          ) : null
+        }
+      />
 
       <ChatSessionRail
         summaries={summaries}

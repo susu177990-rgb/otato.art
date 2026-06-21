@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
-import type { SkillJsonSchema, SkillPackRecord } from "@/lib/chat/types";
+import type { SkillPackRecord } from "@/lib/chat/types";
 
 type SiteSkillPackRow = {
   id: string;
@@ -9,22 +9,12 @@ type SiteSkillPackRow = {
   imported_at: string;
   display_label?: string | null;
   chat_usage_hint?: string | null;
-  input_schema?: unknown;
-  output_schema?: unknown;
-  optimized_system_prompt?: string | null;
 };
 
 const SELECT_FULL =
-  "id, title, display_label, chat_usage_hint, skills, imported_at, input_schema, output_schema, optimized_system_prompt" as const;
-const SELECT_WITH_HINT =
   "id, title, display_label, chat_usage_hint, skills, imported_at" as const;
 const SELECT_LEGACY_LABEL = "id, title, display_label, skills, imported_at" as const;
 const SELECT_LEGACY = "id, title, skills, imported_at" as const;
-
-function asJsonSchema(value: unknown): SkillJsonSchema | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as SkillJsonSchema;
-}
 
 function rowToSkillPack(row: SiteSkillPackRow): SkillPackRecord {
   const skills = (Array.isArray(row.skills) ? row.skills : []) as SkillPackRecord["skills"];
@@ -35,9 +25,6 @@ function rowToSkillPack(row: SiteSkillPackRow): SkillPackRecord {
     chatUsageHint: row.chat_usage_hint?.trim() || undefined,
     importedAt: new Date(row.imported_at).getTime(),
     skills,
-    inputSchema: asJsonSchema(row.input_schema),
-    outputSchema: asJsonSchema(row.output_schema),
-    optimizedSystemPrompt: row.optimized_system_prompt?.trim() || null,
   };
   if (!pack.displayLabel) {
     pack.displayLabel = skillPackDisplayLabel(pack);
@@ -65,20 +52,8 @@ export async function listSiteSkillPacks(supabase: SupabaseClient): Promise<Skil
   if (!full.error) {
     return (full.data ?? []).map((row) => rowToSkillPack(row as SiteSkillPackRow));
   }
-  if (!isMissingColumn(full.error, "input_schema")) {
+  if (!isMissingColumn(full.error, "chat_usage_hint")) {
     throw full.error;
-  }
-
-  const withHint = await supabase
-    .from("site_skill_packs")
-    .select(SELECT_WITH_HINT)
-    .order("imported_at", { ascending: false });
-
-  if (!withHint.error) {
-    return (withHint.data ?? []).map((row) => rowToSkillPack(row as SiteSkillPackRow));
-  }
-  if (!isMissingColumn(withHint.error, "chat_usage_hint")) {
-    throw withHint.error;
   }
 
   const withLabel = await supabase
@@ -110,14 +85,6 @@ export async function getSiteSkillPackById(
   return packs.find((p) => p.id === id) ?? null;
 }
 
-function interfaceInsertFields(pack: SkillPackRecord): Record<string, unknown> {
-  return {
-    input_schema: pack.inputSchema ?? null,
-    output_schema: pack.outputSchema ?? null,
-    optimized_system_prompt: pack.optimizedSystemPrompt ?? null,
-  };
-}
-
 export async function insertSiteSkillPack(supabase: SupabaseClient, pack: SkillPackRecord): Promise<void> {
   const importedAt = new Date(pack.importedAt).toISOString();
   const full = await supabase.from("site_skill_packs").insert({
@@ -127,23 +94,11 @@ export async function insertSiteSkillPack(supabase: SupabaseClient, pack: SkillP
     chat_usage_hint: pack.chatUsageHint ?? null,
     skills: pack.skills,
     imported_at: importedAt,
-    ...interfaceInsertFields(pack),
   });
 
   if (!full.error) return;
 
-  if (isMissingColumn(full.error, "input_schema")) {
-    const withHint = await supabase.from("site_skill_packs").insert({
-      id: pack.id,
-      title: pack.title,
-      display_label: pack.displayLabel,
-      chat_usage_hint: pack.chatUsageHint ?? null,
-      skills: pack.skills,
-      imported_at: importedAt,
-    });
-    if (!withHint.error) return;
-    if (!isMissingColumn(withHint.error, "chat_usage_hint")) throw withHint.error;
-  } else if (
+  if (
     !isMissingColumn(full.error, "chat_usage_hint") &&
     !isMissingColumn(full.error, "display_label")
   ) {
@@ -202,17 +157,6 @@ export async function updateSiteSkillPack(
     .single();
 
   if (error) {
-    if (isMissingColumn(error, "input_schema")) {
-      const legacy = await supabase
-        .from("site_skill_packs")
-        .update(updates)
-        .eq("id", id)
-        .select(SELECT_WITH_HINT)
-        .single();
-      if (legacy.error) throw legacy.error;
-      if (!legacy.data) throw new Error("Skill 包不存在");
-      return rowToSkillPack(legacy.data as SiteSkillPackRow);
-    }
     if (isMissingColumn(error, "chat_usage_hint") && patch.chatUsageHint !== undefined) {
       throw new Error("数据库缺少 chat_usage_hint 列，无法保存对话页说明。请执行迁移 SQL。");
     }

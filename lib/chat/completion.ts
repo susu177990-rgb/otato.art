@@ -1,4 +1,5 @@
 import type { ChatApiConfig, ChatAttachment, ChatMessage, ChatToolCall } from "@/lib/chat/types";
+import { describeUpstreamFetchError } from "@/lib/upstream-fetch-error";
 
 export const CHAT_MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 
@@ -239,7 +240,9 @@ export async function sendChatCompletionRaw(
     if (e instanceof Error && e.name === "AbortError") {
       throw new Error("LLM API 请求超时（180s），请检查模型/中转是否可用，或缩短对话历史后重试");
     }
-    throw e;
+    const err = describeUpstreamFetchError(e);
+    const code = err.code ? `（${err.code}）` : "";
+    throw new Error(`LLM API 网络请求失败${code}: ${err.message}`);
   } finally {
     clearTimeout(timer);
   }

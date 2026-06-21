@@ -2,15 +2,16 @@ import type { ChatMessage } from "@/lib/chat/types";
 
 export type ImageGenerationIntent = {
   active: boolean;
-  /** 本条用户消息是否含图片附件（应用作参考图） */
+  /** 本条用户消息是否含图片附件（仅在明确生图/改图时作为参考图） */
   hasReferenceImages: boolean;
-  /** 本条是否仅有图、几乎无文字（典型图生图/改图） */
+  /** 本条是否仅有图、几乎无文字；这本身不代表要生图 */
   referenceOnly: boolean;
 };
 
 const IMAGE_INTENT_PATTERNS: RegExp[] = [
   /生图|画图|作图|绘图|出图|配图|分镜图|概念图|立绘|海报图|封面图/,
   /生成.{0,6}(?:图|图片|插画|海报|分镜|封面)/,
+  /做.{0,4}(?:图|图片|插画|海报|分镜|封面)/,
   /画.{0,4}(?:一|个|张|幅|点|出)?(?:图|插画|海报|分镜|场景)/,
   /帮我画|给我画|请画|画一下|画张|画一幅/,
   /画(?:一只|一个|一张|一幅|个|点)?[\u4e00-\u9fa5a-zA-Z]{1,24}(?:猫|狗|鸟|花|人|场景|海报|封面)/,
@@ -61,16 +62,19 @@ export function detectImageGenerationIntent(messages: ChatMessage[]): ImageGener
     return { active: false, hasReferenceImages: hasRef, referenceOnly };
   }
 
-  if (referenceOnly) {
-    return { active: true, hasReferenceImages: true, referenceOnly: true };
-  }
-
-  if (hasRef && /改|修|换|风格|参考|基于|按这张|照着/i.test(text)) {
+  if (
+    hasRef &&
+    (
+      /图生图|以图生图|参考图生/.test(text) ||
+      /(?:根据|用|参考|基于|按|照着).{0,12}(?:这张|上传的)?(?:图|参考)?.{0,12}(?:生成|生图|画|绘制|出图|做(?:一张)?图|改|修改|修图|换|替换|重绘)/i.test(text) ||
+      /(?:改|修改|修图|换|替换|重绘).{0,16}(?:这张|上传的)?(?:图|图片|参考)/i.test(text)
+    )
+  ) {
     return { active: true, hasReferenceImages: true, referenceOnly: false };
   }
 
   const active = IMAGE_INTENT_PATTERNS.some((re) => re.test(text));
-  return { active, hasReferenceImages: hasRef, referenceOnly: false };
+  return { active, hasReferenceImages: hasRef, referenceOnly };
 }
 
 export function buildImageIntentBooster(intent: ImageGenerationIntent): string {

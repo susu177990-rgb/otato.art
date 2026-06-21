@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import shellStyles from "@/app/shared/shell.module.css";
 import settingsStyles from "@/app/settings/settings-page.module.css";
 import { SkillZipUploader } from "@/components/skill/SkillZipUploader";
-import { skillPackDisplayLabel, skillPackHasFormInterface } from "@/lib/chat/skill-pack";
+import { skillPackDisplayLabel } from "@/lib/chat/skill-pack";
 import type { SkillPackRecord } from "@/lib/chat/types";
 import { MAX_SKILL_ZIP_BYTES } from "@/lib/chat/skill-pack";
 import {
@@ -183,7 +183,7 @@ export function SkillPacksPanel() {
                       ZIP: {p.title}
                     </div>
                     <div>
-                      {p.skills.length} 个 skill · {skillPackHasFormInterface(p) ? "表单" : "对话"} · {formatImportedAt(p.importedAt).split(" ")[0]}
+                      {p.skills.length} 个 skill · 对话 · {formatImportedAt(p.importedAt).split(" ")[0]}
                     </div>
                   </div>
                   <textarea

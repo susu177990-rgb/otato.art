@@ -1,5 +1,23 @@
 import type { ChatMessage, ChatMessagePart, ConversationAttachmentEntry } from "@/lib/chat/types";
 
+function attachmentTextDescriptor(part: ChatMessagePart): ChatMessagePart {
+  if (part.type !== "attachment") return part;
+
+  const a = part.attachment;
+  const safeName = a.name.replace(/"/g, "'");
+  const idText = a.registryId ? ` attachment_id="${a.registryId}"` : "";
+  const toolHint = a.registryId
+    ? `如需真实生图/改图，generate_image 的 ref_image_urls 可直接传 "${a.registryId}"。`
+    : "如需真实生图/改图，请根据当前用户指令继续判断是否调用作图流程。";
+
+  return {
+    type: "text",
+    text:
+      `[用户上传了附件${idText} name="${safeName}" kind=${a.kind} mime=${a.mime}] ` +
+      `文本对话模型只收到这段附件说明，未接收二进制图片/视频内容；不要假装已经看清画面细节。${toolHint}`,
+  };
+}
+
 export function buildAttachmentsById(
   entries: ConversationAttachmentEntry[] | undefined,
 ): Record<string, ConversationAttachmentEntry> {
@@ -7,6 +25,16 @@ export function buildAttachmentsById(
   if (!entries?.length) return m;
   for (const e of entries) m[e.id] = e;
   return m;
+}
+
+export function compactAllAttachmentsForTextOnlyApi(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((m) => {
+    if (m.role !== "user" && m.role !== "assistant") return m;
+    return {
+      ...m,
+      parts: m.parts.map(attachmentTextDescriptor),
+    };
+  });
 }
 
 export function compactMessagesForAgentApi(messages: ChatMessage[]): ChatMessage[] {

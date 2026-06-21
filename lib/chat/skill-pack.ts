@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import type { SkillDocument, SkillJsonSchema, SkillPackRecord } from "@/lib/chat/types";
+import type { SkillDocument, SkillPackRecord } from "@/lib/chat/types";
 
 export const MAX_SKILL_ZIP_BYTES = 15 * 1024 * 1024;
 export const MAX_SKILL_BODY_CHARS = 48 * 1024;
@@ -17,53 +17,6 @@ function parentDir(path: string): string {
   const n = normalizePath(path);
   const i = n.lastIndexOf("/");
   return i <= 0 ? "" : n.slice(0, i);
-}
-
-function findZipPath(paths: string[], matcher: (norm: string) => boolean): string | null {
-  for (const p of paths) {
-    const norm = normalizePath(p).toLowerCase();
-    if (matcher(norm)) return p;
-  }
-  return null;
-}
-
-async function readZipJson(zip: JSZip, path: string | null): Promise<SkillJsonSchema | null> {
-  if (!path) return null;
-  const entry = zip.file(path);
-  if (!entry) return null;
-  try {
-    const text = await entry.async("string");
-    const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    return parsed as SkillJsonSchema;
-  } catch {
-    return null;
-  }
-}
-
-async function readZipText(zip: JSZip, path: string | null): Promise<string | null> {
-  if (!path) return null;
-  const entry = zip.file(path);
-  if (!entry) return null;
-  const text = (await entry.async("string")).trim();
-  return text || null;
-}
-
-function extractInterfaceFiles(paths: string[]) {
-  const inputPath = findZipPath(
-    paths,
-    (norm) => norm === "interface/input.json" || norm.endsWith("/interface/input.json"),
-  );
-  const outputPath = findZipPath(
-    paths,
-    (norm) => norm === "interface/output.json" || norm.endsWith("/interface/output.json"),
-  );
-  const optimizedPath = findZipPath(paths, (norm) => {
-    if (norm === "optimized_system_prompt.md") return true;
-    if (norm.endsWith("/optimized_system_prompt.md")) return true;
-    return norm === "agent_core/optimized_system_prompt.md";
-  });
-  return { inputPath, outputPath, optimizedPath };
 }
 
 async function parseSkillZipBuffer(buffer: ArrayBuffer, fileName: string): Promise<SkillPackRecord> {
@@ -131,13 +84,6 @@ async function parseSkillZipBuffer(buffer: ArrayBuffer, fileName: string): Promi
     throw new Error("未能解析出有效 SKILL.md 内容");
   }
 
-  const { inputPath, outputPath, optimizedPath } = extractInterfaceFiles(paths);
-  const [inputSchema, outputSchema, optimizedSystemPrompt] = await Promise.all([
-    readZipJson(zip, inputPath),
-    readZipJson(zip, outputPath),
-    readZipText(zip, optimizedPath),
-  ]);
-
   const id = `pack-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const zipTitle = fileName.replace(/\.zip$/i, "") || "skill-pack";
   const displayLabel =
@@ -149,9 +95,6 @@ async function parseSkillZipBuffer(buffer: ArrayBuffer, fileName: string): Promi
     displayLabel,
     importedAt: Date.now(),
     skills,
-    inputSchema,
-    outputSchema,
-    optimizedSystemPrompt,
   };
 }
 
@@ -161,10 +104,6 @@ export function skillPackDisplayLabel(pack: SkillPackRecord): string {
   if (label) return label;
   if (pack.skills.length === 1) return pack.skills[0]!.name;
   return pack.title;
-}
-
-export function skillPackHasFormInterface(pack: SkillPackRecord): boolean {
-  return Boolean(pack.inputSchema && typeof pack.inputSchema === "object");
 }
 
 export async function parseSkillZipFile(file: File): Promise<SkillPackRecord> {
