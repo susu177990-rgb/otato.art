@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/admin-auth";
+import { writeAuditLog } from "@/lib/admin/user-management";
 import { formatDbError } from "@/lib/db/format-db-error";
 import {
   getPromptPresetSubmission,
@@ -67,6 +68,13 @@ export async function PATCH(req: Request) {
         reviewedBy: auth.user.id,
         reviewNote,
       });
+      await writeAuditLog(writeClient, {
+        actor: auth.actor,
+        action: "prompt_submission.reject",
+        targetUserId: submission.submitterUserId,
+        targetEmail: submission.submitterEmail ?? null,
+        metadata: { submissionId, kind: submission.kind, title: submission.title },
+      });
       return NextResponse.json({ submission: reviewed });
     }
 
@@ -86,6 +94,13 @@ export async function PATCH(req: Request) {
       reviewedBy: auth.user.id,
       publishedPresetId: publishedPreset.id,
       reviewNote,
+    });
+    await writeAuditLog(writeClient, {
+      actor: auth.actor,
+      action: "prompt_submission.approve",
+      targetUserId: submission.submitterUserId,
+      targetEmail: submission.submitterEmail ?? null,
+      metadata: { submissionId, publishedPresetId: publishedPreset.id, kind: submission.kind, title: submission.title },
     });
     return NextResponse.json({ submission: reviewed, preset: publishedPreset });
   } catch (e) {

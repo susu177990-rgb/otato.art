@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/admin-auth";
+import { writeAuditLog } from "@/lib/admin/user-management";
 import { getWorkspaceSnapshot, upsertWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 
 function describeError(error: unknown): string {
@@ -17,7 +18,7 @@ function describeError(error: unknown): string {
 
 export async function GET() {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireAdmin("manageSystem");
     if ("error" in auth) return auth.error;
     return NextResponse.json(await getWorkspaceSnapshot(auth.supabase));
   } catch (e) {
@@ -28,13 +29,22 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireAdmin("manageSystem");
     if ("error" in auth) return auth.error;
     const body = (await req.json()) as { llm?: unknown; imageWorkspace?: unknown; videoWorkspace?: unknown };
     const snapshot = await upsertWorkspaceSnapshot(auth.supabase, {
       llm: body.llm as Parameters<typeof upsertWorkspaceSnapshot>[1]["llm"],
       imageWorkspace: body.imageWorkspace,
       videoWorkspace: body.videoWorkspace,
+    });
+    await writeAuditLog(auth.supabase, {
+      actor: auth.actor,
+      action: "workspace_settings.update",
+      metadata: {
+        llm: body.llm !== undefined,
+        imageWorkspace: body.imageWorkspace !== undefined,
+        videoWorkspace: body.videoWorkspace !== undefined,
+      },
     });
     return NextResponse.json(snapshot);
   } catch (e) {

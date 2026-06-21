@@ -9,6 +9,7 @@ export async function GET() {
     user: {
       id: auth.user.id,
       email: auth.user.email ?? null,
+      role: auth.actor.role,
     },
   });
 }

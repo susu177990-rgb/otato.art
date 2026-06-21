@@ -259,6 +259,124 @@
   font-weight: 600;
 }
 
+/* /admin uses the main otato product shell, not the dark personal settings skin. */
+.adminUnifiedPage {
+  --settings-ink: var(--otato-text, #181818);
+  --settings-muted: var(--otato-muted, #6f6a61);
+  --settings-surface: rgba(255, 255, 255, 0.82);
+  --settings-surface-strong: var(--otato-surface-strong, #ffffff);
+  --settings-border: var(--otato-line, #181818);
+  --settings-border-strong: var(--otato-line, #181818);
+  --settings-active-bg: var(--otato-action, #ff4d3d);
+  --settings-active-ink: #ffffff;
+  background: var(--otato-paper-background, var(--otato-bg, #faf7ef));
+  color: var(--otato-text, #181818);
+}
+
+.adminUnifiedPage .settingsBody {
+  padding: 20px 18px 32px;
+}
+
+.adminUnifiedPage .subnav {
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-card-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+  backdrop-filter: blur(18px);
+}
+
+.adminUnifiedPage .subnavPill {
+  min-height: 40px;
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
+  font-weight: 900;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.adminUnifiedPage .subnavPill:hover {
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.adminUnifiedPage .subnavPillActive {
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 #181818);
+}
+
+.adminUnifiedPage .floatCard {
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-card-radius, 24px);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--otato-text, #181818);
+  box-shadow: var(--otato-shadow-card, 6px 6px 0 #181818);
+  backdrop-filter: none;
+}
+
+.adminUnifiedPage .settingsContent h2,
+.adminUnifiedPage .settingsContent h3 {
+  color: var(--otato-text, #181818);
+}
+
+.adminUnifiedPage .settingsContent p,
+.adminUnifiedPage .settingsContent label span,
+.adminUnifiedPage .settingsContent code {
+  color: var(--otato-muted, #6f6a61);
+}
+
+.adminUnifiedPage .settingsContent input,
+.adminUnifiedPage .settingsContent select,
+.adminUnifiedPage .settingsContent textarea {
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.adminUnifiedPage .settingsContent input:focus,
+.adminUnifiedPage .settingsContent select:focus,
+.adminUnifiedPage .settingsContent textarea:focus {
+  border-color: var(--otato-line, #181818);
+  background: #ffffff;
+  outline: 3px solid rgba(255, 77, 61, 0.45);
+  outline-offset: 2px;
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.adminUnifiedPage .settingsContent input::placeholder,
+.adminUnifiedPage .settingsContent textarea::placeholder {
+  color: #9b9388;
+}
+
+.adminUnifiedPage .settingsContent button:not(.promptModeCoverDelete) {
+  border: 3px solid var(--otato-line, #181818);
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
+  font-weight: 900;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+}
+
+.adminUnifiedPage .settingsContent button:not(.promptModeCoverDelete):hover:not(:disabled) {
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: var(--otato-text, #181818);
+}
+
+.adminUnifiedPage .savedHint {
+  color: #166534;
+}
+
+.adminUnifiedPage .apiModeNotice,
+.adminUnifiedPage .llmModelCardTopBar {
+  border-color: rgba(24, 24, 24, 0.18);
+}
+
 .apiTestResult {
   display: flex;
   flex-direction: column;
@@ -1256,6 +1374,11 @@
   gap: 28px;
   align-items: stretch;
   min-height: calc(100vh - 132px);
+}
+
+.adminSettingsWorkspaceNoSubnav {
+  display: block;
+  min-height: auto;
 }
 
 .adminSettingsWorkspace.promptModeShell {

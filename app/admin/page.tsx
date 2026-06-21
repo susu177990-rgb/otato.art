@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SkillPacksPanel } from "@/components/settings/SkillPacksPanel";
+import { AdminUsersPanel } from "@/components/admin/AdminUserManagement";
 import shellStyles from "../shared/shell.module.css";
 import styles from "../settings/settings-page.module.css";
 import type { Settings } from "@/lib/types";
@@ -51,26 +52,37 @@ import {
 } from "@/lib/prompt-preset-api-client";
 import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
-type SettingsCategory = "api" | "prompts";
-type Tab = "llmApi" | "imageApi" | "videoApi" | "imagePrompts" | "videoPrompts" | "chatPrompts" | "promptSubmissions" | "skillPacks";
+type SettingsCategory = "users" | "prompts" | "api";
+type Tab =
+  | "users"
+  | "llmApi"
+  | "imageApi"
+  | "videoApi"
+  | "imagePrompts"
+  | "videoPrompts"
+  | "chatPrompts"
+  | "promptSubmissions"
+  | "skillPacks";
 
 const CATEGORY_DEFS: ReadonlyArray<{ id: SettingsCategory; label: string; defaultTab: Tab }> = [
-  { id: "api", label: "网站内部API", defaultTab: "llmApi" },
+  { id: "users", label: "用户管理", defaultTab: "users" },
   { id: "prompts", label: "预设库", defaultTab: "imagePrompts" },
+  { id: "api", label: "系统 API", defaultTab: "llmApi" },
 ];
 
 const SUBPAGE_DEFS: Record<SettingsCategory, ReadonlyArray<{ id: Tab; label: string }>> = {
+  users: [],
+  prompts: [
+    { id: "promptSubmissions", label: "投稿审核" },
+    { id: "imagePrompts", label: "生图提示词预设" },
+    { id: "videoPrompts", label: "生视频提示词预设" },
+    { id: "chatPrompts", label: "对话提示词预设" },
+    { id: "skillPacks", label: "Skill设置" },
+  ],
   api: [
     { id: "llmApi", label: "LLM" },
     { id: "imageApi", label: "图片" },
     { id: "videoApi", label: "视频" },
-  ],
-  prompts: [
-    { id: "imagePrompts", label: "生图提示词预设" },
-    { id: "videoPrompts", label: "生视频提示词预设" },
-    { id: "chatPrompts", label: "对话提示词预设" },
-    { id: "promptSubmissions", label: "投稿审核" },
-    { id: "skillPacks", label: "Skill设置" },
   ],
 };
 
@@ -108,6 +120,7 @@ function nextLlmModelId(models: Settings["models"]): string {
 
 function tabFromSearchParam(raw: string | null): Tab | null {
   if (
+    raw === "users" ||
     raw === "llmApi" ||
     raw === "imageApi" ||
     raw === "imagePrompts" ||
@@ -123,13 +136,14 @@ function tabFromSearchParam(raw: string | null): Tab | null {
 }
 
 function categoryForTab(tab: Tab): SettingsCategory {
-  if (tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "promptSubmissions" || tab === "skillPacks") return "prompts";
+  if (tab === "users") return "users";
+  if (tab === "promptSubmissions" || tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "skillPacks") return "prompts";
   return "api";
 }
 
 function AdminPageInner() {
   const searchParams = useSearchParams();
-  const initialTab = tabFromSearchParam(searchParams.get("tab")) ?? "llmApi";
+  const initialTab = tabFromSearchParam(searchParams.get("tab")) ?? "users";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [llmSettings, setLlmSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [imageSettings, setImageSettings] = useState<ImageWorkspaceSettings>(DEFAULT_IMAGE_SETTINGS);
@@ -159,11 +173,13 @@ function AdminPageInner() {
           if (!cancelled) setAdminState("forbidden");
           return;
         }
-        const snapshot = await fetchAdminWorkspaceSnapshot();
+        const snapshot = await fetchAdminWorkspaceSnapshot().catch(() => null);
         if (cancelled) return;
-        setLlmSettings(snapshot.llm ?? DEFAULT_SETTINGS);
-        setImageSettings(snapshot.imageWorkspace);
-        setVideoSettings(snapshot.videoWorkspace);
+        if (snapshot) {
+          setLlmSettings(snapshot.llm ?? DEFAULT_SETTINGS);
+          setImageSettings(snapshot.imageWorkspace);
+          setVideoSettings(snapshot.videoWorkspace);
+        }
         setAdminState("ready");
       } catch {
         if (!cancelled) setAdminState("forbidden");
@@ -316,9 +332,10 @@ function AdminPageInner() {
           : tab === "chatPrompts"
             ? { label: "新建对话预设", onClick: addChatPromptPreset }
             : null;
+  const showSaveButton = tab === "llmApi" || tab === "imageApi" || tab === "videoApi" || tab === "imagePrompts" || tab === "videoPrompts";
 
   return (
-    <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
+    <main className={[shellStyles.page, styles.settingsPage, styles.adminUnifiedPage].join(" ")}>
       <header className={shellStyles.topbar}>
         <nav className={shellStyles.topbarLeft} aria-label="全局管理分类">
           <Link href="/projects" className={shellStyles.navLink}>
@@ -350,13 +367,15 @@ function AdminPageInner() {
               {createAction.label}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={saveAll}
-            className={[shellStyles.navLink, styles.saveButton].join(" ")}
-          >
-            保存
-          </button>
+          {adminState === "ready" && showSaveButton ? (
+            <button
+              type="button"
+              onClick={saveAll}
+              className={[shellStyles.navLink, styles.saveButton].join(" ")}
+            >
+              保存
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -369,30 +388,35 @@ function AdminPageInner() {
         <div
           className={[styles.settingsWorkspace, tab === "imagePrompts" || tab === "videoPrompts" ? styles.promptModeShell : ""]
             .concat(styles.adminSettingsWorkspace)
+            .concat(subpages.length === 0 ? styles.adminSettingsWorkspaceNoSubnav : "")
             .filter(Boolean)
             .join(" ")}
         >
-          <aside className={styles.subnav} aria-label="全局管理子页面">
-            {subpages.map((def) => {
-              const active = tab === def.id;
-              return (
-                <button
-                  key={def.id}
-                  type="button"
-                  onClick={() => setTab(def.id)}
-                  className={[styles.subnavPill, active ? styles.subnavPillActive : ""].filter(Boolean).join(" ")}
-                  aria-pressed={active}
-                >
-                  {def.label}
-                </button>
-              );
-            })}
-          </aside>
+          {subpages.length > 0 ? (
+            <aside className={styles.subnav} aria-label="全局管理子页面">
+              {subpages.map((def) => {
+                const active = tab === def.id;
+                return (
+                  <button
+                    key={def.id}
+                    type="button"
+                    onClick={() => setTab(def.id)}
+                    className={[styles.subnavPill, active ? styles.subnavPillActive : ""].filter(Boolean).join(" ")}
+                    aria-pressed={active}
+                  >
+                    {def.label}
+                  </button>
+                );
+              })}
+            </aside>
+          ) : null}
 
           <section className={styles.settingsContent}>
             {tab === "llmApi" ? (
               <LlmApiPanel value={llmSettings} onChange={setLlmSettings} />
             ) : null}
+
+            {tab === "users" ? <AdminUsersPanel /> : null}
 
             {tab === "imagePrompts" ? (
               <ImagePromptsPanel
