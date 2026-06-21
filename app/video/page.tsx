@@ -10,6 +10,7 @@ import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog, type ProjectAssetMediaKind } from "@/components/project-assets/ProjectAssetPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
@@ -849,6 +850,7 @@ export default function VideoPage() {
         </div>
         <div className={shellStyles.topnav}>
           <ApiUsageModeSwitch module="video" />
+          <TopbarAccountActions />
         </div>
       </header> : null}
 
@@ -864,25 +866,30 @@ export default function VideoPage() {
                       {presetRailItems.length === 0 ? (
                         <div className={styles.emptyRail}>暂无预设</div>
                       ) : (
-                        presetRailItems.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => setSelectedPresetId(preset.id)}
-                            className={[styles.modeItem, selectedPresetId === preset.id ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
-                            aria-label={preset.label}
-                          >
-                            {preset.coverUrl ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
-                                <span className={styles.modeMeta}>{preset.label}</span>
-                              </>
-                            ) : (
-                              <span className={styles.modeCoverFallback}>{preset.label}</span>
-                            )}
-                          </button>
-                        ))
+                        presetRailItems.map((preset) => {
+                          const active = selectedPresetId === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => setSelectedPresetId(preset.id)}
+                              className={[styles.modeItem, active ? styles.modeItemActive : ""].filter(Boolean).join(" ")}
+                              aria-label={preset.label}
+                            >
+                              {preset.coverUrl ? (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={preset.coverUrl} alt="" className={styles.modeCoverImage} />
+                                  <span className={[styles.modeMeta, active ? styles.modeMetaActive : ""].filter(Boolean).join(" ")}>
+                                    {preset.label}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className={styles.modeCoverFallback}>{preset.label}</span>
+                              )}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   </div>

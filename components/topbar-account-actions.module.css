@@ -1,0 +1,15 @@
+.accountActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--otato-topbar-button-gap, 12px);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+@media (max-width: 920px) {
+  .accountActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

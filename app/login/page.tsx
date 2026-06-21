@@ -10,6 +10,7 @@ import {
   signUpWithPassword,
   type AuthFormState,
 } from "@/app/login/actions";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { BRAND_NAME } from "@/lib/branding";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "../shared/shell.module.css";
@@ -142,6 +143,7 @@ function LoginInner() {
           <Link href="/" className={shellStyles.navLink}>
             首页
           </Link>
+          <TopbarAccountActions />
         </nav>
       </header>
 

@@ -2537,6 +2537,15 @@
     flex-wrap: wrap;
   }
 
+  .topbarLeft,
+  .topnav {
+    flex-wrap: wrap;
+  }
+
+  .topnav {
+    justify-content: flex-start;
+  }
+
   .heroWrap {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto;

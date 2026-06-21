@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import styles from "./home-page.module.css";
 
 const GITHUB_URL = "https://github.com/susu177990-rgb/otato.art";
@@ -72,6 +73,7 @@ function HomeContent() {
             <Link className={[styles.btn, styles.primary].join(" ")} href="/projects">
               进入工作台
             </Link>
+            <TopbarAccountActions linkClassName={styles.btn} />
           </div>
         </div>
       </header>

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { updateRecoveredPassword } from "@/app/reset-password/actions";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { BRAND_NAME } from "@/lib/branding";
 import shellStyles from "../shared/shell.module.css";
 import loginStyles from "../login/login-page.module.css";
@@ -29,6 +30,9 @@ export default function ResetPasswordPage() {
             <span className={shellStyles.brandWordmark}>oTATo Art</span>
           </Link>
         </div>
+        <nav className={shellStyles.topnav}>
+          <TopbarAccountActions />
+        </nav>
       </header>
 
       <div className={loginStyles.authBody}>

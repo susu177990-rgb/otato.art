@@ -66,55 +66,78 @@
   position: sticky;
   top: 0;
   z-index: 60;
-  border-bottom: 1px solid rgba(23, 23, 23, 0.14);
-  background: rgba(250, 247, 239, 0.82);
-  backdrop-filter: blur(18px);
+  padding: var(--otato-floating-bar-margin-top, 12px) var(--otato-floating-bar-margin-x, 18px) 0;
+  pointer-events: none;
 }
 
 .nav {
-  height: 76px;
+  width: min(var(--max), 100%);
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 22px;
+  gap: 18px;
+  padding: 10px 14px;
+  border: 3px solid var(--otato-line, var(--line));
+  border-radius: var(--otato-floating-bar-radius, 24px);
+  background: rgba(250, 247, 239, 0.92);
+  box-shadow: var(--otato-shadow-sm, 3px 3px 0 var(--line));
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  font-weight: 950;
-  font-size: 21px;
-  letter-spacing: -0.045em;
+  gap: 10px;
+  min-width: 0;
+  color: var(--otato-text, var(--ink));
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
 .brand img {
-  width: 43px;
-  height: 43px;
+  width: 42px;
+  height: 42px;
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 0 0 2px var(--line);
+  box-shadow: 0 0 0 1.5px var(--otato-line, var(--line));
 }
 
 .navLinks {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: #3d362e;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--otato-text, var(--ink));
   font-size: 14px;
-  font-weight: 760;
+  font-weight: 900;
 }
 
 .navLinks a {
-  padding: 10px 12px;
-  border-radius: 999px;
-  transition: background 0.18s ease, transform 0.18s ease;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--otato-topbar-control-height, 42px);
+  padding: 0 16px;
+  border: 3px solid var(--otato-line, var(--line));
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, #ffffff);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  line-height: 1;
+  white-space: nowrap;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .navLinks a:hover {
-  background: rgba(23, 23, 23, 0.07);
-  transform: translateY(-1px);
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .navActions,
@@ -128,30 +151,38 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
-  padding: 0 18px;
+  min-height: var(--otato-topbar-control-height, 42px);
+  padding: 0 22px;
   gap: 8px;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
+  border: 3px solid var(--otato-line, var(--line));
+  border-radius: var(--otato-control-radius, 15px);
+  background: var(--otato-surface-strong, var(--card));
   font-weight: 900;
-  box-shadow: 3px 3px 0 var(--line);
+  line-height: 1;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
   white-space: nowrap;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
 }
 
 .btn:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--line);
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
 }
 
 .btn:active {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 var(--line);
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  background: var(--otato-yellow, #ffd86b);
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
 }
 
 .btn.primary {
-  background: var(--ink);
+  background: var(--otato-action, var(--red));
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #ff6b5d;
   color: #fff;
 }
 
@@ -161,9 +192,8 @@
 }
 
 .btn.ghost {
-  box-shadow: none;
-  background: rgba(255, 255, 255, 0.48);
-  border-color: rgba(23, 23, 23, 0.28);
+  background: var(--otato-surface-strong, #ffffff);
+  border-color: var(--otato-line, var(--line));
 }
 
 .hero {
@@ -1370,6 +1400,10 @@
   }
 
   .navActions .ghost {
+    display: none;
+  }
+
+  .navActions > .primary {
     display: none;
   }
 

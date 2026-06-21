@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import { ApiUsageModeSwitchAll } from "@/components/ApiUsageModeSwitch";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createPortal } from "react-dom";
@@ -41,6 +42,7 @@ import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { useProjectCanvasRouteOptions } from "@/components/project-canvas/project-canvas-route-context";
 import type { AssetMentionCandidate, AssetMentionRole } from "@/lib/asset-mentions";
 import type { ChatConversation, ChatMessage } from "@/lib/chat/types";
+import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import type {
@@ -2027,7 +2029,10 @@ export default function CanvasBoardPage() {
   if (loading) return <main className={shellStyles.page}><div className={shellStyles.empty}>正在加载画布...</div></main>;
   if (loadError) return (
     <main className={shellStyles.page}>
-      <header className={shellStyles.topbar}><div className={shellStyles.topbarLeft}><Link href={backHref} className={shellStyles.navLink}>{backLabel}</Link></div></header>
+      <header className={shellStyles.topbar}>
+        <div className={shellStyles.topbarLeft}><Link href={backHref} className={shellStyles.navLink}>{backLabel}</Link></div>
+        <nav className={shellStyles.topnav}><TopbarAccountActions /></nav>
+      </header>
       <div className={shellStyles.empty}>{loadError}</div>
     </main>
   );
@@ -2054,6 +2059,7 @@ export default function CanvasBoardPage() {
         </div>
         <nav className={shellStyles.topnav}>
           <ApiUsageModeSwitchAll />
+          <TopbarAccountActions />
         </nav>
       </header> : null}
 
@@ -2494,6 +2500,7 @@ export default function CanvasBoardPage() {
                           onKeyDown={(e) => {
                             e.stopPropagation();
                             if (e.key === "Enter" && !e.shiftKey) {
+                              if (isImeCompositionKeyEvent(e)) return;
                               e.preventDefault();
                               void runTextChatNode(node.id);
                             }

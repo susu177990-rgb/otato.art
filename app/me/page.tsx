@@ -137,18 +137,13 @@ export default function MePage() {
   return (
     <main className={[shellStyles.page, styles.mePage].join(" ")}>
       <header className={[shellStyles.topbar, styles.meTopbar].join(" ")}>
-        <div className={shellStyles.topbarLeft}>
+        <div className={[shellStyles.topbarLeft, styles.meTopbarLeft].join(" ")}>
           <div className={shellStyles.topbarTagline}>
             <Link href="/projects" className={shellStyles.navLink}>
               返回项目
             </Link>
           </div>
         </div>
-        <nav className={shellStyles.topnav}>
-          <Link href="/me" className={[shellStyles.navLink, shellStyles.navLinkActive].join(" ")}>
-            我的
-          </Link>
-        </nav>
       </header>
 
       <div className={[shellStyles.body, shellStyles.bodyTight].join(" ")}>

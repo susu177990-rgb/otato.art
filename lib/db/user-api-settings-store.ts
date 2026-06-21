@@ -12,6 +12,7 @@ import { mergeImageSettings, type GptImageQuality, type ImageModelId, type Image
 import { normalizeLlmSettings } from "@/lib/llm-models";
 import type { Settings, LlmModelConfig } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import { maybeCreateSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mergeVideoSettings, VIDEO_MODEL_ORDER, type VideoModelId, type VideoModelSettings } from "@/lib/video-workspace";
 
 type UserApiSettingsRow = {
@@ -409,6 +410,21 @@ async function getUserApiSettingsRow(supabase: SupabaseClient, userId: string): 
   return data as UserApiSettingsRow | null;
 }
 
+async function isPublicApiBlocked(userId: string): Promise<boolean> {
+  const admin = maybeCreateSupabaseAdminClient();
+  if (!admin) return false;
+  const { data, error } = await admin
+    .from("user_admin_profiles")
+    .select("public_api_blocked")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    if (/user_admin_profiles|Could not find the table|schema cache/i.test(error.message)) return false;
+    throw error;
+  }
+  return Boolean((data as { public_api_blocked?: unknown } | null)?.public_api_blocked);
+}
+
 export async function getUserWorkspaceSnapshot(
   supabase: SupabaseClient,
   userId: string,
@@ -416,29 +432,40 @@ export async function getUserWorkspaceSnapshot(
 ): Promise<WorkspaceSnapshot> {
   const siteSnapshot = await getWorkspaceSnapshot(supabase);
   const row = await getUserApiSettingsRow(supabase, userId);
-  if (!row) return options.visibility === "server" ? siteSnapshot : userWorkspaceDefaultsForClient(siteSnapshot);
+  const publicApiBlocked = await isPublicApiBlocked(userId);
+  if (!row && !publicApiBlocked) return options.visibility === "server" ? siteSnapshot : userWorkspaceDefaultsForClient(siteSnapshot);
+  if (!row && publicApiBlocked) {
+    return {
+      ...userWorkspaceDefaultsForClient(siteSnapshot),
+      apiUsageMode: { llm: "user", image: "user", video: "user" },
+      publicApiAccess: { blocked: true },
+    };
+  }
 
-  const apiUsageMode = normalizeApiUsageMode(row.api_usage_mode);
-  const publicApiAccess = normalizePublicApiAccess(row.public_api_access);
+  const settingsRow = row ?? {};
+  const apiUsageMode = publicApiBlocked
+    ? { llm: "user" as const, image: "user" as const, video: "user" as const }
+    : normalizeApiUsageMode(settingsRow.api_usage_mode);
+  const publicApiAccess = normalizePublicApiAccess(settingsRow.public_api_access);
   const clientDefaults = options.visibility === "server" ? null : userWorkspaceDefaultsForClient(siteSnapshot);
   const llm = apiUsageMode.llm === "user"
     ? options.visibility === "server"
-      ? userLlmWithSecrets(row.llm, siteSnapshot.llm)
-      : userLlmForClient(row.llm, siteSnapshot.llm)
+      ? userLlmWithSecrets(settingsRow.llm, siteSnapshot.llm)
+      : userLlmForClient(settingsRow.llm, siteSnapshot.llm)
     : options.visibility === "server"
       ? siteSnapshot.llm
-      : clientSiteLlmWithUserKeys(row.llm, siteSnapshot.llm);
+      : clientSiteLlmWithUserKeys(settingsRow.llm, siteSnapshot.llm);
   const imageModels =
-    options.visibility === "server" ? decryptImageModels(row.image_models) : clientImageModels(row.image_models);
+    options.visibility === "server" ? decryptImageModels(settingsRow.image_models) : clientImageModels(settingsRow.image_models);
   const videoModels =
-    options.visibility === "server" ? decryptVideoModels(row.video_models) : clientVideoModels(row.video_models);
+    options.visibility === "server" ? decryptVideoModels(settingsRow.video_models) : clientVideoModels(settingsRow.video_models);
 
   return {
     llm,
     imageWorkspace: apiUsageMode.image === "user" || options.visibility === "client"
       ? mergeImageSettings({
           ...siteSnapshot.imageWorkspace,
-          ...imagePreferences(row.image_models),
+          ...imagePreferences(settingsRow.image_models),
           models: {
             ...(options.visibility === "server"
               ? siteSnapshot.imageWorkspace.models
@@ -452,7 +479,7 @@ export async function getUserWorkspaceSnapshot(
     videoWorkspace: apiUsageMode.video === "user" || options.visibility === "client"
       ? mergeVideoSettings({
           ...siteSnapshot.videoWorkspace,
-          ...videoPreferences(row.video_models),
+          ...videoPreferences(settingsRow.video_models),
           models: {
             ...(options.visibility === "server"
               ? siteSnapshot.videoWorkspace.models
@@ -464,7 +491,7 @@ export async function getUserWorkspaceSnapshot(
         ? siteSnapshot.videoWorkspace
         : clientDefaults?.videoWorkspace ?? userWorkspaceDefaultsForClient(siteSnapshot).videoWorkspace,
     apiUsageMode,
-    publicApiAccess,
+    publicApiAccess: publicApiBlocked ? { ...publicApiAccess, blocked: true } : publicApiAccess,
   };
 }
 
@@ -487,7 +514,9 @@ export async function upsertUserApiSettings(
   const videoModels = snapshot.videoWorkspace === undefined
     ? existing?.video_models ?? {}
     : sanitizeVideoSettingsForStorage(mergeVideoSettings(snapshot.videoWorkspace), existing?.video_models);
-  const apiUsageMode = normalizeApiUsageMode(snapshot.apiUsageMode ?? existing?.api_usage_mode);
+  const apiUsageMode = (await isPublicApiBlocked(userId))
+    ? { llm: "user" as const, image: "user" as const, video: "user" as const }
+    : normalizeApiUsageMode(snapshot.apiUsageMode ?? existing?.api_usage_mode);
   const publicApiAccess = normalizePublicApiAccess(snapshot.publicApiAccess ?? existing?.public_api_access);
 
   const { error } = await supabase.from("user_api_settings").upsert(

@@ -28,7 +28,8 @@
 .mode,
 .modeActive,
 .presetButton,
-.assetButton {
+.assetButton,
+.accountLink {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -96,7 +97,8 @@
 .mode,
 .modeActive,
 .presetButton,
-.assetButton {
+.assetButton,
+.accountLink {
   height: var(--otato-topbar-inner-height, 30px);
   min-height: var(--otato-topbar-inner-height, 30px);
   padding: 0 22px;
@@ -110,7 +112,8 @@
 }
 
 .presetButton,
-.assetButton {
+.assetButton,
+.accountLink {
   height: var(--otato-topbar-control-height, 42px);
   min-height: var(--otato-topbar-control-height, 42px);
   background: #ffffff;
@@ -132,7 +135,8 @@
 .backLink:hover,
 .projectName:hover:not(:disabled),
 .presetButton:hover:not(:disabled),
-.assetButton:hover:not(:disabled) {
+.assetButton:hover:not(:disabled),
+.accountLink:hover {
   background: var(--otato-yellow-soft, #fff1a8);
   color: #050505;
   transform: var(--otato-control-hover-transform, translate(-1px, -1px));
@@ -144,7 +148,8 @@
 .backLink:active,
 .projectName:active:not(:disabled),
 .presetButton:active:not(:disabled),
-.assetButton:active:not(:disabled) {
+.assetButton:active:not(:disabled),
+.accountLink:active {
   background: var(--otato-yellow, #ffd86b);
   transform: var(--otato-control-press-transform, translate(2px, 2px));
   box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);

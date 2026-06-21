@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { ChatAttachment } from "@/lib/chat/types";
 import type { ChatMode } from "@/lib/chat/types";
 import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } from "@/lib/image-workspace";
+import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import type { Settings } from "@/lib/types";
 import imageStyles from "@/app/image/image-page.module.css";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
@@ -177,6 +178,7 @@ export function ChatComposer({
             onChange={(e) => onInputTextChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
+                if (isImeCompositionKeyEvent(e)) return;
                 e.preventDefault();
                 if (!isSending && canSend) void onSend();
               }

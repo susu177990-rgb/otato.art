@@ -13,6 +13,7 @@ import type {
   SourceMaterial,
 } from "@/lib/types";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import PlanningChatPanel from "@/components/PlanningChatPanel";
 import { buildAdaptationDiscussBootstrap, buildPlanningBootstrap } from "@/lib/planning-bootstrap";
 import {
@@ -836,6 +837,7 @@ export default function OnboardingPage({
             {serverMode === "adaptation" && originTab === "original" ? (
               <span className={styles.adaptHint}>（已存为改编）</span>
             ) : null}
+            <TopbarAccountActions />
           </nav>
         </header>
       ) : null}

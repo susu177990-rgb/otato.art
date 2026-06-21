@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { useProjectWorkspace } from "./ProjectProvider";
 import { PROJECT_MODES, projectModeFromPathname, projectModeHref } from "./project-routes";
 import styles from "./project-mode-bar.module.css";
@@ -63,6 +64,7 @@ export function ProjectModeBar({ onOpenAssets, onOpenPresets }: ProjectModeBarPr
         >
           素材 / 画廊
         </button>
+        <TopbarAccountActions linkClassName={styles.accountLink} />
       </div>
     </header>
   );

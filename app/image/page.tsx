@@ -25,6 +25,7 @@ import {
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog } from "@/components/project-assets/ProjectAssetPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
@@ -1107,6 +1108,7 @@ export default function ImagePage() {
         </div>
         <div className={shellStyles.topnav}>
           <ApiUsageModeSwitch module="image" />
+          <TopbarAccountActions />
         </div>
       </header> : null}
 
@@ -1145,7 +1147,9 @@ export default function ImagePage() {
                                 <>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={coverUrl} alt="" className={styles.modeCoverImage} />
-                                  <span className={styles.modeMeta}>{mode.label}</span>
+                                  <span className={[styles.modeMeta, active ? styles.modeMetaActive : ""].filter(Boolean).join(" ")}>
+                                    {mode.label}
+                                  </span>
                                 </>
                               ) : (
                                 <span className={styles.modeCoverFallback}>{mode.label}</span>

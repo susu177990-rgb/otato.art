@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useProjectWorkspace } from "@/components/project/ProjectProvider";
 import { projectModeHref } from "@/components/project/project-routes";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import type { ProjectSummary } from "@/lib/types";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./projects-page.module.css";
@@ -204,24 +205,12 @@ function ProjectsHubInner() {
         </nav>
 
         <div className={styles.projectTopbarActions}>
-          {loaded ? (
-            <>
-              {needsLogin ? (
-                <Link href="/login?next=/projects" className={styles.projectTopbarAction}>
-                  登录 / 注册
-                </Link>
-              ) : (
-                <>
-                  <Link href="/settings" className={styles.projectTopbarAction}>
-                    API 设置
-                  </Link>
-                  <Link href="/me" className={styles.projectTopbarAction}>
-                    我的
-                  </Link>
-                </>
-              )}
-            </>
+          {loaded && needsLogin ? (
+            <Link href="/login?next=/projects" className={styles.projectTopbarAction}>
+              登录 / 注册
+            </Link>
           ) : null}
+          <TopbarAccountActions linkClassName={styles.projectTopbarAction} />
         </div>
       </header>
 

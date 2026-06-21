@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { PromptPresetKind, SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { PromptPresetCard } from "@/components/prompt-presets/PromptPresetCard";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { fetchAllSitePromptPresets, setSitePromptPresetFavorite, submitPromptPresetContribution } from "@/lib/prompt-preset-api-client";
 import {
   PROMPT_TAG_GROUPS,
@@ -240,6 +241,7 @@ function PromptPageInner() {
           <button type="button" className={styles.promptTopbarAction} onClick={() => setUploadOpen(true)}>
             投稿提示词
           </button>
+          <TopbarAccountActions linkClassName={styles.promptTopbarAction} />
         </div>
       </header>
 

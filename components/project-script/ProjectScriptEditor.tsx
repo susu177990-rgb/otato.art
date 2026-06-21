@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import type {
   Message,
   Project,
@@ -1012,6 +1013,9 @@ function ProjectScriptEditorInner() {
               返回项目页
             </Link>
           </div>
+          <nav className={shellStyles.topnav}>
+            <TopbarAccountActions />
+          </nav>
         </header>
         <div className={shellStyles.empty}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
@@ -1155,6 +1159,7 @@ function ProjectScriptEditorInner() {
           >
             {exportingZip ? "打包中…" : "下载"}
           </button>
+          <TopbarAccountActions />
         </nav>
       </header>
 

@@ -2201,6 +2201,11 @@
 .modeItemActive .modeMeta,
 .modeItemActive .modeLabel {
   border-color: #050505;
-  background: #ffffff !important;
-  color: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
+}
+
+.modeMetaActive {
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
 }
