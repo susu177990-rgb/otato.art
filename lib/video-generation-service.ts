@@ -4,7 +4,9 @@ import { persistGeneratedVideoToStorage } from "@/lib/db/persist-generated-video
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import {
   getVideoCapabilities,
+  getVideoParameterCapabilities,
   getVideoModelDefinition,
+  isVideoDurationSupported,
   type UnifiedVideoGenerateRequest,
   type UnifiedVideoReference,
   type VideoModelId,
@@ -58,12 +60,57 @@ function assertConfiguredModel(model: VideoModelSettings, modelId: VideoModelId)
   if (!model.enabled) {
     throw new VideoGenerationError("model_not_configured", `模型「${model.label || modelId}」当前未启用。`);
   }
-  if (!model.baseUrl.trim() || !model.apiKey.trim() || !model.apiModelName.trim()) {
+  const apiModelNameRequired = !isAutoDispatchedVideoModel(modelId);
+  if (!model.baseUrl.trim() || !model.apiKey.trim() || (apiModelNameRequired && !model.apiModelName.trim())) {
     throw new VideoGenerationError(
       "model_not_configured",
-      `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key / API Model Name。`,
+      apiModelNameRequired
+        ? `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key / API Model Name。`
+        : `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key。`,
     );
   }
+}
+
+function resolveAutoDispatchedVideoModelSettings(
+  models: WorkspaceSnapshot["videoWorkspace"]["models"],
+  modelId: VideoModelId,
+): VideoModelSettings {
+  const model = models[modelId];
+  if (!isAutoDispatchedVideoModel(modelId) || (model.baseUrl.trim() && model.apiKey.trim())) return model;
+
+  const source = Object.values(models).find((candidate) =>
+    isAutoDispatchedVideoModel(candidate.id) &&
+    candidate.baseUrl.trim() &&
+    candidate.apiKey.trim() &&
+    /evolink\.ai/i.test(candidate.baseUrl),
+  ) ?? Object.values(models).find((candidate) =>
+    isAutoDispatchedVideoModel(candidate.id) &&
+    candidate.baseUrl.trim() &&
+    candidate.apiKey.trim(),
+  );
+
+  if (!source) return model;
+
+  return {
+    ...model,
+    baseUrl: model.baseUrl.trim() || source.baseUrl,
+    apiKey: model.apiKey.trim() || source.apiKey,
+    apiModelName: "",
+    providerOptions: {
+      ...source.providerOptions,
+      ...model.providerOptions,
+      submitPath: typeof model.providerOptions.submitPath === "string" && model.providerOptions.submitPath.trim()
+        ? model.providerOptions.submitPath
+        : typeof source.providerOptions.submitPath === "string" && source.providerOptions.submitPath.trim()
+          ? source.providerOptions.submitPath
+          : "/v1/videos/generations",
+      statusPath: typeof model.providerOptions.statusPath === "string" && model.providerOptions.statusPath.trim()
+        ? model.providerOptions.statusPath
+        : typeof source.providerOptions.statusPath === "string" && source.providerOptions.statusPath.trim()
+          ? source.providerOptions.statusPath
+          : "/v1/tasks/{taskId}",
+    },
+  };
 }
 
 function dedupeReferences(references: UnifiedVideoReference[]): UnifiedVideoReference[] {
@@ -88,13 +135,23 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
   if (!request.prompt.trim()) {
     throw new VideoGenerationError("invalid_mode", "提示词不能为空。");
   }
-  if (!capabilities.durations.includes(request.durationSeconds)) {
+  if (request.grokImagineMode && request.grokImagineMode !== "normal" && request.grokImagineMode !== "fun" && request.grokImagineMode !== "spicy") {
+    throw new VideoGenerationError("invalid_mode", "Grok Imagine 风格只支持 normal / fun / spicy。");
+  }
+  const parameterCapabilities = getVideoParameterCapabilities(request.modelId, request.modeId, request.references);
+  if (parameterCapabilities.supportsDuration && parameterCapabilities.durationCapability && !isVideoDurationSupported(request.durationSeconds, parameterCapabilities.durationCapability)) {
     throw new VideoGenerationError("invalid_mode", `当前模型不支持 ${request.durationSeconds}s 时长。`);
   }
-  if (request.aspectRatio && !capabilities.aspectRatios.includes(request.aspectRatio)) {
+  if (!parameterCapabilities.supportsDuration && Number.isFinite(request.durationSeconds) && request.durationSeconds > 0 && request.modeId !== "video_edit" && request.modeId !== "motion_control") {
+    throw new VideoGenerationError("invalid_mode", "当前模式不支持设置时长。");
+  }
+  if (parameterCapabilities.supportsAspectRatio && request.aspectRatio && !parameterCapabilities.aspectRatios.includes(request.aspectRatio)) {
     throw new VideoGenerationError("invalid_mode", `当前模型不支持 ${request.aspectRatio} 比例。`);
   }
-  if (request.resolution && !capabilities.resolutions.includes(request.resolution)) {
+  if (!parameterCapabilities.supportsAspectRatio && request.aspectRatio) {
+    throw new VideoGenerationError("invalid_mode", "当前模式不支持设置比例。");
+  }
+  if (request.resolution && !parameterCapabilities.resolutions.includes(request.resolution)) {
     throw new VideoGenerationError("invalid_mode", `当前模型不支持 ${request.resolution} 分辨率。`);
   }
 
@@ -108,6 +165,13 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
 
   if (startFrameCount > 1 || endFrameCount > 1 || motionSourceCount > 1) {
     throw new VideoGenerationError("invalid_mode", "首帧、尾帧或动作参考视频只能各提供一个。");
+  }
+
+  if (request.modeId === "multi_image_reference" && isHappyHorseFamily(request.modelId) && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
+    throw new VideoGenerationError("invalid_mode", "HappyHorse 全能参考模式只支持 1~9 张图片参考，不支持视频或音频参考。");
+  }
+  if (request.modeId === "multi_image_reference" && isVeo31Family(request.modelId) && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
+    throw new VideoGenerationError("invalid_mode", "Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
   }
 
   if (imageRefCount > capabilities.maxImageReferences) {
@@ -156,15 +220,23 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
         throw new VideoGenerationError("invalid_mode", "全能参考模式需要至少 1 个图片、视频或音频参考素材，且不接收动作控制视频。");
       }
       break;
+    case "video_edit":
+      if (!capabilities.supportedModes.includes("video_edit")) {
+        throw new VideoGenerationError("unsupported_capability", "当前模型不支持视频编辑模式。");
+      }
+      if (videoRefCount !== 1 || startFrameCount !== 0 || endFrameCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
+        throw new VideoGenerationError("invalid_mode", "视频编辑模式需要且只需要 1 个原视频素材，可附加参考图。");
+      }
+      if (request.modelId === "happyhorse-1.0" && imageRefCount > 5) {
+        throw new VideoGenerationError("unsupported_capability", "HappyHorse 1.0 视频编辑最多支持 5 张参考图。");
+      }
+      break;
     case "motion_control":
       if (!capabilities.supportsMotionControl) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持动作控制模式。");
+        throw new VideoGenerationError("unsupported_capability", "当前模型不支持动作迁移模式。");
       }
-      if (motionSourceCount !== 1 || endFrameCount !== 0 || imageRefCount > 0 || videoRefCount > 0 || audioRefCount > 0) {
-        throw new VideoGenerationError("invalid_mode", "动作控制模式需要 1 个动作参考视频，可选 1 张首帧图。");
-      }
-      if (startFrameCount > 1) {
-        throw new VideoGenerationError("invalid_mode", "动作控制模式最多只支持 1 张首帧图。");
+      if (motionSourceCount !== 1 || startFrameCount !== 1 || endFrameCount !== 0 || imageRefCount > 0 || videoRefCount > 0 || audioRefCount > 0) {
+        throw new VideoGenerationError("invalid_mode", "动作迁移模式需要且只需要 1 张主体参考图和 1 个动作参考视频。");
       }
       break;
     default:
@@ -184,16 +256,131 @@ function buildUrl(baseUrl: string, path: string): string {
   return `${trimmedBase}${normalizedPath}`;
 }
 
-function defaultStatusPath(modelId: VideoModelId, options: VideoProviderOptions): string {
-  if (typeof options.statusPath === "string" && options.statusPath.trim()) return options.statusPath.trim();
-  if (modelId === "seedance-1.5") return "/status";
-  return "/status";
+function isAutoDispatchedVideoModel(modelId: VideoModelId): boolean {
+  return modelId === "seedance-2.0" ||
+    modelId === "seedance-2.0-fast" ||
+    modelId === "seedance-1.5-pro" ||
+    modelId === "doubao-seedance-1.0-pro-fast" ||
+    modelId === "kling-3.0" ||
+    modelId === "kling-2.6-motion" ||
+    modelId === "happyhorse-1.1" ||
+    modelId === "happyhorse-1.0" ||
+    modelId === "grok-imagine" ||
+    modelId === "veo-3.1" ||
+    modelId === "veo-3.1-fast";
+}
+
+function isSeedance20Family(modelId: VideoModelId): boolean {
+  return modelId === "seedance-2.0" || modelId === "seedance-2.0-fast";
+}
+
+function isHappyHorseFamily(modelId: VideoModelId): boolean {
+  return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
+}
+
+function isGrokImagine(modelId: VideoModelId): boolean {
+  return modelId === "grok-imagine";
+}
+
+function isVeo31Family(modelId: VideoModelId): boolean {
+  return modelId === "veo-3.1" || modelId === "veo-3.1-fast";
+}
+
+function resolveSeedanceGenerationMode(
+  modeId: UnifiedVideoGenerateRequest["modeId"],
+): "text_to_video" | "image_to_video" | "reference_to_video" {
+  switch (modeId) {
+    case "text_to_video":
+      return "text_to_video";
+    case "start_frame":
+    case "start_end_frame":
+      return "image_to_video";
+    default:
+      return "reference_to_video";
+  }
+}
+
+function resolveSeedanceApiModel(
+  requestedModel: string,
+  modelId: VideoModelId,
+  generationMode: "text_to_video" | "image_to_video" | "reference_to_video",
+): string {
+  const suffix =
+    generationMode === "image_to_video" ? "image-to-video" : generationMode === "reference_to_video" ? "reference-to-video" : "text-to-video";
+  const trimmedModel = requestedModel.trim();
+  if (modelId === "seedance-1.5-pro" || modelId === "doubao-seedance-1.0-pro-fast") return modelId;
+  if (!trimmedModel) {
+    return modelId === "seedance-2.0-fast"
+      ? `seedance-2.0-fast-${suffix}`
+      : `seedance-2.0-${suffix}`;
+  }
+
+  if (/^seedance-2\.0-(?:fast-|mini-|)(?:text|image|reference)-to-video$/.test(trimmedModel)) {
+    if (modelId === "seedance-2.0-fast") return `seedance-2.0-fast-${suffix}`;
+    if (trimmedModel.includes("mini-")) return `seedance-2.0-mini-${suffix}`;
+    return `seedance-2.0-${suffix}`;
+  }
+
+  if (trimmedModel === "seedance-2.0" || trimmedModel === "seedance-2.0-fast") {
+    return modelId === "seedance-2.0-fast"
+      ? `seedance-2.0-fast-${suffix}`
+      : `seedance-2.0-${suffix}`;
+  }
+
+  return trimmedModel;
+}
+
+function resolveTaskStatusUrl(baseUrl: string, modelSettings: VideoModelSettings, providerTaskId: string): string {
+  const rawStatusPath =
+    typeof modelSettings.providerOptions.statusPath === "string" && modelSettings.providerOptions.statusPath.trim()
+      ? modelSettings.providerOptions.statusPath.trim()
+      : "/v1/tasks/{taskId}";
+  const taskIdToken = encodeURIComponent(providerTaskId);
+  if (rawStatusPath.includes("{taskId}") || rawStatusPath.includes("{task_id}") || rawStatusPath.includes("{id}")) {
+    return buildUrl(
+      baseUrl,
+      rawStatusPath
+        .replace("{taskId}", taskIdToken)
+        .replace("{task_id}", taskIdToken)
+        .replace("{id}", taskIdToken),
+    );
+  }
+  if (rawStatusPath.includes("?") && !rawStatusPath.includes("task_id=") && !rawStatusPath.includes("taskId=")) {
+    return `${buildUrl(baseUrl, rawStatusPath)}&task_id=${taskIdToken}`;
+  }
+  if (rawStatusPath.includes("?")) {
+    return buildUrl(baseUrl, rawStatusPath);
+  }
+  return `${buildUrl(baseUrl, rawStatusPath)}/${taskIdToken}`;
+}
+
+function readBooleanOption(options: VideoProviderOptions, key: string): boolean | undefined {
+  const value = options[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function soundEnabledWithDefault(request: UnifiedVideoGenerateRequest, defaultEnabled: boolean): boolean {
+  return typeof request.soundEnabled === "boolean" ? request.soundEnabled : defaultEnabled;
+}
+
+function extractCompletedTaskVideoUrl(data: Record<string, unknown>): string {
+  if (typeof data.results === "string") return String(data.results).trim();
+  if (Array.isArray(data.results) && data.results.length > 0) {
+    const head = data.results[0];
+    if (typeof head === "string") return head.trim();
+    if (head && typeof head === "object" && "url" in head && typeof head.url === "string") return head.url.trim();
+  }
+  if (typeof data.video_url === "string") return data.video_url.trim();
+  if (typeof data.url === "string") return data.url.trim();
+  if (typeof data.result_url === "string") return data.result_url.trim();
+  if (Array.isArray(data.response) && typeof data.response[0] === "string") return String(data.response[0]).trim();
+  return "";
 }
 
 async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
   const { modelId, modelSettings, request } = ctx;
-  const isV15 = modelId === "seedance-1.5";
   const startFrame = request.references.find((item) => item.role === "start_frame");
+  const endFrame = request.references.find((item) => item.role === "end_frame");
   const imageReferences = request.references
     .filter((item) => item.role === "image_reference")
     .map((item) => item.url);
@@ -203,29 +390,43 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
   const audioReferences = request.references
     .filter((item) => item.role === "audio_reference")
     .map((item) => item.url);
-  const images = startFrame ? [startFrame.url] : imageReferences;
-  const createPayload = isV15
-    ? {
-        prompt: request.prompt,
-        aspect_ratio: request.aspectRatio,
-        resolution: request.resolution ?? "720p",
-        duration: String(request.durationSeconds),
-        generate_audio: Boolean(modelSettings.providerOptions.generateAudio),
-        fixed_lens: Boolean(modelSettings.providerOptions.fixedLens),
-        image_urls: images.length > 0 ? images.slice(0, 1) : undefined,
-      }
-    : {
-        prompt: request.prompt,
-        aspect_ratio: request.aspectRatio,
-        duration: request.durationSeconds,
-        model: modelSettings.apiModelName,
-        images: images.length > 0 ? images : undefined,
-        videos: videoReferences.length > 0 ? videoReferences : undefined,
-        audios: audioReferences.length > 0 ? audioReferences : undefined,
-      };
+  const images = startFrame ? [startFrame.url, ...(endFrame ? [endFrame.url] : [])] : imageReferences;
+  const generationMode = resolveSeedanceGenerationMode(request.modeId);
+  const seedanceModel = resolveSeedanceApiModel(
+    modelSettings.apiModelName,
+    modelId,
+    generationMode,
+  );
+  const legacyGenerateAudio = readBooleanOption(modelSettings.providerOptions, "generateAudio");
+  const generateAudio = modelId === "doubao-seedance-1.0-pro-fast"
+    ? undefined
+    : typeof request.soundEnabled === "boolean"
+      ? request.soundEnabled
+      : typeof legacyGenerateAudio === "boolean"
+        ? legacyGenerateAudio
+        : true;
+  const contentFilter =
+    readBooleanOption(modelSettings.providerOptions, "contentFilter") ??
+    readBooleanOption(modelSettings.providerOptions, "content_filter");
+  const webSearch = readBooleanOption(modelSettings.providerOptions, "webSearch") ?? readBooleanOption(modelSettings.providerOptions, "web_search");
+  const createPayload = {
+    model: seedanceModel,
+    prompt: request.prompt,
+    duration: request.durationSeconds,
+    aspect_ratio: request.aspectRatio,
+    ...(request.resolution ? { quality: request.resolution } : {}),
+    ...(typeof generateAudio === "boolean" ? { generate_audio: generateAudio } : {}),
+    ...(isSeedance20Family(modelId) && typeof contentFilter === "boolean" ? { content_filter: contentFilter } : {}),
+    ...(isSeedance20Family(modelId) && generationMode === "text_to_video" && typeof webSearch === "boolean"
+      ? { model_params: { web_search: webSearch } }
+      : {}),
+    ...(images.length > 0 ? { image_urls: images } : {}),
+    ...(isSeedance20Family(modelId) && videoReferences.length > 0 ? { video_urls: videoReferences } : {}),
+    ...(isSeedance20Family(modelId) && audioReferences.length > 0 ? { audio_urls: audioReferences } : {}),
+  };
   const submitPath = typeof modelSettings.providerOptions.submitPath === "string" && modelSettings.providerOptions.submitPath.trim()
     ? modelSettings.providerOptions.submitPath.trim()
-    : "/generate";
+    : "/v1/videos/generations";
   let submitRes: Response;
   try {
     submitRes = await fetch(buildUrl(modelSettings.baseUrl, submitPath), {
@@ -243,7 +444,8 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
   const submitData = (await submitRes.json().catch(() => ({}))) as {
     message?: string;
     error?: string;
-    data?: { task_id?: string };
+    data?: { task_id?: string; id?: string };
+    id?: string;
   };
   if (!submitRes.ok) {
     throw new VideoGenerationError(
@@ -251,12 +453,17 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
       String(submitData.error || submitData.message || "提交任务失败"),
     );
   }
-  const providerTaskId = String(submitData.data?.task_id ?? "").trim();
+  const providerTaskId = String(
+    submitData.id ??
+      submitData.data?.id ??
+      submitData.data?.task_id ??
+      "",
+  ).trim();
   if (!providerTaskId) {
     throw new VideoGenerationError("provider_submit_failed", "上游未返回任务 ID。");
   }
 
-  const statusPath = defaultStatusPath(modelId, modelSettings.providerOptions);
+  const statusUrl = resolveTaskStatusUrl(modelSettings.baseUrl, modelSettings, providerTaskId);
   const timeoutMs = Number(modelSettings.providerOptions.timeoutMs) || 6 * 60_000;
   const intervalMs = Number(modelSettings.providerOptions.intervalMs) || 1800;
   const startedAt = Date.now();
@@ -266,21 +473,18 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
     }
     let statusRes: Response;
     try {
-      statusRes = await fetch(
-        `${buildUrl(modelSettings.baseUrl, statusPath)}?task_id=${encodeURIComponent(providerTaskId)}`,
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${modelSettings.apiKey}` },
-          cache: "no-store",
-        },
-      );
+      statusRes = await fetch(statusUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${modelSettings.apiKey}` },
+        cache: "no-store",
+      });
     } catch (error) {
       throw new VideoGenerationError("provider_poll_failed", error instanceof Error ? error.message : "查询任务失败");
     }
     const statusData = (await statusRes.json().catch(() => ({}))) as {
       message?: string;
       error?: string;
-      data?: { status?: string; response?: string[]; error_message?: string | null };
+      data?: { status?: string; state?: string; response?: string[]; results?: unknown; error_message?: string | null };
     };
     if (!statusRes.ok) {
       throw new VideoGenerationError(
@@ -288,51 +492,209 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
         String(statusData.error || statusData.message || "查询任务失败"),
       );
     }
-    const status = String(statusData.data?.status ?? "").trim().toUpperCase();
+    const statusContainer = statusData.data && typeof statusData.data === "object" ? statusData.data : statusData;
+    const status = String(
+      (statusContainer as { status?: string; state?: string }).status ??
+        (statusContainer as { status?: string; state?: string }).state ??
+        "",
+    ).trim().toUpperCase();
     if (status === "SUCCESS") {
-      const remoteVideoUrl = String(statusData.data?.response?.[0] ?? "").trim();
+      const remoteVideoUrl = extractCompletedTaskVideoUrl(statusContainer);
       if (!remoteVideoUrl) {
         throw new VideoGenerationError("result_missing", "任务完成但未返回视频地址。");
       }
       return { providerTaskId, remoteVideoUrl };
     }
-    if (status === "FAILED") {
+    if (status === "COMPLETED" || status === "DONE" || status === "SUCCEEDED") {
+      const remoteVideoUrl = extractCompletedTaskVideoUrl(statusContainer);
+      if (!remoteVideoUrl) {
+        throw new VideoGenerationError("result_missing", "任务完成但未返回视频地址。");
+      }
+      return { providerTaskId, remoteVideoUrl };
+    }
+    if (status === "FAILED" || status === "CANCELLED" || status === "CANCELED") {
       throw new VideoGenerationError(
         "provider_poll_failed",
-        String(statusData.data?.error_message ?? "任务失败"),
+        String(
+          (statusContainer as { error_message?: string; error?: string }).error_message ||
+            (statusContainer as { error_message?: string; error?: string }).error ||
+            "任务失败",
+        ),
+      );
+    }
+    if (status === "ERROR") {
+      throw new VideoGenerationError(
+        "provider_poll_failed",
+        String(
+          (statusContainer as { error_message?: string; error?: string }).error_message ||
+            (statusContainer as { error_message?: string; error?: string }).error ||
+            "任务失败",
+        ),
       );
     }
     await wait(intervalMs);
   }
 }
 
+function resolveKlingO3ApiModel(request: UnifiedVideoGenerateRequest): string {
+  if (request.modeId === "video_edit") return "kling-o3-video-edit";
+  if (request.modeId === "multi_image_reference" && request.references.some((item) => item.role === "video_reference")) {
+    return "kling-o3-reference-to-video";
+  }
+  if (request.modeId === "start_frame" || request.modeId === "start_end_frame" || request.references.some((item) => item.role === "image_reference")) {
+    return "kling-o3-image-to-video";
+  }
+  return "kling-o3-text-to-video";
+}
+
 function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
+  if (request.modelId === "kling-2.6-motion" && request.modeId === "motion_control" && !apiModelName.trim()) {
+    const startFrame = request.references.find((item) => item.role === "start_frame");
+    const motionSource = request.references.find((item) => item.role === "motion_source_video");
+    if (!startFrame?.url || !motionSource?.url) {
+      throw new VideoGenerationError("invalid_mode", "动作迁移模式需要 1 张主体参考图和 1 个动作参考视频。");
+    }
+    return {
+      model: "kling-v3-motion-control",
+      ...(request.prompt.trim() ? { prompt: request.prompt } : {}),
+      image_urls: [startFrame.url],
+      video_urls: [motionSource.url],
+      ...(request.resolution ? { quality: request.resolution } : {}),
+      model_params: {
+        character_orientation: "image",
+        keep_sound: soundEnabledWithDefault(request, true),
+      },
+    };
+  }
+
+  if (apiModelName.trim()) {
+    const startFrame = request.references.find((item) => item.role === "start_frame");
+    const endFrame = request.references.find((item) => item.role === "end_frame");
+    const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
+    const videoReferences = request.references.filter((item) => item.role === "video_reference").map((item) => item.url);
+    const audioReferences = request.references.filter((item) => item.role === "audio_reference").map((item) => item.url);
+    const motionSource = request.references.find((item) => item.role === "motion_source_video");
+    return {
+      prompt: request.prompt,
+      model_name: apiModelName,
+      mode: request.modeId,
+      duration: request.durationSeconds,
+      aspect_ratio: request.aspectRatio,
+      resolution: request.resolution,
+      start_frame_url: startFrame?.url,
+      end_frame_url: endFrame?.url,
+      image_reference_urls: imageReferences.length > 0 ? imageReferences : undefined,
+      video_reference_urls: videoReferences.length > 0 ? videoReferences : undefined,
+      audio_reference_urls: audioReferences.length > 0 ? audioReferences : undefined,
+      motion_video_url: motionSource?.url,
+    };
+  }
+
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const endFrame = request.references.find((item) => item.role === "end_frame");
-  const imageReferences = request.references
-    .filter((item) => item.role === "image_reference")
-    .map((item) => item.url);
-  const videoReferences = request.references
-    .filter((item) => item.role === "video_reference")
-    .map((item) => item.url);
-  const audioReferences = request.references
-    .filter((item) => item.role === "audio_reference")
-    .map((item) => item.url);
-  const motionSource = request.references.find((item) => item.role === "motion_source_video");
-  return {
+  const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
+  const videoReference = request.references.find((item) => item.role === "video_reference");
+  const model = resolveKlingO3ApiModel(request);
+  const basePayload = {
+    model,
     prompt: request.prompt,
-    model_name: apiModelName,
-    mode: request.modeId,
+    ...(request.resolution ? { quality: request.resolution } : {}),
+  };
+
+  if (model === "kling-o3-video-edit") {
+    if (!videoReference?.url) throw new VideoGenerationError("invalid_mode", "视频编辑模式需要 1 个原视频素材。");
+    return {
+      ...basePayload,
+      video_url: videoReference.url,
+      keep_original_sound: soundEnabledWithDefault(request, true),
+      ...(imageReferences.length > 0 ? { image_urls: imageReferences } : {}),
+    };
+  }
+
+  if (model === "kling-o3-reference-to-video") {
+    if (!videoReference?.url) throw new VideoGenerationError("invalid_mode", "全能参考视频参考需要 1 个参考视频素材。");
+    return {
+      ...basePayload,
+      duration: request.durationSeconds,
+      aspect_ratio: request.aspectRatio,
+      video_url: videoReference.url,
+      keep_original_sound: soundEnabledWithDefault(request, true),
+      ...(imageReferences.length > 0 ? { image_urls: imageReferences } : {}),
+    };
+  }
+
+  if (model === "kling-o3-image-to-video") {
+    return {
+      ...basePayload,
+      duration: request.durationSeconds,
+      aspect_ratio: request.aspectRatio,
+      sound: soundEnabledWithDefault(request, false) ? "on" : "off",
+      ...(startFrame?.url ? { image_start: startFrame.url } : {}),
+      ...(endFrame?.url ? { image_end: endFrame.url } : {}),
+      ...(!startFrame?.url && imageReferences.length > 0 ? { image_urls: imageReferences } : {}),
+    };
+  }
+
+  return {
+    ...basePayload,
     duration: request.durationSeconds,
     aspect_ratio: request.aspectRatio,
-    resolution: request.resolution,
-    start_frame_url: startFrame?.url,
-    end_frame_url: endFrame?.url,
-    image_reference_urls: imageReferences.length > 0 ? imageReferences : undefined,
-    video_reference_urls: videoReferences.length > 0 ? videoReferences : undefined,
-    audio_reference_urls: audioReferences.length > 0 ? audioReferences : undefined,
-    motion_video_url: motionSource?.url,
+    sound: soundEnabledWithDefault(request, false) ? "on" : "off",
   };
+}
+
+function resolveHappyHorseApiModel(request: UnifiedVideoGenerateRequest, modelId: VideoModelId): string {
+  const version = modelId === "happyhorse-1.0" ? "1.0" : "1.1";
+  switch (request.modeId) {
+    case "start_frame":
+      return `happyhorse-${version}-image-to-video`;
+    case "multi_image_reference":
+      return `happyhorse-${version}-reference-to-video`;
+    case "video_edit":
+      return "happyhorse-1.0-video-edit";
+    default:
+      return `happyhorse-${version}-text-to-video`;
+  }
+}
+
+function buildHappyHorseCreatePayload(request: UnifiedVideoGenerateRequest, modelId: VideoModelId) {
+  const startFrame = request.references.find((item) => item.role === "start_frame");
+  const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
+  const videoReference = request.references.find((item) => item.role === "video_reference");
+  const model = resolveHappyHorseApiModel(request, modelId);
+  if (request.modeId === "multi_image_reference") {
+    return {
+      model,
+      prompt: request.prompt,
+      image_urls: imageReferences.slice(0, 9),
+      ...(request.resolution ? { quality: request.resolution } : {}),
+      aspect_ratio: request.aspectRatio,
+      duration: request.durationSeconds,
+    };
+  }
+  if (request.modeId === "video_edit") {
+    return {
+      model,
+      prompt: request.prompt,
+      video_urls: videoReference ? [videoReference.url] : [],
+      ...(imageReferences.length > 0 ? { image_urls: imageReferences.slice(0, 5) } : {}),
+      ...(request.resolution ? { quality: request.resolution } : {}),
+      keep_original_sound: soundEnabledWithDefault(request, false),
+    };
+  }
+  return {
+    model,
+    prompt: request.prompt,
+    ...(request.resolution ? { quality: request.resolution } : {}),
+    duration: request.durationSeconds,
+    ...(model.endsWith("-image-to-video")
+      ? startFrame?.url ? { image_urls: [startFrame.url] } : {}
+      : { aspect_ratio: request.aspectRatio }),
+  };
+}
+
+async function submitHappyHorse(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
+  return submitEvoLinkVideoTask(ctx, buildHappyHorseCreatePayload(ctx.request, ctx.modelId));
 }
 
 async function submitGenericTaskApi(
@@ -430,39 +792,155 @@ async function submitGenericTaskApi(
   }
 }
 
+async function submitEvoLinkVideoTask(ctx: ProviderSubmitContext, payload: Record<string, unknown>): Promise<ProviderTaskResult> {
+  const { modelSettings } = ctx;
+  const submitPath = typeof modelSettings.providerOptions.submitPath === "string" && modelSettings.providerOptions.submitPath.trim()
+    ? modelSettings.providerOptions.submitPath.trim()
+    : "/v1/videos/generations";
+  let submitRes: Response;
+  try {
+    submitRes = await fetch(buildUrl(modelSettings.baseUrl, submitPath), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${modelSettings.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw new VideoGenerationError("provider_submit_failed", error instanceof Error ? error.message : "提交任务失败");
+  }
+
+  const submitData = (await submitRes.json().catch(() => ({}))) as {
+    message?: string;
+    error?: string;
+    data?: { task_id?: string; id?: string };
+    id?: string;
+    task_id?: string;
+  };
+  if (!submitRes.ok) {
+    throw new VideoGenerationError(
+      "provider_submit_failed",
+      String(submitData.error || submitData.message || "提交任务失败"),
+    );
+  }
+  const providerTaskId = String(
+    submitData.id ??
+      submitData.task_id ??
+      submitData.data?.id ??
+      submitData.data?.task_id ??
+      "",
+  ).trim();
+  if (!providerTaskId) {
+    throw new VideoGenerationError("provider_submit_failed", "上游未返回任务 ID。");
+  }
+
+  const statusUrl = resolveTaskStatusUrl(modelSettings.baseUrl, modelSettings, providerTaskId);
+  const timeoutMs = Number(modelSettings.providerOptions.timeoutMs) || 6 * 60_000;
+  const intervalMs = Number(modelSettings.providerOptions.intervalMs) || 1800;
+  const startedAt = Date.now();
+  for (;;) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new VideoGenerationError("provider_timeout", "任务超时，请稍后重试。");
+    }
+    let statusRes: Response;
+    try {
+      statusRes = await fetch(statusUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${modelSettings.apiKey}` },
+        cache: "no-store",
+      });
+    } catch (error) {
+      throw new VideoGenerationError("provider_poll_failed", error instanceof Error ? error.message : "查询任务失败");
+    }
+    const statusData = (await statusRes.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!statusRes.ok) {
+      throw new VideoGenerationError(
+        "provider_poll_failed",
+        String(statusData.error || statusData.message || "查询任务失败"),
+      );
+    }
+    const statusContainer = statusData.data && typeof statusData.data === "object" ? statusData.data as Record<string, unknown> : statusData;
+    const status = String(statusContainer.status ?? statusContainer.state ?? "").trim().toUpperCase();
+    if (status === "SUCCESS" || status === "COMPLETED" || status === "DONE" || status === "SUCCEEDED") {
+      const remoteVideoUrl = extractCompletedTaskVideoUrl(statusContainer);
+      if (!remoteVideoUrl) {
+        throw new VideoGenerationError("result_missing", "任务完成但未返回视频地址。");
+      }
+      return { providerTaskId, remoteVideoUrl };
+    }
+    if (status === "FAILED" || status === "CANCELLED" || status === "CANCELED" || status === "ERROR") {
+      throw new VideoGenerationError(
+        "provider_poll_failed",
+        String(statusContainer.error_message || statusContainer.error || statusContainer.message || "任务失败"),
+      );
+    }
+    await wait(intervalMs);
+  }
+}
+
 async function submitKling(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  return submitGenericTaskApi(ctx, buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName));
+  const payload = buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
+  if ((ctx.modelId === "kling-3.0" || ctx.modelId === "kling-2.6-motion") && !ctx.modelSettings.apiModelName.trim()) {
+    return submitEvoLinkVideoTask(ctx, payload);
+  }
+  return submitGenericTaskApi(ctx, payload);
+}
+
+function normalizeGrokImagineMode(value: unknown): "normal" | "fun" | "spicy" {
+  return value === "fun" || value === "spicy" || value === "normal" ? value : "normal";
+}
+
+function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest) {
+  const startFrame = request.references.find((item) => item.role === "start_frame");
+  const imageUrls = startFrame ? [startFrame.url] : [];
+  const isImageToVideo = request.modeId === "start_frame";
+  return {
+    model: isImageToVideo ? "grok-imagine-image-to-video-beta" : "grok-imagine-text-to-video-beta",
+    prompt: request.prompt,
+    duration: request.durationSeconds,
+    mode: normalizeGrokImagineMode(request.grokImagineMode),
+    ...(request.resolution ? { quality: request.resolution } : {}),
+    ...(!isImageToVideo ? { aspect_ratio: request.aspectRatio } : {}),
+    ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+  };
+}
+
+async function submitGrokImagine(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
+  return submitEvoLinkVideoTask(ctx, buildGrokImagineCreatePayload(ctx.request));
 }
 
 function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const endFrame = request.references.find((item) => item.role === "end_frame");
-  const imageReferences = request.references
+  const imageReferenceUrls = request.references
     .filter((item) => item.role === "image_reference")
-    .map((item) => ({ imageUri: item.url }));
-  const videoReferences = request.references
-    .filter((item) => item.role === "video_reference")
-    .map((item) => ({ videoUri: item.url }));
-  const audioReferences = request.references
-    .filter((item) => item.role === "audio_reference")
-    .map((item) => ({ audioUri: item.url }));
+    .map((item) => item.url);
+  const imageUrls = request.modeId === "multi_image_reference"
+    ? imageReferenceUrls
+    : startFrame
+      ? [startFrame.url, ...(endFrame ? [endFrame.url] : [])]
+      : [];
+  const generationType = request.modeId === "multi_image_reference"
+    ? "REFERENCE"
+    : request.modeId === "text_to_video"
+      ? "TEXT"
+      : "FIRST&LAST";
+  const model = apiModelName.trim() || (request.modelId === "veo-3.1-fast" ? "veo-3.1-fast-generate-preview" : "veo-3.1-generate-preview");
   return {
-    model: apiModelName,
+    model,
     prompt: request.prompt,
-    aspectRatio: request.aspectRatio,
-    durationSeconds: request.durationSeconds,
-    resolution: request.resolution,
-    image: startFrame ? { imageUri: startFrame.url } : undefined,
-    firstFrame: startFrame ? { imageUri: startFrame.url } : undefined,
-    lastFrame: endFrame ? { imageUri: endFrame.url } : undefined,
-    referenceImages: imageReferences.length > 0 ? imageReferences : undefined,
-    referenceVideos: videoReferences.length > 0 ? videoReferences : undefined,
-    referenceAudios: audioReferences.length > 0 ? audioReferences : undefined,
+    generation_type: generationType,
+    duration: generationType === "REFERENCE" ? 8 : request.durationSeconds,
+    aspect_ratio: generationType === "REFERENCE" ? "16:9" : request.aspectRatio,
+    ...(request.resolution ? { quality: request.resolution } : {}),
+    generate_audio: soundEnabledWithDefault(request, true),
+    ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
   };
 }
 
 async function submitVeo(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  return submitGenericTaskApi(ctx, buildVeoCreatePayload(ctx.request, ctx.modelSettings.apiModelName));
+  return submitEvoLinkVideoTask(ctx, buildVeoCreatePayload(ctx.request, ctx.modelSettings.apiModelName));
 }
 
 async function submitGeminiOmni(): Promise<ProviderTaskResult> {
@@ -472,32 +950,63 @@ async function submitGeminiOmni(): Promise<ProviderTaskResult> {
 export function buildVideoCreatePayloadForTest(ctx: ProviderSubmitContext): Record<string, unknown> {
   switch (ctx.modelDefinition.provider) {
     case "seedance":
-      if (ctx.modelId === "seedance-1.5") {
-        const startFrame = ctx.request.references.find((item) => item.role === "start_frame");
-        return {
-          prompt: ctx.request.prompt,
-          aspect_ratio: ctx.request.aspectRatio,
-          resolution: ctx.request.resolution ?? "720p",
-          duration: String(ctx.request.durationSeconds),
-          generate_audio: Boolean(ctx.modelSettings.providerOptions.generateAudio),
-          fixed_lens: Boolean(ctx.modelSettings.providerOptions.fixedLens),
-          image_urls: startFrame ? [startFrame.url] : undefined,
-        };
-      }
-      const seedanceImages = ctx.request.references.filter((item) => item.role === "start_frame" || item.role === "image_reference").map((item) => item.url);
+      const seedanceStartFrame = ctx.request.references.find((item) => item.role === "start_frame");
+      const seedanceEndFrame = ctx.request.references.find((item) => item.role === "end_frame");
+      const seedanceImages = seedanceStartFrame
+        ? [seedanceStartFrame.url, ...(seedanceEndFrame ? [seedanceEndFrame.url] : [])]
+        : ctx.request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
       const seedanceVideos = ctx.request.references.filter((item) => item.role === "video_reference").map((item) => item.url);
       const seedanceAudios = ctx.request.references.filter((item) => item.role === "audio_reference").map((item) => item.url);
+      const generationMode = resolveSeedanceGenerationMode(ctx.request.modeId);
+      const legacyGenerateAudio = readBooleanOption(ctx.modelSettings.providerOptions, "generateAudio");
+      const generateAudio = ctx.modelId === "doubao-seedance-1.0-pro-fast"
+        ? undefined
+        : typeof ctx.request.soundEnabled === "boolean"
+          ? ctx.request.soundEnabled
+          : typeof legacyGenerateAudio === "boolean"
+            ? legacyGenerateAudio
+            : true;
       return {
         prompt: ctx.request.prompt,
         aspect_ratio: ctx.request.aspectRatio,
         duration: ctx.request.durationSeconds,
-        model: ctx.modelSettings.apiModelName,
-        ...(seedanceImages.length > 0 ? { images: seedanceImages } : {}),
-        ...(seedanceVideos.length > 0 ? { videos: seedanceVideos } : {}),
-        ...(seedanceAudios.length > 0 ? { audios: seedanceAudios } : {}),
+        ...(ctx.request.resolution ? { quality: ctx.request.resolution } : {}),
+        model: resolveSeedanceApiModel(ctx.modelSettings.apiModelName, ctx.modelId, generationMode),
+        ...(seedanceImages.length > 0 ? { image_urls: seedanceImages } : {}),
+        ...(isSeedance20Family(ctx.modelId) && seedanceVideos.length > 0 ? { video_urls: seedanceVideos } : {}),
+        ...(isSeedance20Family(ctx.modelId) && seedanceAudios.length > 0 ? { audio_urls: seedanceAudios } : {}),
+        ...(typeof generateAudio === "boolean" ? { generate_audio: generateAudio } : {}),
+        ...(isSeedance20Family(ctx.modelId) && (
+          readBooleanOption(ctx.modelSettings.providerOptions, "contentFilter") ??
+          readBooleanOption(ctx.modelSettings.providerOptions, "content_filter")
+        ) === true
+          ? { content_filter: true }
+          : isSeedance20Family(ctx.modelId) && (
+              readBooleanOption(ctx.modelSettings.providerOptions, "contentFilter") ??
+              readBooleanOption(ctx.modelSettings.providerOptions, "content_filter")
+            ) === false
+            ? { content_filter: false }
+            : {}),
+        ...(isSeedance20Family(ctx.modelId) && generationMode === "text_to_video"
+          ? (
+              readBooleanOption(ctx.modelSettings.providerOptions, "webSearch") ??
+              readBooleanOption(ctx.modelSettings.providerOptions, "web_search")
+            ) === true
+            ? { model_params: { web_search: true } }
+            : (
+                readBooleanOption(ctx.modelSettings.providerOptions, "webSearch") ??
+                readBooleanOption(ctx.modelSettings.providerOptions, "web_search")
+              ) === false
+              ? { model_params: { web_search: false } }
+              : {}
+          : {}),
       };
     case "kling":
       return buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
+    case "happyhorse":
+      return buildHappyHorseCreatePayload(ctx.request, ctx.modelId);
+    case "grok":
+      return buildGrokImagineCreatePayload(ctx.request);
     case "veo":
       return buildVeoCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
     case "gemini-omni":
@@ -514,6 +1023,8 @@ export function buildVideoCreatePayloadForTest(ctx: ProviderSubmitContext): Reco
 const PROVIDER_ADAPTERS: Record<ReturnType<typeof getVideoModelDefinition>["provider"], ProviderAdapter> = {
   seedance: { submit: submitSeedance },
   kling: { submit: submitKling },
+  happyhorse: { submit: submitHappyHorse },
+  grok: { submit: submitGrokImagine },
   veo: { submit: submitVeo },
   "gemini-omni": { submit: submitGeminiOmni },
 };
@@ -526,7 +1037,10 @@ export async function generateUnifiedVideo(params: {
 }): Promise<UnifiedVideoGenerationSuccess> {
   const request = validateUnifiedVideoRequest(params.request);
   const modelDefinition = getVideoModelDefinition(request.modelId);
-  const modelSettings = params.workspaceSnapshot.videoWorkspace.models[request.modelId];
+  const modelSettings = resolveAutoDispatchedVideoModelSettings(
+    params.workspaceSnapshot.videoWorkspace.models,
+    request.modelId,
+  );
   assertConfiguredModel(modelSettings, request.modelId);
 
   const adapter = PROVIDER_ADAPTERS[modelDefinition.provider];

@@ -4,6 +4,7 @@ import type { Artifact } from "@/lib/types";
 import { STAGES, STAGE_LABELS } from "@/lib/types";
 import { getProjectScriptAutoStageUserMessage } from "@/lib/project-script-auto-kickoff";
 import type { PipelineProgress } from "@/lib/stage5-pipeline";
+import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import StageGroup from "./StageGroup";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./artifact-panel.module.css";
@@ -189,6 +190,8 @@ export default function ArtifactPanel({
               </button>
             ) : null}
             {onStartThisStage ? (
+              <>
+                <ApiUsageModeToggle module="llm" />
               <button
                 type="button"
                 onClick={() => onStartThisStage()}
@@ -198,6 +201,7 @@ export default function ArtifactPanel({
               >
                 {startLabel}
               </button>
+              </>
             ) : null}
           </div>
         </div>

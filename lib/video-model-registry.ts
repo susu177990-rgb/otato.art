@@ -1,10 +1,9 @@
 import type {
-  VideoAspectRatio,
+  VideoCapabilitySet,
   VideoGenerationModeId,
   VideoModelDefinition,
   VideoModelId,
   VideoPresetDefinition,
-  VideoResolution,
 } from "@/lib/video-core";
 
 function preset(title: string, description: string, promptTemplate: string): VideoPresetDefinition {
@@ -13,20 +12,7 @@ function preset(title: string, description: string, promptTemplate: string): Vid
 
 function model(
   row: Omit<VideoModelDefinition, "capabilities"> & {
-    capabilities: {
-      supportedModes: VideoGenerationModeId[];
-      aspectRatios: VideoAspectRatio[];
-      durations: number[];
-      resolutions: VideoResolution[];
-      maxImageReferences: number;
-      maxVideoReferences: number;
-      maxAudioReferences: number;
-      supportsFirstLastFrames: boolean;
-      supportsMotionControl: boolean;
-      supportsNativeAudio: boolean;
-      supportsVideoExtension: boolean;
-      supportsMultipleImageReferences: boolean;
-    };
+    capabilities: VideoCapabilitySet;
   },
 ): VideoModelDefinition {
   return row;
@@ -78,6 +64,16 @@ const MULTI_IMAGE_PROMPT = `# 任务：全能参考视频
 ## 约束
 {{约束}}`;
 
+const VIDEO_EDIT_PROMPT = `# 任务：视频编辑
+## 原视频修改目标
+{{修改目标}}
+
+## 保留内容
+{{保留内容}}
+
+## 风格与约束
+{{风格与约束}}`;
+
 const MOTION_CONTROL_PROMPT = `# 任务：动作控制视频
 ## 主体表现
 {{主体表现}}
@@ -94,9 +90,13 @@ const MOTION_CONTROL_PROMPT = `# 任务：动作控制视频
 export const VIDEO_MODEL_ORDER: VideoModelId[] = [
   "seedance-2.0",
   "seedance-2.0-fast",
-  "seedance-1.5",
+  "seedance-1.5-pro",
+  "doubao-seedance-1.0-pro-fast",
   "kling-3.0",
   "kling-2.6-motion",
+  "happyhorse-1.1",
+  "happyhorse-1.0",
+  "grok-imagine",
   "veo-3.1",
   "veo-3.1-fast",
   "gemini-omni",
@@ -107,16 +107,17 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     id: "seedance-2.0",
     provider: "seedance",
     label: "Seedance 2.0",
-    defaultApiModelName: "seedance-2.0",
+    defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "multi_image_reference"],
-      aspectRatios: ["16:9", "9:16", "4:3", "3:4"],
-      durations: [5, 10, 15],
-      resolutions: ["1080p"],
-      maxImageReferences: 4,
-      maxVideoReferences: 2,
-      maxAudioReferences: 1,
-      supportsFirstLastFrames: false,
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive", "keep_ratio"],
+      durations: [4, 5, 10, 15],
+      durationCapability: { type: "range", min: 4, max: 15, step: 1, defaultValue: 5, presets: [4, 5, 10, 15] },
+      resolutions: ["480p", "720p", "1080p"],
+      maxImageReferences: 9,
+      maxVideoReferences: 3,
+      maxAudioReferences: 3,
+      supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: false,
       supportsVideoExtension: false,
@@ -127,38 +128,61 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     id: "seedance-2.0-fast",
     provider: "seedance",
     label: "Seedance 2.0 Fast",
-    defaultApiModelName: "seedance-2.0-fast",
+    defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "multi_image_reference"],
-      aspectRatios: ["16:9", "9:16", "4:3", "3:4"],
-      durations: [5, 10, 15],
-      resolutions: ["1080p"],
-      maxImageReferences: 4,
-      maxVideoReferences: 2,
-      maxAudioReferences: 1,
-      supportsFirstLastFrames: false,
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive", "keep_ratio"],
+      durations: [4, 5, 10, 15],
+      durationCapability: { type: "range", min: 4, max: 15, step: 1, defaultValue: 5, presets: [4, 5, 10, 15] },
+      resolutions: ["480p", "720p"],
+      maxImageReferences: 9,
+      maxVideoReferences: 3,
+      maxAudioReferences: 3,
+      supportsFirstLastFrames: true,
       supportsMotionControl: false,
       supportsNativeAudio: false,
       supportsVideoExtension: false,
       supportsMultipleImageReferences: true,
     },
   }),
-  "seedance-1.5": model({
-    id: "seedance-1.5",
+  "seedance-1.5-pro": model({
+    id: "seedance-1.5-pro",
     provider: "seedance",
-    label: "Seedance 1.5",
-    defaultApiModelName: "seedance-1.5",
+    label: "Seedance 1.5 Pro",
+    defaultApiModelName: "",
+    capabilities: {
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive", "keep_ratio"],
+      durations: [4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durationCapability: { type: "range", min: 4, max: 12, step: 1, defaultValue: 5, presets: [4, 5, 8, 12] },
+      resolutions: ["480p", "720p", "1080p"],
+      maxImageReferences: 2,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
+      supportsFirstLastFrames: true,
+      supportsMotionControl: false,
+      supportsNativeAudio: true,
+      supportsVideoExtension: false,
+      supportsMultipleImageReferences: false,
+    },
+  }),
+  "doubao-seedance-1.0-pro-fast": model({
+    id: "doubao-seedance-1.0-pro-fast",
+    provider: "seedance",
+    label: "Seedance 1.0 Pro Fast",
+    defaultApiModelName: "",
     capabilities: {
       supportedModes: ["text_to_video", "start_frame"],
-      aspectRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
-      durations: [4, 8, 12],
-      resolutions: ["480p", "720p"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive", "keep_ratio"],
+      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durationCapability: { type: "range", min: 2, max: 12, step: 1, defaultValue: 5, presets: [2, 5, 8, 12] },
+      resolutions: ["480p", "720p", "1080p"],
       maxImageReferences: 1,
       maxVideoReferences: 0,
       maxAudioReferences: 0,
       supportsFirstLastFrames: false,
       supportsMotionControl: false,
-      supportsNativeAudio: true,
+      supportsNativeAudio: false,
       supportsVideoExtension: false,
       supportsMultipleImageReferences: false,
     },
@@ -166,15 +190,16 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
   "kling-3.0": model({
     id: "kling-3.0",
     provider: "kling",
-    label: "可灵 3.0",
-    defaultApiModelName: "kling-v3",
+    label: "Kling O3",
+    defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference", "video_edit"],
       aspectRatios: ["16:9", "9:16", "1:1"],
-      durations: [5, 10, 15],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      durationCapability: { type: "range", min: 3, max: 15, step: 1, defaultValue: 5, presets: [3, 5, 10, 15] },
       resolutions: ["720p", "1080p"],
       maxImageReferences: 4,
-      maxVideoReferences: 2,
+      maxVideoReferences: 1,
       maxAudioReferences: 1,
       supportsFirstLastFrames: true,
       supportsMotionControl: false,
@@ -186,18 +211,81 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
   "kling-2.6-motion": model({
     id: "kling-2.6-motion",
     provider: "kling",
-    label: "可灵 2.6 动作控制",
-    defaultApiModelName: "kling-v2-6",
+    label: "Kling V3 Motion Control",
+    defaultApiModelName: "",
     capabilities: {
       supportedModes: ["motion_control"],
-      aspectRatios: ["16:9", "9:16", "1:1"],
-      durations: [5],
+      aspectRatios: [],
+      durations: [],
       resolutions: ["720p", "1080p"],
       maxImageReferences: 1,
       maxVideoReferences: 0,
       maxAudioReferences: 0,
       supportsFirstLastFrames: false,
       supportsMotionControl: true,
+      supportsNativeAudio: true,
+      supportsVideoExtension: false,
+      supportsMultipleImageReferences: false,
+    },
+  }),
+  "happyhorse-1.1": model({
+    id: "happyhorse-1.1",
+    provider: "happyhorse",
+    label: "HappyHorse 1.1",
+    defaultApiModelName: "",
+    capabilities: {
+      supportedModes: ["text_to_video", "start_frame", "multi_image_reference"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "4:5", "5:4", "9:21", "21:9"],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      durationCapability: { type: "range", min: 3, max: 15, step: 1, defaultValue: 5, presets: [3, 5, 10, 15] },
+      resolutions: ["720p", "1080p"],
+      maxImageReferences: 9,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
+      supportsFirstLastFrames: false,
+      supportsMotionControl: false,
+      supportsNativeAudio: false,
+      supportsVideoExtension: false,
+      supportsMultipleImageReferences: true,
+    },
+  }),
+  "happyhorse-1.0": model({
+    id: "happyhorse-1.0",
+    provider: "happyhorse",
+    label: "HappyHorse 1.0",
+    defaultApiModelName: "",
+    capabilities: {
+      supportedModes: ["text_to_video", "start_frame", "multi_image_reference", "video_edit"],
+      aspectRatios: ["16:9", "9:16", "1:1", "4:3", "3:4", "4:5", "5:4", "9:21", "21:9"],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      durationCapability: { type: "range", min: 3, max: 15, step: 1, defaultValue: 5, presets: [3, 5, 10, 15] },
+      resolutions: ["720p", "1080p"],
+      maxImageReferences: 9,
+      maxVideoReferences: 1,
+      maxAudioReferences: 0,
+      supportsFirstLastFrames: false,
+      supportsMotionControl: false,
+      supportsNativeAudio: false,
+      supportsVideoExtension: false,
+      supportsMultipleImageReferences: true,
+    },
+  }),
+  "grok-imagine": model({
+    id: "grok-imagine",
+    provider: "grok",
+    label: "Grok Imagine",
+    defaultApiModelName: "",
+    capabilities: {
+      supportedModes: ["text_to_video", "start_frame"],
+      aspectRatios: ["16:9", "9:16", "1:1", "3:2", "2:3"],
+      durations: [6, 12, 18, 24, 30],
+      durationCapability: { type: "range", min: 6, max: 30, step: 1, defaultValue: 6 },
+      resolutions: ["480p", "720p"],
+      maxImageReferences: 1,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
+      supportsFirstLastFrames: false,
+      supportsMotionControl: false,
       supportsNativeAudio: false,
       supportsVideoExtension: false,
       supportsMultipleImageReferences: false,
@@ -207,11 +295,12 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     id: "veo-3.1",
     provider: "veo",
     label: "Veo 3.1",
-    defaultApiModelName: "veo-3.1-generate-001",
+    defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame"],
-      aspectRatios: ["16:9", "9:16"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      aspectRatios: ["auto", "16:9", "9:16"],
       durations: [4, 6, 8],
+      durationCapability: { type: "presets", values: [4, 6, 8], defaultValue: 4 },
       resolutions: ["720p", "1080p", "4k"],
       maxImageReferences: 3,
       maxVideoReferences: 0,
@@ -227,11 +316,12 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     id: "veo-3.1-fast",
     provider: "veo",
     label: "Veo 3.1 Fast",
-    defaultApiModelName: "veo-3.1-fast-generate-001",
+    defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame"],
-      aspectRatios: ["16:9", "9:16"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      aspectRatios: ["auto", "16:9", "9:16"],
       durations: [4, 6, 8],
+      durationCapability: { type: "presets", values: [4, 6, 8], defaultValue: 4 },
       resolutions: ["720p", "1080p", "4k"],
       maxImageReferences: 3,
       maxVideoReferences: 0,
@@ -279,28 +369,48 @@ export const DEFAULT_VIDEO_PRESETS: Record<
     start_frame: preset("Seedance 2.0 Fast · 首帧", "快速首帧图生视频", START_FRAME_PROMPT),
     multi_image_reference: preset("Seedance 2.0 Fast · 全能参考", "快速全能参考视频", MULTI_IMAGE_PROMPT),
   },
-  "seedance-1.5": {
-    text_to_video: preset("Seedance 1.5 · 文生视频", "1.5 文生视频", TEXT_TO_VIDEO_PROMPT),
-    start_frame: preset("Seedance 1.5 · 首帧", "1.5 首帧图生视频", START_FRAME_PROMPT),
+  "seedance-1.5-pro": {
+    text_to_video: preset("Seedance 1.5 Pro · 文生视频", "1.5 Pro 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("Seedance 1.5 Pro · 首帧", "1.5 Pro 首帧图生视频", START_FRAME_PROMPT),
+    start_end_frame: preset("Seedance 1.5 Pro · 首尾帧", "1.5 Pro 首尾帧视频", START_END_FRAME_PROMPT),
+  },
+  "doubao-seedance-1.0-pro-fast": {
+    text_to_video: preset("Seedance 1.0 Pro Fast · 文生视频", "1.0 Pro Fast 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("Seedance 1.0 Pro Fast · 首帧", "1.0 Pro Fast 首帧图生视频", START_FRAME_PROMPT),
   },
   "kling-3.0": {
-    text_to_video: preset("可灵 3.0 · 文生视频", "可灵 3.0 单镜头/多镜头视频", TEXT_TO_VIDEO_PROMPT),
-    start_frame: preset("可灵 3.0 · 首帧", "可灵 3.0 首帧图生视频", START_FRAME_PROMPT),
-    start_end_frame: preset("可灵 3.0 · 首尾帧", "可灵 3.0 首尾帧视频", START_END_FRAME_PROMPT),
-    multi_image_reference: preset("可灵 3.0 · 全能参考", "可灵 3.0 元素一致性/全能参考", MULTI_IMAGE_PROMPT),
+    text_to_video: preset("Kling O3 · 文生视频", "O3 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("Kling O3 · 首帧", "O3 首帧图生视频", START_FRAME_PROMPT),
+    start_end_frame: preset("Kling O3 · 首尾帧", "O3 首尾帧视频", START_END_FRAME_PROMPT),
+    multi_image_reference: preset("Kling O3 · 全能参考", "O3 视频参考/图片参考", MULTI_IMAGE_PROMPT),
+    video_edit: preset("Kling O3 · 视频编辑", "O3 基于原视频编辑", VIDEO_EDIT_PROMPT),
   },
   "kling-2.6-motion": {
-    motion_control: preset("可灵 2.6 · 动作控制", "动作迁移视频", MOTION_CONTROL_PROMPT),
+    motion_control: preset("Kling V3 · 动作迁移", "参考图 + 动作视频迁移", MOTION_CONTROL_PROMPT),
+  },
+  "happyhorse-1.1": {
+    text_to_video: preset("HappyHorse 1.1 · 文生视频", "1.1 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("HappyHorse 1.1 · 首帧", "1.1 单图首帧视频", START_FRAME_PROMPT),
+  },
+  "happyhorse-1.0": {
+    text_to_video: preset("HappyHorse 1.0 · 文生视频", "1.0 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("HappyHorse 1.0 · 首帧", "1.0 单图首帧视频", START_FRAME_PROMPT),
+  },
+  "grok-imagine": {
+    text_to_video: preset("Grok Imagine · 文生视频", "Grok Imagine 文生视频", TEXT_TO_VIDEO_PROMPT),
+    start_frame: preset("Grok Imagine · 单图", "Grok Imagine 单图图生视频", START_FRAME_PROMPT),
   },
   "veo-3.1": {
     text_to_video: preset("Veo 3.1 · 文生视频", "Veo 文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Veo 3.1 · 首帧", "Veo 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("Veo 3.1 · 首尾帧", "Veo 首尾帧视频", START_END_FRAME_PROMPT),
+    multi_image_reference: preset("Veo 3.1 · 全能参考", "Veo 图片参考视频", MULTI_IMAGE_PROMPT),
   },
   "veo-3.1-fast": {
     text_to_video: preset("Veo 3.1 Fast · 文生视频", "Veo Fast 文生视频", TEXT_TO_VIDEO_PROMPT),
     start_frame: preset("Veo 3.1 Fast · 首帧", "Veo Fast 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("Veo 3.1 Fast · 首尾帧", "Veo Fast 首尾帧视频", START_END_FRAME_PROMPT),
+    multi_image_reference: preset("Veo 3.1 Fast · 全能参考", "Veo Fast 图片参考视频", MULTI_IMAGE_PROMPT),
   },
   "gemini-omni": {
     text_to_video: preset("Gemini Omni · 文生视频", "独立占位模型，等待可信契约", TEXT_TO_VIDEO_PROMPT),

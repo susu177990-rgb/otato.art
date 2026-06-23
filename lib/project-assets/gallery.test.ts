@@ -37,8 +37,8 @@ const image = {
 const video = {
   id: "video-1",
   createdAt: "2026-06-14T02:00:00.000Z",
-  modelId: "seedance-1.5",
-  modelName: "Seedance",
+  modelId: "seedance-1.5-pro",
+  modelName: "Seedance 1.5 Pro",
   modeId: "text_to_video",
   modeName: "文生视频",
   finalPrompt: "列车驶入",

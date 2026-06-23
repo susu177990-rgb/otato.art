@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { normalizeLlmSettings } from "@/lib/llm-models";
 import { normalizeModel } from "@/lib/model-presets";
@@ -47,6 +47,20 @@ function resultKey(module: PersonalApiModule, modelId: string): string {
   return `${module}:${modelId}`;
 }
 
+function isAutoDispatchedVideoModel(modelId: string): boolean {
+  return modelId === "seedance-2.0" ||
+    modelId === "seedance-2.0-fast" ||
+    modelId === "seedance-1.5-pro" ||
+    modelId === "doubao-seedance-1.0-pro-fast" ||
+    modelId === "kling-3.0" ||
+    modelId === "kling-2.6-motion" ||
+    modelId === "happyhorse-1.1" ||
+    modelId === "happyhorse-1.0" ||
+    modelId === "grok-imagine" ||
+    modelId === "veo-3.1" ||
+    modelId === "veo-3.1-fast";
+}
+
 function nextLlmModelId(models: Settings["models"]): string {
   let index = Object.keys(models).length + 1;
   let id = `llm-${index}`;
@@ -58,6 +72,7 @@ function nextLlmModelId(models: Settings["models"]): string {
 }
 
 function SettingsPageInner() {
+  const router = useRouter();
   const {
     settings: loadedLlm,
     imageWorkspace: loadedImage,
@@ -159,7 +174,19 @@ function SettingsPageInner() {
     <main className={[shellStyles.page, styles.settingsPage].join(" ")}>
       <header className={shellStyles.topbar}>
         <nav className={shellStyles.topbarLeft} aria-label="个人设置分类">
-          <Link href="/projects" className={shellStyles.navLink}>返回项目</Link>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.replace("/projects");
+              }
+            }}
+            className={shellStyles.navLink}
+          >
+            返回
+          </button>
           <button type="button" onClick={() => setTab("llmApi")} className={[shellStyles.navLink, tab === "llmApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>LLM</button>
           <button type="button" onClick={() => setTab("imageApi")} className={[shellStyles.navLink, tab === "imageApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>图片</button>
           <button type="button" onClick={() => setTab("videoApi")} className={[shellStyles.navLink, tab === "videoApi" ? shellStyles.navLinkActive : ""].filter(Boolean).join(" ")}>视频</button>
@@ -345,6 +372,7 @@ function VideoApiPanel({
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
+        const modelNameReadOnly = isAutoDispatchedVideoModel(id);
         return (
           <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
             <div className={styles.llmModelCardTopBar}>
@@ -369,7 +397,15 @@ function VideoApiPanel({
               </div>
               <div className={styles.llmModelCardRow}>
                 <Field label="显示名" value={model.label} onChange={(label) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], label } } })} />
-                <Field label="API Model Name" mono value={model.apiModelName} onChange={(apiModelName) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiModelName } } })} />
+                <Field
+                  label={modelNameReadOnly ? "模型族（自动派发）" : "API Model Name"}
+                  mono
+                  value={model.apiModelName}
+                  readOnly={modelNameReadOnly}
+                  disabled={modelNameReadOnly}
+                  title={modelNameReadOnly ? "系统会按当前生成模式自动派发真实上游模型" : undefined}
+                  onChange={(apiModelName) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiModelName } } })}
+                />
               </div>
             </div>
             <ApiTestResultView result={testResults[resultKey("video", id)]} />
@@ -380,11 +416,11 @@ function VideoApiPanel({
   );
 }
 
-function Field({ label, value, onChange, placeholder, mono }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; mono?: boolean }) {
+function Field({ label, value, onChange, placeholder, mono, readOnly, disabled, title }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; mono?: boolean; readOnly?: boolean; disabled?: boolean; title?: string }) {
   return (
     <label className={shellStyles.field}>
       <span className={shellStyles.fieldLabel}>{label}</span>
-      <input className={[shellStyles.input, shellStyles.inputCompact, mono ? shellStyles.mono : ""].filter(Boolean).join(" ")} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} spellCheck={false} autoComplete="off" />
+      <input className={[shellStyles.input, shellStyles.inputCompact, mono ? shellStyles.mono : ""].filter(Boolean).join(" ")} value={value} placeholder={placeholder} readOnly={readOnly} aria-readonly={readOnly} disabled={disabled} title={title} onChange={(e) => { if (!readOnly && !disabled) onChange(e.target.value); }} spellCheck={false} autoComplete="off" />
     </label>
   );
 }

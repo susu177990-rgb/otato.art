@@ -1,0 +1,174 @@
+.player {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+}
+
+.video {
+  cursor: pointer;
+}
+
+.controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 34px minmax(72px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 3px solid #050505;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: auto;
+}
+
+.player:hover .controls,
+.player:focus-within .controls,
+.player[data-playing="false"] .controls {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cornerButton {
+  position: absolute;
+  top: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 38px;
+  padding: 0;
+  border: 4px solid #050505;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #050505;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
+  transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.volumeControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.downloadButton {
+  right: 12px;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid #050505;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #050505;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.controlIcon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.iconButton:hover,
+.cornerButton:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8);
+  transform: var(--otato-control-hover-transform, translate(-1px, -1px));
+  box-shadow: var(--otato-control-shadow-hover, 5px 5px 0 #050505);
+}
+
+.iconButton:active,
+.cornerButton:active:not(:disabled) {
+  background: var(--otato-action, #ff4d3d);
+  color: #ffffff;
+  transform: var(--otato-control-press-transform, translate(2px, 2px));
+  box-shadow: var(--otato-control-shadow-pressed, 1px 1px 0 #050505);
+}
+
+.downloadButton {
+  background: #ffffff;
+  color: #050505;
+}
+
+.downloadButton:hover:not(:disabled),
+.downloadButton:active:not(:disabled) {
+  color: #050505;
+}
+
+.downloadButton:active:not(:disabled) {
+  color: #ffffff;
+}
+
+.downloadButton:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.progress {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--otato-action, #ff4d3d);
+}
+
+.volumeRange {
+  width: 72px;
+  min-width: 0;
+  accent-color: var(--otato-action, #ff4d3d);
+}
+
+.time {
+  color: #050505;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .controls {
+    grid-template-columns: 32px minmax(58px, 1fr) auto;
+    gap: 6px;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+  }
+
+  .time {
+    display: none;
+  }
+
+  .volumeRange {
+    width: 50px;
+  }
+}

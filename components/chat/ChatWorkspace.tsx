@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { ChatPromptPresetRail } from "@/components/chat/ChatPromptPresetRail";
 import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
+import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/completion";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
@@ -102,7 +103,13 @@ function ToolResultBody({ text }: { text: string }) {
     return (
       <div className={styles.toolResult}>
         {media.isVideo ? (
-          <video src={media.mediaUrl} controls className={styles.toolMedia} />
+          <InlineVideoPlayer
+            src={media.mediaUrl}
+            title="工具结果视频"
+            suggestedFileName="tool-result-video.mp4"
+            className={styles.toolVideoPlayer}
+            videoClassName={styles.toolMedia}
+          />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={media.mediaUrl} alt="生图结果" className={styles.toolMedia} />
@@ -127,7 +134,13 @@ function MessageAttachment({ attachment }: { attachment: ChatAttachment }) {
   if (attachment.kind === "video" || attachment.mime.startsWith("video/")) {
     return (
       <figure className={styles.messageAttachment}>
-        <video src={attachment.dataUrl} controls className={styles.messageAttachmentMedia} />
+        <InlineVideoPlayer
+          src={attachment.dataUrl}
+          title={attachment.name}
+          suggestedFileName={attachment.name}
+          className={styles.messageAttachmentPlayer}
+          videoClassName={styles.messageAttachmentMedia}
+        />
         <figcaption className={styles.messageAttachmentCaption}>{attachment.name}</figcaption>
       </figure>
     );

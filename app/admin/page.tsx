@@ -141,6 +141,20 @@ function categoryForTab(tab: Tab): SettingsCategory {
   return "api";
 }
 
+function isAutoDispatchedVideoModel(modelId: string): boolean {
+  return modelId === "seedance-2.0" ||
+    modelId === "seedance-2.0-fast" ||
+    modelId === "seedance-1.5-pro" ||
+    modelId === "doubao-seedance-1.0-pro-fast" ||
+    modelId === "kling-3.0" ||
+    modelId === "kling-2.6-motion" ||
+    modelId === "happyhorse-1.1" ||
+    modelId === "happyhorse-1.0" ||
+    modelId === "grok-imagine" ||
+    modelId === "veo-3.1" ||
+    modelId === "veo-3.1-fast";
+}
+
 function AdminPageInner() {
   const searchParams = useSearchParams();
   const initialTab = tabFromSearchParam(searchParams.get("tab")) ?? "users";
@@ -1767,6 +1781,7 @@ function VideoApiPanel({
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
+        const modelNameReadOnly = isAutoDispatchedVideoModel(id);
         return (
           <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
             <div className={styles.llmModelCardTopBar}>
@@ -1857,12 +1872,17 @@ function VideoApiPanel({
                   />
                 </label>
                 <label className={shellStyles.field}>
-                  <span className={shellStyles.fieldLabel}>模型名</span>
+                  <span className={shellStyles.fieldLabel}>{modelNameReadOnly ? "模型族（自动派发）" : "模型名"}</span>
                   <input
                     className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
                     value={model.apiModelName}
                     placeholder={definition.defaultApiModelName}
-                    onChange={(e) =>
+                    readOnly={modelNameReadOnly}
+                    aria-readonly={modelNameReadOnly}
+                    disabled={modelNameReadOnly}
+                    title={modelNameReadOnly ? "系统会按当前生成模式自动派发真实上游模型" : undefined}
+                    onChange={(e) => {
+                      if (modelNameReadOnly) return;
                       onChange({
                         ...value,
                         models: {
@@ -1872,8 +1892,8 @@ function VideoApiPanel({
                             apiModelName: e.target.value,
                           },
                         },
-                      })
-                    }
+                      });
+                    }}
                   />
                 </label>
               </div>

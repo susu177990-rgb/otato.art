@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import type { ProjectAssetType, ProjectGalleryItem } from "@/lib/project-assets";
 import styles from "./project-assets.module.css";
 
@@ -141,7 +142,13 @@ export function ProjectGallery({
             </button>
             <div className={styles.previewMediaPane}>
               {previewItem.kind === "video" ? (
-                <video src={previewItem.mediaUrl} controls playsInline className={styles.previewMedia} />
+                <InlineVideoPlayer
+                  src={previewItem.mediaUrl}
+                  title={previewItem.name}
+                  suggestedFileName={safeMediaDownloadName(previewItem.name, "video")}
+                  className={styles.previewVideoPlayer}
+                  videoClassName={styles.previewMedia}
+                />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={previewItem.mediaUrl} alt={previewItem.name} className={styles.previewMedia} />

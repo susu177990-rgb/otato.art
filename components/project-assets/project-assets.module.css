@@ -449,6 +449,11 @@
   background: #f3f3ef;
 }
 
+.previewVideoPlayer {
+  width: 100%;
+  max-width: min(820px, 100%);
+}
+
 .previewMedia {
   display: block;
   max-width: 100%;

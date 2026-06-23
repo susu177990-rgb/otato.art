@@ -114,6 +114,10 @@
   margin: 6px 0 0;
 }
 
+.messageAttachmentPlayer {
+  width: 100%;
+}
+
 .messageAttachmentMedia {
   display: block;
   width: auto;
@@ -171,6 +175,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.toolVideoPlayer {
+  width: min(100%, 460px);
 }
 
 .toolJson {

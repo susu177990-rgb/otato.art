@@ -127,6 +127,20 @@ function validateImageConfig(model: ImageModelSettings): PersonalApiTestResult {
   });
 }
 
+function isAutoDispatchedVideoModel(modelId: string): boolean {
+  return modelId === "seedance-2.0" ||
+    modelId === "seedance-2.0-fast" ||
+    modelId === "seedance-1.5-pro" ||
+    modelId === "doubao-seedance-1.0-pro-fast" ||
+    modelId === "kling-3.0" ||
+    modelId === "kling-2.6-motion" ||
+    modelId === "happyhorse-1.1" ||
+    modelId === "happyhorse-1.0" ||
+    modelId === "grok-imagine" ||
+    modelId === "veo-3.1" ||
+    modelId === "veo-3.1-fast";
+}
+
 function validateVideoConfig(model: VideoModelSettings): PersonalApiTestResult {
   const endpoint = safeEndpoint(model.baseUrl);
   if (!model.enabled) {
@@ -140,14 +154,17 @@ function validateVideoConfig(model: VideoModelSettings): PersonalApiTestResult {
       safeEndpoint: endpoint,
     });
   }
-  if (!model.baseUrl.trim() || !model.apiKey.trim() || !model.apiModelName.trim()) {
+  const apiModelNameRequired = !isAutoDispatchedVideoModel(model.id);
+  if (!model.baseUrl.trim() || !model.apiKey.trim() || (apiModelNameRequired && !model.apiModelName.trim())) {
     return result({
       ok: false,
       code: "MODEL_CONFIG_INCOMPLETE",
       module: "video",
       modelId: model.id,
       stage: "model_config",
-      message: `视频模型「${model.label || model.id}」缺少 Base URL / API Key / API Model Name。`,
+      message: apiModelNameRequired
+        ? `视频模型「${model.label || model.id}」缺少 Base URL / API Key / API Model Name。`
+        : `视频模型「${model.label || model.id}」缺少 Base URL / API Key。`,
       safeEndpoint: endpoint,
     });
   }

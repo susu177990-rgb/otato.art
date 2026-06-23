@@ -13,6 +13,7 @@ import type {
   SourceMaterial,
 } from "@/lib/types";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
+import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import PlanningChatPanel from "@/components/PlanningChatPanel";
 import { buildAdaptationDiscussBootstrap, buildPlanningBootstrap } from "@/lib/planning-bootstrap";
@@ -1124,14 +1125,17 @@ export default function OnboardingPage({
                     {saving ? "保存中…" : "保存素材"}
                   </button>
                   {isAdaptationUi && (phase === "idle" || phase === "upload") ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveMaterialsAndAnalyze()}
-                      disabled={saving || analyzing || materials.length === 0}
-                      className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
-                    >
-                      {analyzing ? "分析中…" : saving ? "保存中…" : "保存原文并开始分析"}
-                    </button>
+                    <>
+                      <ApiUsageModeToggle module="llm" />
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveMaterialsAndAnalyze()}
+                        disabled={saving || analyzing || materials.length === 0}
+                        className={[shellStyles.button, shellStyles.buttonPrimary].join(" ")}
+                      >
+                        {analyzing ? "分析中…" : saving ? "保存中…" : "保存原文并开始分析"}
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
@@ -1230,6 +1234,7 @@ export default function OnboardingPage({
                     inputPlaceholder="输入你的想法或追问…"
                   />
                   <div className={styles.cardActions}>
+                    <ApiUsageModeToggle module="llm" />
                     <button
                       type="button"
                       onClick={() => void handleGenerateAdaptPlan()}
@@ -1326,6 +1331,7 @@ export default function OnboardingPage({
                       </p>
                     </div>
                     <div className={styles.cardActions}>
+                      <ApiUsageModeToggle module="llm" />
                       <button
                         type="button"
                         disabled={!seriesBibleDraft.trim()}
@@ -1381,6 +1387,7 @@ export default function OnboardingPage({
                       </p>
                     </div>
                     <div className={styles.cardActions}>
+                      <ApiUsageModeToggle module="llm" />
                       <button
                         type="button"
                         disabled={

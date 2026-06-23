@@ -5,6 +5,12 @@ import {
   generateUnifiedVideo,
   VideoGenerationError,
 } from "@/lib/video-generation-service";
+import {
+  getVideoParameterCapabilities,
+  isDisabledVideoModel,
+  isVideoDurationSupported,
+  normalizeVideoDuration,
+} from "@/lib/video-workspace";
 import type {
   UnifiedVideoGenerateRequest,
   UnifiedVideoReference,
@@ -19,9 +25,13 @@ function mustBeVideoModelId(raw: unknown): VideoModelId {
   switch (v) {
     case "seedance-2.0":
     case "seedance-2.0-fast":
-    case "seedance-1.5":
+    case "seedance-1.5-pro":
+    case "doubao-seedance-1.0-pro-fast":
     case "kling-3.0":
     case "kling-2.6-motion":
+    case "happyhorse-1.1":
+    case "happyhorse-1.0":
+    case "grok-imagine":
     case "veo-3.1":
     case "veo-3.1-fast":
     case "gemini-omni":
@@ -38,6 +48,7 @@ function mustBeModeId(raw: unknown): VideoGenerationModeId {
     case "start_frame":
     case "start_end_frame":
     case "multi_image_reference":
+    case "video_edit":
     case "motion_control":
       return v;
     default:
@@ -48,6 +59,7 @@ function mustBeModeId(raw: unknown): VideoGenerationModeId {
 function mustBeAspectRatio(raw: unknown): VideoAspectRatio | undefined {
   const v = String(raw ?? "");
   switch (v) {
+    case "auto":
     case "1:1":
     case "4:3":
     case "3:4":
@@ -55,6 +67,12 @@ function mustBeAspectRatio(raw: unknown): VideoAspectRatio | undefined {
     case "9:16":
     case "21:9":
     case "9:21":
+    case "3:2":
+    case "2:3":
+    case "4:5":
+    case "5:4":
+    case "adaptive":
+    case "keep_ratio":
       return v;
     default:
       return undefined;
@@ -114,6 +132,8 @@ export async function POST(req: NextRequest) {
     aspectRatio?: unknown;
     duration?: unknown;
     resolution?: unknown;
+    soundEnabled?: unknown;
+    grokImagineMode?: unknown;
     references?: unknown;
     providerOptions?: unknown;
     projectId?: unknown;
@@ -137,21 +157,40 @@ export async function POST(req: NextRequest) {
   }
 
   const modelId = mustBeVideoModelId(body.modelId);
+  if (isDisabledVideoModel(modelId)) {
+    return Response.json({ error: "Gemini Omni API 尚未开放，当前已停用。", code: "model_disabled" }, { status: 422 });
+  }
   const modeId = mustBeModeId(body.modeId);
   const aspectRatio = mustBeAspectRatio(body.aspectRatio);
   const duration = typeof body.duration === "number" ? body.duration : Number(body.duration);
+  const durationProvided = body.duration !== undefined && body.duration !== null && String(body.duration).trim() !== "";
   const resolution = mustBeResolution(body.resolution);
+  const grokImagineMode = body.grokImagineMode === "fun" || body.grokImagineMode === "spicy" || body.grokImagineMode === "normal"
+    ? body.grokImagineMode
+    : undefined;
   const references = parseReferences(body.references);
 
   const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
+  const parameterCapabilities = getVideoParameterCapabilities(modelId, modeId, references);
+  const durationCapability = parameterCapabilities.durationCapability;
+  if (durationProvided && parameterCapabilities.supportsDuration && durationCapability && !isVideoDurationSupported(duration, durationCapability)) {
+    return Response.json({ error: `当前模型不支持 ${duration}s 时长`, code: "unsupported_duration" }, { status: 422 });
+  }
+  const durationSeconds = parameterCapabilities.supportsDuration && durationCapability
+    ? durationProvided
+      ? duration
+      : normalizeVideoDuration(snapshot.videoWorkspace.uiDefaults.defaultDurationSeconds, durationCapability)
+    : 0;
   try {
     const requestPayload: UnifiedVideoGenerateRequest = {
       modelId,
       modeId,
       prompt,
-      durationSeconds: Number.isFinite(duration) ? duration : snapshot.videoWorkspace.uiDefaults.defaultDurationSeconds,
+      durationSeconds,
       aspectRatio,
       resolution,
+      soundEnabled: typeof body.soundEnabled === "boolean" ? body.soundEnabled : undefined,
+      grokImagineMode,
       references,
       providerOptions:
         body.providerOptions && typeof body.providerOptions === "object"

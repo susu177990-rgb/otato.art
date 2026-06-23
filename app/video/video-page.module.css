@@ -14,7 +14,7 @@
   height: 100% !important;
   min-height: 0 !important;
   overflow: hidden;
-  background: transparent;
+  background: transparent !important;
 }
 
 .projectWorkspacePage .stage {
@@ -78,6 +78,31 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
+}
+
+.projectWorkspacePage .loadingOverlay {
+  color: #050505;
+}
+
+.projectWorkspacePage .bigSpinner {
+  border-color: rgba(5, 5, 5, 0.16);
+  border-top-color: #050505;
+  filter: none;
+}
+
+.projectWorkspacePage .statusLabel {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 3px solid #050505;
+  border-radius: var(--otato-control-radius, 15px);
+  background: #ffffff;
+  color: #050505;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: none;
 }
 
 .projectWorkspacePage .promptSlotGrid,
@@ -816,6 +841,18 @@
   will-change: auto;
 }
 
+.composerPickerApi {
+  width: 5.75rem;
+  min-width: 5.75rem;
+  padding: 0 10px;
+}
+
+.composerPickerMode {
+  width: 7.35rem;
+  min-width: 7.35rem;
+  padding: 0 14px;
+}
+
 .composerPickerModel {
   width: 10.75rem;
   min-width: 10.75rem;
@@ -863,6 +900,20 @@
   box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
 }
 
+.toolbarPickerMenuRatio {
+  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  gap: 10px;
+  min-width: 0;
+  max-width: min(306px, calc(100vw - 24px));
+}
+
+.toolbarPickerMenuDuration {
+  grid-template-columns: repeat(3, minmax(68px, 1fr));
+  gap: 10px;
+  min-width: 0;
+  max-width: min(296px, calc(100vw - 24px));
+}
+
 .toolbarPickerOption {
   min-height: 40px;
   border: 3px solid #050505;
@@ -878,6 +929,100 @@
   cursor: pointer;
   box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505);
   transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.toolbarPickerOptionRatio {
+  display: flex;
+  min-width: 74px;
+  min-height: 68px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+}
+
+.toolbarPickerOptionDuration {
+  display: flex;
+  min-width: 68px;
+  min-height: 62px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.toolbarRatioPreview {
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 auto;
+  min-width: 12px;
+  min-height: 12px;
+  border: 3px solid currentColor;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.toolbarRatioLabel {
+  line-height: 1;
+}
+
+.toolbarDurationBar {
+  --duration-progress: 50%;
+  position: relative;
+  display: block;
+  width: 42px;
+  height: 10px;
+  border: 3px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.toolbarDurationBar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--duration-progress);
+  background: currentColor;
+}
+
+.toolbarDurationLabel {
+  line-height: 1;
+}
+
+.toolbarDurationRange {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 4px 4px 8px;
+}
+
+.toolbarDurationRangeHead {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  color: #050505;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.toolbarDurationRangeHead span:last-child {
+  text-align: right;
+}
+
+.toolbarDurationSlider {
+  width: 100%;
+  accent-color: var(--otato-action, #ff4d3d);
+}
+
+.toolbarPickerOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  background: #ffffff;
+  color: #777;
 }
 
 .toolbarPickerOption:hover {
@@ -1650,7 +1795,17 @@
 .refSlot {
   border: 3px dashed #050505;
   border-radius: 999px;
+  background: transparent;
+}
+
+.refSlotEmpty::before,
+.refSlotFilled::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
   background: #ffffff;
+  z-index: 0;
 }
 
 .refSlotFilled {
@@ -1658,9 +1813,19 @@
   border-radius: 24px;
 }
 
+.refSlotFilled::before {
+  inset: 0;
+}
+
 .refSlot:hover,
 .refSlot:focus-within {
   border-style: solid;
+}
+
+.refSlotEmpty:hover::before,
+.refSlotEmpty:focus-within::before,
+.refSlotFilled:hover::before,
+.refSlotFilled:focus-within::before {
   background: #f3f3ef;
 }
 
@@ -1833,7 +1998,6 @@
   color: #b42318;
 }
 
-.loadingOverlay,
 .promptPreviewBackdrop,
 .presetLibraryBackdrop {
   background: rgba(255, 255, 255, 0.78);
@@ -1841,6 +2005,8 @@
 }
 
 .loadingOverlay {
+  background: transparent;
+  backdrop-filter: none;
   color: #050505;
 }
 

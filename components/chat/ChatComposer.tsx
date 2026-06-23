@@ -8,6 +8,7 @@ import { IMAGE_MODEL_ORDER, type ImageModelId, type ImageWorkspaceSettings } fro
 import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import type { Settings } from "@/lib/types";
 import imageStyles from "@/app/image/image-page.module.css";
+import { ApiUsageModeToggleAll } from "@/components/ApiUsageModeSwitch";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-composer.module.css";
@@ -210,6 +211,13 @@ export function ChatComposer({
               <span className={styles.addPlus}>+</span>
             </label>
           ) : null}
+          <ApiUsageModeToggleAll
+            className={[imageStyles.composerPickerButton, imageStyles.composerSelectApi].join(" ")}
+            backdropClassName={styles.modelPickerBackdrop}
+            menuClassName={styles.modelPickerMenu}
+            optionClassName={styles.modelPickerOption}
+            optionActiveClassName={styles.modelPickerOptionActive}
+          />
           {showChatMode ? (
             <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
               {(["prompt", "skill"] as const).map((mode) => {

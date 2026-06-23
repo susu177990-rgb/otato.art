@@ -8,7 +8,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
+import { ApiUsageModeSwitch, ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
+import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog, type ProjectAssetMediaKind } from "@/components/project-assets/ProjectAssetPickerDialog";
@@ -35,11 +36,19 @@ import {
   extractPromptPlaceholderOccurrences,
   getVideoCapabilities,
   getVideoModelDefinition,
+  getVideoParameterCapabilities,
+  isVideoDurationSupported,
+  modelSupportsUiMode,
+  normalizeVideoDuration,
   placeholderInnerHint,
+  videoModelsForUiMode,
   type UnifiedVideoReference,
   type VideoAspectRatio,
+  type VideoDurationCapability,
   type VideoGenerationModeId,
+  type VideoGrokImagineMode,
   type VideoModelId,
+  type VideoModelSettings,
   type VideoResolution,
   type UiVideoModeId,
   UI_VIDEO_MODES as UI_MODES,
@@ -50,9 +59,96 @@ import {
 const MEDIA_BUCKET = "generated-images";
 const OPEN_VIDEO_PROMPT_PRESETS_EVENT = "otato:open-video-prompt-presets";
 
+function ratioPreviewAspect(value: string): string | undefined {
+  const match = value.match(/^(\d+):(\d+)$/);
+  return match ? `${match[1]} / ${match[2]}` : undefined;
+}
+
+function ratioPreviewStyle(value: string): CSSProperties | undefined {
+  const match = value.match(/^(\d+):(\d+)$/);
+  if (!match) return undefined;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return undefined;
+  const maxWidth = 38;
+  const maxHeight = 26;
+  const ratio = width / height;
+  const previewWidth = ratio >= maxWidth / maxHeight ? maxWidth : maxHeight * ratio;
+  const previewHeight = ratio >= maxWidth / maxHeight ? maxWidth / ratio : maxHeight;
+  return {
+    aspectRatio: ratioPreviewAspect(value),
+    width: `${previewWidth}px`,
+    height: `${previewHeight}px`,
+  };
+}
+
+function durationProgressStyle(value: number, capability: VideoDurationCapability): CSSProperties {
+  const values = capability.type === "range" ? [capability.min, capability.max] : capability.values;
+  const min = Math.min(...values, value);
+  const max = Math.max(...values, value);
+  const progress = max > min ? ((value - min) / (max - min)) * 100 : 100;
+  return { "--duration-progress": `${Math.min(100, Math.max(18, progress))}%` } as CSSProperties;
+}
+
+function durationPresets(capability: VideoDurationCapability): number[] {
+  if (capability.type === "range") return [];
+  return Array.from(new Set(capability.values)).sort((a, b) => a - b);
+}
+
 type ReferenceKind = "image" | "video" | "audio";
 type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string } | null;
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
+
+function isAutoDispatchedVideoModel(modelId: VideoModelId): boolean {
+  return modelId === "seedance-2.0" ||
+    modelId === "seedance-2.0-fast" ||
+    modelId === "seedance-1.5-pro" ||
+    modelId === "doubao-seedance-1.0-pro-fast" ||
+    modelId === "kling-3.0" ||
+    modelId === "kling-2.6-motion" ||
+    modelId === "happyhorse-1.1" ||
+    modelId === "happyhorse-1.0" ||
+    modelId === "grok-imagine" ||
+    modelId === "veo-3.1" ||
+    modelId === "veo-3.1-fast";
+}
+
+function isHappyHorseVideoModel(modelId: VideoModelId): boolean {
+  return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
+}
+
+function isGrokImagineVideoModel(modelId: VideoModelId): boolean {
+  return modelId === "grok-imagine";
+}
+
+function isVeo31VideoModel(modelId: VideoModelId): boolean {
+  return modelId === "veo-3.1" || modelId === "veo-3.1-fast";
+}
+
+function referenceKindsForUiMode(uiModeId: UiVideoModeId, modelId: VideoModelId): ReferenceKind[] {
+  if (uiModeId === "motion_control") return ["image", "video"];
+  if (uiModeId === "video_edit") return ["video", "image"];
+  if (isHappyHorseVideoModel(modelId) || isGrokImagineVideoModel(modelId) || isVeo31VideoModel(modelId)) return ["image"];
+  if (modelId === "kling-3.0") return ["image", "video"];
+  return REFERENCE_KINDS;
+}
+
+function isVideoModelConfiguredForMode(
+  modelId: VideoModelId,
+  model: VideoModelSettings | undefined,
+  apiMode: "site" | "user",
+): boolean {
+  if (!model?.baseUrl.trim()) return false;
+  if (apiMode === "user" && !model.apiKey.trim()) return false;
+  if (!isAutoDispatchedVideoModel(modelId) && !model.apiModelName.trim()) return false;
+  return true;
+}
+
+function missingVideoConfigMessage(modelId: VideoModelId, label: string, apiMode: "site" | "user"): string {
+  const parts = apiMode === "user" ? ["Base URL", "API Key"] : ["Base URL"];
+  if (!isAutoDispatchedVideoModel(modelId)) parts.push("API Model Name");
+  return `模型「${label}」未配置完整，请先到设置页填写 ${parts.join(" / ")}。`;
+}
 type ReferenceState = {
   frames: [ReferenceSlot, ReferenceSlot];
   allPurpose: ReferenceCollections;
@@ -65,7 +161,7 @@ type ReferenceUploadMenuState = {
   projectAssetKind: ProjectAssetMediaKind | null;
   anchor: MenuAnchor;
 } | null;
-type ToolbarPickerKind = "model" | "ratio" | "duration" | "resolution";
+type ToolbarPickerKind = "mode" | "model" | "ratio" | "duration" | "resolution" | "grokMode";
 type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
 type PresetRailItem = {
@@ -76,7 +172,12 @@ type PresetRailItem = {
 };
 
 const FREE_PRESET: PresetRailItem = { id: "free", label: "自由模式", promptTemplate: "", coverUrl: "" };
-const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => id !== "kling-2.6-motion");
+const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => modelSupportsUiMode(id, "start_end_frame") || modelSupportsUiMode(id, "multi_image_reference") || modelSupportsUiMode(id, "video_edit"));
+const GROK_IMAGINE_MODES: ReadonlyArray<{ id: VideoGrokImagineMode; label: string }> = [
+  { id: "normal", label: "普通" },
+  { id: "fun", label: "有趣" },
+  { id: "spicy", label: "热辣" },
+];
 
 const REFERENCE_KINDS: ReferenceKind[] = ["image", "video", "audio"];
 
@@ -160,7 +261,9 @@ function composerPlaceholder(tokenList: string[], slotIndex: number): string {
 }
 
 function uiModeFromRecord(modeId: VideoGenerationModeId): UiVideoModeId {
-  return modeId === "multi_image_reference" ? "multi_image_reference" : "start_end_frame";
+  if (modeId === "multi_image_reference") return "multi_image_reference";
+  if (modeId === "video_edit") return "video_edit";
+  return "start_end_frame";
 }
 
 function effectiveModeFromUi(
@@ -172,6 +275,8 @@ function effectiveModeFromUi(
 
 function slotLabel(uiModeId: UiVideoModeId, index: number): string {
   if (uiModeId === "start_end_frame") return index === 0 ? "首帧" : "尾帧";
+  if (uiModeId === "video_edit") return index === 0 ? "原视频" : `参考图${index}`;
+  if (uiModeId === "motion_control") return index === 0 ? "主体图" : "动作视频";
   return `图${index + 1}`;
 }
 
@@ -182,6 +287,38 @@ function referenceRoleForKind(kind: ReferenceKind): UnifiedVideoReference["role"
 }
 
 function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): UnifiedVideoReference[] {
+  if (uiModeId === "motion_control") {
+    return [
+      ...references.allPurpose.image.slice(0, 1).map((slot) => ({
+        role: "start_frame" as const,
+        url: slot.url,
+        label: "主体图",
+        mimeType: slot.mimeType,
+      })),
+      ...references.allPurpose.video.slice(0, 1).map((slot) => ({
+        role: "motion_source_video" as const,
+        url: slot.url,
+        label: "动作视频",
+        mimeType: slot.mimeType,
+      })),
+    ];
+  }
+  if (uiModeId === "video_edit") {
+    return [
+      ...references.allPurpose.video.slice(0, 1).map((slot, index) => ({
+        role: "video_reference" as const,
+        url: slot.url,
+        label: index === 0 ? "原视频" : kindSlotLabel("video", index),
+        mimeType: slot.mimeType,
+      })),
+      ...references.allPurpose.image.map((slot, index) => ({
+        role: "image_reference" as const,
+        url: slot.url,
+        label: `参考图${index + 1}`,
+        mimeType: slot.mimeType,
+      })),
+    ];
+  }
   if (uiModeId === "multi_image_reference") {
     return REFERENCE_KINDS.flatMap((kind) =>
       references.allPurpose[kind].map((slot, index) => ({
@@ -214,9 +351,9 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
 }
 
 function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReference["role"], index: number): { kind: "frame"; index: 0 | 1 } | { kind: ReferenceKind; index: number } | null {
-  if (modeId === "multi_image_reference") {
+  if (modeId === "multi_image_reference" || modeId === "video_edit" || modeId === "motion_control") {
     if (role === "image_reference") return { kind: "image", index };
-    if (role === "video_reference") return { kind: "video", index };
+    if (role === "video_reference" || role === "motion_source_video") return { kind: "video", index };
     if (role === "audio_reference") return { kind: "audio", index };
     return null;
   }
@@ -252,7 +389,7 @@ export default function VideoPage() {
     if (pathname === "/video") router.replace("/projects");
   }, [pathname, router]);
 
-  const { videoWorkspace, workspaceReady } = useApiSettings();
+  const { videoWorkspace, apiUsageMode, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
   const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
   const [selectedPresetId, setSelectedPresetId] = useState("free");
@@ -260,6 +397,8 @@ export default function VideoPage() {
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<VideoAspectRatio>(videoWorkspace.uiDefaults.defaultAspectRatio);
   const [selectedDuration, setSelectedDuration] = useState<number>(videoWorkspace.uiDefaults.defaultDurationSeconds);
   const [selectedResolution, setSelectedResolution] = useState<VideoResolution>(videoWorkspace.uiDefaults.defaultResolution);
+  const [selectedSoundEnabled, setSelectedSoundEnabled] = useState(false);
+  const [selectedGrokMode, setSelectedGrokMode] = useState<VideoGrokImagineMode>("normal");
   const [slotInputs, setSlotInputs] = useState<string[]>([""]);
   const [references, setReferences] = useState<ReferenceState>(createEmptyReferences);
   const [resultUrl, setResultUrl] = useState("");
@@ -278,14 +417,25 @@ export default function VideoPage() {
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
 
-  const safeModelId = VIDEO_UI_MODEL_ORDER.includes(selectedModelId)
+  const selectableModelIds = useMemo(() => videoModelsForUiMode(selectedUiModeId), [selectedUiModeId]);
+  const safeModelId = selectableModelIds.includes(selectedModelId)
     ? selectedModelId
-    : videoWorkspace.uiDefaults.defaultModelId;
+    : selectableModelIds[0] ?? videoWorkspace.uiDefaults.defaultModelId;
   const capabilities = useMemo(() => getVideoCapabilities(safeModelId), [safeModelId]);
   const { modeId: effectiveModeId, error: modeError } = useMemo(
     () => effectiveModeFromUi(selectedUiModeId, references),
     [selectedUiModeId, references],
   );
+  const currentParameterReferences = useMemo(
+    () => buildReferences(selectedUiModeId, references),
+    [references, selectedUiModeId],
+  );
+  const parameterCapabilities = useMemo(
+    () => getVideoParameterCapabilities(safeModelId, effectiveModeId, currentParameterReferences),
+    [currentParameterReferences, effectiveModeId, safeModelId],
+  );
+  const durationCapability = parameterCapabilities.durationCapability;
+  const soundControl = parameterCapabilities.soundControl;
 
   const allModes = useMemo(
     () => [...VIDEO_MODES, ...(videoWorkspace.customModes ?? [])].reverse(),
@@ -326,11 +476,9 @@ export default function VideoPage() {
     [selectedPreset.promptTemplate],
   );
   const composerSlotCount = composerSlotCountForTemplate(selectedPreset.promptTemplate);
-  const modelReady = Boolean(
-    videoWorkspace.models[safeModelId]?.baseUrl.trim() &&
-      videoWorkspace.models[safeModelId]?.apiKey.trim() &&
-      videoWorkspace.models[safeModelId]?.apiModelName.trim(),
-  );
+  const modelReady = apiUsageMode.video === "site"
+    ? true
+    : isVideoModelConfiguredForMode(safeModelId, videoWorkspace.models[safeModelId], apiUsageMode.video);
   const sidebarHistoryRecords = useMemo(() => {
     const success = records.filter((item) => item.status === "success" && Boolean(item.videoUrl)).slice(0, 24);
     return success.slice().reverse();
@@ -443,7 +591,7 @@ export default function VideoPage() {
       });
       return candidates;
     }
-    REFERENCE_KINDS.forEach((kind) => {
+    referenceKindsForUiMode(selectedUiModeId, safeModelId).forEach((kind) => {
       references.allPurpose[kind].forEach((slot, index) => {
         candidates.push({
           id: `${kind}:${index}`,
@@ -458,29 +606,35 @@ export default function VideoPage() {
       });
     });
     return candidates;
-  }, [references, selectedUiModeId]);
+  }, [references, safeModelId, selectedUiModeId]);
 
   useEffect(() => {
     setSelectedModelId((current) =>
-      VIDEO_UI_MODEL_ORDER.includes(current) ? current : videoWorkspace.uiDefaults.defaultModelId,
+      selectableModelIds.includes(current) ? current : selectableModelIds[0] ?? videoWorkspace.uiDefaults.defaultModelId,
     );
-  }, [videoWorkspace.uiDefaults.defaultModelId]);
+  }, [selectableModelIds, videoWorkspace.uiDefaults.defaultModelId]);
 
   useEffect(() => {
     setSelectedAspectRatio((current) =>
-      capabilities.aspectRatios.includes(current) ? current : capabilities.aspectRatios[0],
+      parameterCapabilities.supportsAspectRatio && parameterCapabilities.aspectRatios.includes(current)
+        ? current
+        : parameterCapabilities.aspectRatios[0] ?? videoWorkspace.uiDefaults.defaultAspectRatio,
     );
-    setSelectedDuration((current) =>
-      capabilities.durations.includes(current) ? current : capabilities.durations[0],
-    );
+    if (parameterCapabilities.supportsDuration && durationCapability) {
+      setSelectedDuration((current) => normalizeVideoDuration(current, durationCapability));
+    } else {
+      setSelectedDuration(0);
+    }
     setSelectedResolution((current) =>
-      capabilities.resolutions.includes(current) ? current : capabilities.resolutions[0],
+      parameterCapabilities.resolutions.includes(current) ? current : parameterCapabilities.resolutions[0],
     );
-    if (selectedUiModeId === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference")) {
-      setSelectedUiModeId("start_end_frame");
+    setSelectedSoundEnabled(soundControl?.defaultEnabled ?? false);
+    setSelectedGrokMode("normal");
+    if (!capabilities.supportsFirstLastFrames) {
+      setReferences((current) => current.frames[1] ? { ...current, frames: [current.frames[0], null] } : current);
     }
     setToolbarPickerMenu(null);
-  }, [capabilities, safeModelId, selectedUiModeId]);
+  }, [capabilities, durationCapability, effectiveModeId, parameterCapabilities, safeModelId, selectedUiModeId, soundControl, videoWorkspace.uiDefaults.defaultAspectRatio]);
 
   useEffect(() => {
     if (selectedPresetId === "free") return;
@@ -649,6 +803,11 @@ export default function VideoPage() {
   async function handleGenerate() {
     setError("");
 
+    if (selectableModelIds.length === 0 || !modelSupportsUiMode(safeModelId, selectedUiModeId)) {
+      setError("当前模式暂无可用模型。");
+      return;
+    }
+
     const prompt = buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs).trim();
     if (!prompt) {
       setError("提示词不能为空。");
@@ -691,18 +850,31 @@ export default function VideoPage() {
       setError("全能参考模式至少需要上传或 @ 引用一个图片、视频或音频素材。");
       return;
     }
+    if (selectedUiModeId === "video_edit" && !allReferences.some((ref) => ref.role === "video_reference")) {
+      setError("视频编辑模式需要上传或 @ 引用一个原视频素材。");
+      return;
+    }
+    if (selectedUiModeId === "motion_control" && (!allReferences.some((ref) => ref.role === "start_frame") || !allReferences.some((ref) => ref.role === "motion_source_video"))) {
+      setError("动作迁移模式需要上传或 @ 引用 1 张主体图和 1 个动作参考视频。");
+      return;
+    }
     const hasStartFrame = allReferences.some((ref) => ref.role === "start_frame");
     const hasEndFrame = allReferences.some((ref) => ref.role === "end_frame");
     const hasImageReferences = allReferences.some((ref) => ref.role === "image_reference");
     const hasVideoReferences = allReferences.some((ref) => ref.role === "video_reference");
     const hasAudioReferences = allReferences.some((ref) => ref.role === "audio_reference");
     const hasMotionSourceVideo = allReferences.some((ref) => ref.role === "motion_source_video");
+    const imageReferenceCount = allReferences.filter((ref) => ref.role === "image_reference").length;
 
     let finalEffectiveModeId = effectiveModeId;
     if (mentionResolution.hasMentions && hasMotionSourceVideo) {
       finalEffectiveModeId = "motion_control";
     } else if (mentionResolution.hasMentions && (hasImageReferences || hasVideoReferences || hasAudioReferences)) {
       finalEffectiveModeId = "multi_image_reference";
+    } else if (selectedUiModeId === "video_edit") {
+      finalEffectiveModeId = "video_edit";
+    } else if (selectedUiModeId === "motion_control") {
+      finalEffectiveModeId = "motion_control";
     } else if (selectedUiModeId === "start_end_frame") {
       const { modeId: inferredMode } = inferEffectiveVideoMode(selectedUiModeId, hasStartFrame, hasEndFrame);
       finalEffectiveModeId = inferredMode;
@@ -716,11 +888,50 @@ export default function VideoPage() {
       setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持全能参考模式。`);
       return;
     }
+    if (isHappyHorseVideoModel(safeModelId) && finalEffectiveModeId === "multi_image_reference" && (!hasImageReferences || hasVideoReferences || hasAudioReferences)) {
+      setError("HappyHorse 全能参考只支持 1~9 张图片参考，不支持视频或音频参考。");
+      return;
+    }
+    if (isVeo31VideoModel(safeModelId) && finalEffectiveModeId === "multi_image_reference" && (!hasImageReferences || hasVideoReferences || hasAudioReferences)) {
+      setError("Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
+      return;
+    }
+    if (finalEffectiveModeId === "video_edit" && !capabilities.supportedModes.includes("video_edit")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持视频编辑模式。`);
+      return;
+    }
+    if (finalEffectiveModeId === "motion_control" && !capabilities.supportedModes.includes("motion_control")) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持动作迁移模式。`);
+      return;
+    }
+    const finalParameterCapabilities = getVideoParameterCapabilities(safeModelId, finalEffectiveModeId, allReferences);
+    const finalDurationCapability = finalParameterCapabilities.durationCapability;
+    const requestDuration = finalParameterCapabilities.supportsDuration && finalDurationCapability
+      ? selectedDuration
+      : 0;
+    const requestAspectRatio = finalParameterCapabilities.supportsAspectRatio
+      ? selectedAspectRatio
+      : undefined;
+    if (finalParameterCapabilities.supportsDuration && finalDurationCapability && !isVideoDurationSupported(selectedDuration, finalDurationCapability)) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持 ${selectedDuration}s 时长。`);
+      setSelectedDuration(normalizeVideoDuration(selectedDuration, finalDurationCapability));
+      return;
+    }
+    if (finalParameterCapabilities.supportsAspectRatio && requestAspectRatio && !finalParameterCapabilities.aspectRatios.includes(requestAspectRatio)) {
+      setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持 ${requestAspectRatio} 比例。`);
+      setSelectedAspectRatio(finalParameterCapabilities.aspectRatios[0] ?? videoWorkspace.uiDefaults.defaultAspectRatio);
+      return;
+    }
+    if (safeModelId === "happyhorse-1.0" && finalEffectiveModeId === "video_edit" && imageReferenceCount > 5) {
+      setError("HappyHorse 1.0 视频编辑最多支持 5 张参考图。");
+      return;
+    }
 
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
-    if (!liveModel.baseUrl.trim() || !liveModel.apiKey.trim() || !liveModel.apiModelName.trim()) {
-      setError(`模型「${liveModel.label}」未配置完整，请先到设置页填写 Base URL / API Key / API Model Name。`);
+    const liveApiMode = liveSnapshot.apiUsageMode?.video ?? "site";
+    if (liveApiMode === "user" && !isVideoModelConfiguredForMode(safeModelId, liveModel, liveApiMode)) {
+      setError(missingVideoConfigMessage(safeModelId, liveModel.label || safeModelId, liveApiMode));
       return;
     }
 
@@ -733,9 +944,11 @@ export default function VideoPage() {
           modelId: safeModelId,
           modeId: finalEffectiveModeId,
           prompt: cleanedPrompt,
-          duration: selectedDuration,
-          aspectRatio: selectedAspectRatio,
+          duration: requestDuration,
+          aspectRatio: requestAspectRatio,
           resolution: selectedResolution,
+          soundEnabled: finalParameterCapabilities.soundControl ? selectedSoundEnabled : undefined,
+          grokImagineMode: isGrokImagineVideoModel(safeModelId) ? selectedGrokMode : undefined,
           references: allReferences,
           projectId,
         }),
@@ -761,8 +974,9 @@ export default function VideoPage() {
 
   function applyHistoryRecord(record: VideoGalleryRecord) {
     setError("");
-    setSelectedUiModeId(uiModeFromRecord(record.modeId));
-    setSelectedModelId(VIDEO_UI_MODEL_ORDER.includes(record.modelId) ? record.modelId : videoWorkspace.uiDefaults.defaultModelId);
+    const nextUiModeId = uiModeFromRecord(record.modeId);
+    setSelectedUiModeId(nextUiModeId);
+    setSelectedModelId(modelSupportsUiMode(record.modelId, nextUiModeId) ? record.modelId : videoModelsForUiMode(nextUiModeId)[0] ?? videoWorkspace.uiDefaults.defaultModelId);
     if (record.aspectRatio) setSelectedAspectRatio(record.aspectRatio);
     if (record.durationSeconds) setSelectedDuration(record.durationSeconds);
     if (record.resolution) setSelectedResolution(record.resolution);
@@ -804,33 +1018,69 @@ export default function VideoPage() {
   }
 
   const toolbarPickerOptions = toolbarPickerMenu
-    ? toolbarPickerMenu.kind === "model"
-      ? VIDEO_UI_MODEL_ORDER.map((id) => ({
-          id,
-          label: getVideoModelDefinition(id).label,
-          active: safeModelId === id,
-          onSelect: () => setSelectedModelId(id),
+    ? toolbarPickerMenu.kind === "mode"
+      ? UI_MODES.map((mode) => ({
+          id: mode.id,
+          label: mode.label,
+          active: selectedUiModeId === mode.id,
+          disabled: false,
+          title: undefined,
+          onSelect: () => setSelectedUiModeId(mode.id),
         }))
-      : toolbarPickerMenu.kind === "ratio"
-        ? capabilities.aspectRatios.map((ratio) => ({
-            id: ratio,
-            label: ratio,
-            active: selectedAspectRatio === ratio,
-            onSelect: () => setSelectedAspectRatio(ratio),
-          }))
-        : toolbarPickerMenu.kind === "duration"
-          ? capabilities.durations.map((duration) => ({
-              id: String(duration),
-              label: `${duration}s`,
-              active: selectedDuration === duration,
-              onSelect: () => setSelectedDuration(duration),
+        : toolbarPickerMenu.kind === "model"
+          ? (selectableModelIds.length > 0 ? selectableModelIds.map((id) => ({
+            id,
+            label: getVideoModelDefinition(id).label,
+            active: safeModelId === id,
+            disabled: false,
+            title: undefined,
+            onSelect: () => setSelectedModelId(id),
+          })) : [{
+            id: "no-model",
+            label: "当前模式暂无可用模型",
+            active: false,
+            disabled: true,
+            title: undefined,
+            onSelect: () => {},
+          }])
+        : toolbarPickerMenu.kind === "grokMode"
+          ? GROK_IMAGINE_MODES.map((mode) => ({
+              id: mode.id,
+              label: mode.label,
+              active: selectedGrokMode === mode.id,
+              disabled: false,
+              title: undefined,
+              onSelect: () => setSelectedGrokMode(mode.id),
             }))
-          : capabilities.resolutions.map((resolution) => ({
-              id: resolution,
-              label: resolution,
-              active: selectedResolution === resolution,
-              onSelect: () => setSelectedResolution(resolution),
+        : toolbarPickerMenu.kind === "ratio"
+          ? parameterCapabilities.aspectRatios.map((ratio) => ({
+              id: ratio,
+              label: ratio,
+              previewAspectRatio: ratioPreviewAspect(ratio),
+              previewStyle: ratioPreviewStyle(ratio),
+              active: selectedAspectRatio === ratio,
+              disabled: false,
+              title: undefined,
+              onSelect: () => setSelectedAspectRatio(ratio),
             }))
+          : toolbarPickerMenu.kind === "duration"
+            ? durationCapability ? durationPresets(durationCapability).map((duration) => ({
+                id: String(duration),
+                label: `${duration}s`,
+                progressStyle: durationProgressStyle(duration, durationCapability),
+                active: selectedDuration === duration,
+                disabled: durationCapability.type === "range" ? !isVideoDurationSupported(duration, durationCapability) : false,
+                title: durationCapability.type === "recommended" ? "推荐时长" : undefined,
+                onSelect: () => setSelectedDuration(duration),
+              })) : []
+            : parameterCapabilities.resolutions.map((resolution) => ({
+                id: resolution,
+                label: resolution,
+                active: selectedResolution === resolution,
+                disabled: false,
+                title: undefined,
+                onSelect: () => setSelectedResolution(resolution),
+              }))
     : [];
 
   return (
@@ -903,7 +1153,14 @@ export default function VideoPage() {
           <div className={styles.canvasInner}>
             <div className={styles.resultSafeFrame}>
               <div className={styles.resultClip}>
-                {resultUrl ? <video className={styles.resultVideo} src={resultUrl} controls /> : null}
+                {resultUrl ? (
+                  <InlineVideoPlayer
+                    src={resultUrl}
+                    title="生成结果视频"
+                    suggestedFileName="生成视频.mp4"
+                    videoClassName={styles.resultVideo}
+                  />
+                ) : null}
               </div>
             </div>
             {isGenerating ? (
@@ -954,7 +1211,7 @@ export default function VideoPage() {
           <div className={styles.composerDock}>
             <div className={styles.referenceStrip}>
               {selectedUiModeId === "start_end_frame" ? (
-                references.frames.map((slot, index) => (
+                references.frames.slice(0, capabilities.supportsFirstLastFrames ? 2 : 1).map((slot, index) => (
                   <div
                     key={`frame-${index}`}
                     className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
@@ -1011,7 +1268,7 @@ export default function VideoPage() {
                   </div>
                 ))
               ) : (
-                REFERENCE_KINDS.map((kind) => (
+                referenceKindsForUiMode(selectedUiModeId, safeModelId).map((kind) => (
                   <div key={kind} className={styles.refGroup} aria-label={`${kindGroupLabel(kind)}素材`}>
                     {[...references.allPurpose[kind], null].map((slot, index) => (
                       <div
@@ -1067,7 +1324,7 @@ export default function VideoPage() {
                             )
                           ) : (
                             <span className={styles.refEmptyContent}>
-                              <span className={styles.refSlotIndex}>{kindSlotLabel(kind, index)}</span>
+                              <span className={styles.refSlotIndex}>{selectedUiModeId === "video_edit" && kind === "video" && index === 0 ? "原视频" : selectedUiModeId === "motion_control" && kind === "image" ? "主体图" : selectedUiModeId === "motion_control" && kind === "video" ? "动作视频" : kindSlotLabel(kind, index)}</span>
                             </span>
                           )}
                         </button>
@@ -1111,27 +1368,26 @@ export default function VideoPage() {
             </div>
 
             <div className={styles.toolbar}>
-              <div className={[shellStyles.segmented, shellStyles.segmentedComposer].join(" ")}>
-                {UI_MODES.map((mode) => (
-                  (() => {
-                    const unsupported = mode.id === "multi_image_reference" && !capabilities.supportedModes.includes("multi_image_reference");
-                    return (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        disabled={unsupported}
-                        title={unsupported ? "当前模型不支持全能参考" : undefined}
-                        onClick={() => {
-                          if (!unsupported) setSelectedUiModeId(mode.id);
-                        }}
-                        className={[shellStyles.segmentedItem, selectedUiModeId === mode.id ? shellStyles.segmentedItemActive : ""].join(" ")}
-                      >
-                        {mode.label}
-                      </button>
-                    );
-                  })()
-                ))}
-              </div>
+              <ApiUsageModeToggle
+                module="video"
+                className={[styles.composerPickerButton, styles.composerPickerApi].join(" ")}
+                backdropClassName={styles.toolbarPickerBackdrop}
+                menuClassName={styles.toolbarPickerMenu}
+                optionClassName={styles.toolbarPickerOption}
+                optionActiveClassName={styles.toolbarPickerOptionActive}
+              />
+              <button
+                type="button"
+                className={[styles.composerPickerButton, styles.composerPickerMode].join(" ")}
+                aria-haspopup="menu"
+                aria-expanded={toolbarPickerMenu?.kind === "mode"}
+                onClick={(event) => {
+                  const anchor = menuAnchorFromElement(event.currentTarget);
+                  setToolbarPickerMenu((current) => current?.kind === "mode" ? null : { kind: "mode", anchor });
+                }}
+              >
+                <span className={styles.composerPickerLabel}>{UI_MODES.find((mode) => mode.id === selectedUiModeId)?.label ?? "首尾帧"}</span>
+              </button>
 
               <button
                 type="button"
@@ -1146,31 +1402,51 @@ export default function VideoPage() {
                 <span className={styles.composerPickerLabel}>{getVideoModelDefinition(safeModelId).label}</span>
               </button>
 
-              <button
-                type="button"
-                className={[styles.composerPickerButton, styles.composerPickerRatio].join(" ")}
-                aria-haspopup="menu"
-                aria-expanded={toolbarPickerMenu?.kind === "ratio"}
-                onClick={(event) => {
-                  const anchor = menuAnchorFromElement(event.currentTarget);
-                  setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
-                }}
-              >
-                <span className={styles.composerPickerLabel}>{selectedAspectRatio}</span>
-              </button>
+              {isGrokImagineVideoModel(safeModelId) ? (
+                <button
+                  type="button"
+                  className={[styles.composerPickerButton, styles.composerPickerMode].join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={toolbarPickerMenu?.kind === "grokMode"}
+                  title="Grok Imagine 生成风格"
+                  onClick={(event) => {
+                    const anchor = menuAnchorFromElement(event.currentTarget);
+                    setToolbarPickerMenu((current) => current?.kind === "grokMode" ? null : { kind: "grokMode", anchor });
+                  }}
+                >
+                  <span className={styles.composerPickerLabel}>{GROK_IMAGINE_MODES.find((mode) => mode.id === selectedGrokMode)?.label ?? "普通"}</span>
+                </button>
+              ) : null}
 
-              <button
-                type="button"
-                className={[styles.composerPickerButton, styles.composerPickerDuration].join(" ")}
-                aria-haspopup="menu"
-                aria-expanded={toolbarPickerMenu?.kind === "duration"}
-                onClick={(event) => {
-                  const anchor = menuAnchorFromElement(event.currentTarget);
-                  setToolbarPickerMenu((current) => current?.kind === "duration" ? null : { kind: "duration", anchor });
-                }}
-              >
-                <span className={styles.composerPickerLabel}>{selectedDuration}s</span>
-              </button>
+              {parameterCapabilities.supportsAspectRatio ? (
+                <button
+                  type="button"
+                  className={[styles.composerPickerButton, styles.composerPickerRatio].join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={toolbarPickerMenu?.kind === "ratio"}
+                  onClick={(event) => {
+                    const anchor = menuAnchorFromElement(event.currentTarget);
+                    setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
+                  }}
+                >
+                  <span className={styles.composerPickerLabel}>{selectedAspectRatio}</span>
+                </button>
+              ) : null}
+
+              {parameterCapabilities.supportsDuration && durationCapability ? (
+                <button
+                  type="button"
+                  className={[styles.composerPickerButton, styles.composerPickerDuration].join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={toolbarPickerMenu?.kind === "duration"}
+                  onClick={(event) => {
+                    const anchor = menuAnchorFromElement(event.currentTarget);
+                    setToolbarPickerMenu((current) => current?.kind === "duration" ? null : { kind: "duration", anchor });
+                  }}
+                >
+                  <span className={styles.composerPickerLabel}>{selectedDuration}s</span>
+                </button>
+              ) : null}
 
               <button
                 type="button"
@@ -1186,6 +1462,20 @@ export default function VideoPage() {
               </button>
 
               <div className={styles.toolbarActions}>
+                {soundControl ? (
+                  <button
+                    type="button"
+                    className={[styles.freeModeToggle, selectedSoundEnabled ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}
+                    aria-pressed={selectedSoundEnabled}
+                    title={soundControl.costHint}
+                    onClick={() => setSelectedSoundEnabled((value) => !value)}
+                  >
+                    <span className={styles.freeSwitchTrack} aria-hidden>
+                      <span className={styles.freeSwitchThumb} />
+                    </span>
+                    <span>{soundControl.label}</span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={[styles.freeModeToggle, !isFreeMode ? styles.freeModeToggleActive : ""].filter(Boolean).join(" ")}
@@ -1275,26 +1565,79 @@ export default function VideoPage() {
                 onClick={() => setToolbarPickerMenu(null)}
               />
               <div
-                className={styles.toolbarPickerMenu}
+                className={[
+                  styles.toolbarPickerMenu,
+                  toolbarPickerMenu.kind === "ratio" ? styles.toolbarPickerMenuRatio : "",
+                  toolbarPickerMenu.kind === "duration" ? styles.toolbarPickerMenuDuration : "",
+                ].filter(Boolean).join(" ")}
                 style={{
                   left: toolbarPickerMenu.anchor.left + toolbarPickerMenu.anchor.width / 2,
                   top: toolbarPickerMenu.anchor.top,
                 } as CSSProperties}
                 role="menu"
               >
+                {toolbarPickerMenu.kind === "duration" && durationCapability?.type === "range" ? (
+                  <div className={styles.toolbarDurationRange} role="presentation">
+                    <div className={styles.toolbarDurationRangeHead}>
+                      <span>{durationCapability.min}s</span>
+                      <strong>{selectedDuration}s</strong>
+                      <span>{durationCapability.max}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={durationCapability.min}
+                      max={durationCapability.max}
+                      step={durationCapability.step}
+                      value={selectedDuration}
+                      aria-label="视频时长"
+                      className={styles.toolbarDurationSlider}
+                      onChange={(event) => {
+                        setSelectedDuration(normalizeVideoDuration(Number(event.currentTarget.value), durationCapability));
+                      }}
+                    />
+                  </div>
+                ) : null}
                 {toolbarPickerOptions.map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    className={[styles.toolbarPickerOption, option.active ? styles.toolbarPickerOptionActive : ""].filter(Boolean).join(" ")}
+                    className={[
+                      styles.toolbarPickerOption,
+                      toolbarPickerMenu.kind === "ratio" ? styles.toolbarPickerOptionRatio : "",
+                      toolbarPickerMenu.kind === "duration" ? styles.toolbarPickerOptionDuration : "",
+                      option.active ? styles.toolbarPickerOptionActive : "",
+                    ].filter(Boolean).join(" ")}
                     role="menuitemradio"
                     aria-checked={option.active}
+                    disabled={option.disabled}
+                    title={option.title}
                     onClick={() => {
+                      if (option.disabled) return;
                       option.onSelect();
                       setToolbarPickerMenu(null);
                     }}
                   >
-                    {option.label}
+                    {toolbarPickerMenu.kind === "ratio" ? (
+                      <>
+                        <span
+                          className={styles.toolbarRatioPreview}
+                          style={"previewStyle" in option ? (option.previewStyle as CSSProperties) : undefined}
+                          aria-hidden
+                        />
+                        <span className={styles.toolbarRatioLabel}>{option.label}</span>
+                      </>
+                    ) : toolbarPickerMenu.kind === "duration" ? (
+                      <>
+                        <span
+                          className={styles.toolbarDurationBar}
+                          style={"progressStyle" in option ? (option.progressStyle as CSSProperties) : undefined}
+                          aria-hidden
+                        />
+                        <span className={styles.toolbarDurationLabel}>{option.label}</span>
+                      </>
+                    ) : (
+                      option.label
+                    )}
                   </button>
                 ))}
               </div>

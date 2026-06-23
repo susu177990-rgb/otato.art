@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { MeSnapshot } from "@/lib/types";
 import shellStyles from "../shared/shell.module.css";
@@ -52,6 +52,7 @@ function totalAssets(snapshot: MeSnapshot): number {
 }
 
 export default function MePage() {
+  const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [emailForm, setEmailForm] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
@@ -139,9 +140,19 @@ export default function MePage() {
       <header className={[shellStyles.topbar, styles.meTopbar].join(" ")}>
         <div className={[shellStyles.topbarLeft, styles.meTopbarLeft].join(" ")}>
           <div className={shellStyles.topbarTagline}>
-            <Link href="/projects" className={shellStyles.navLink}>
-              返回项目
-            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  router.back();
+                } else {
+                  router.replace("/projects");
+                }
+              }}
+              className={shellStyles.navLink}
+            >
+              返回
+            </button>
           </div>
         </div>
       </header>

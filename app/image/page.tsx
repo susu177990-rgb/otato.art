@@ -23,7 +23,7 @@ import {
   type ImageSizeTier,
 } from "@/lib/image-workspace";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
-import { ApiUsageModeSwitch } from "@/components/ApiUsageModeSwitch";
+import { ApiUsageModeSwitch, ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog } from "@/components/project-assets/ProjectAssetPickerDialog";
@@ -69,6 +69,31 @@ const RESULT_ASPECT_RATIO_NUMBER_BY_VALUE: Partial<Record<ImageAspectRatio, numb
   "16:9": 16 / 9,
   "21:9": 21 / 9,
 };
+
+function ratioPreviewAspect(value: string): string | undefined {
+  if (value === "auto") return undefined;
+  const match = value.match(/^(\d+):(\d+)$/);
+  return match ? `${match[1]} / ${match[2]}` : undefined;
+}
+
+function ratioPreviewStyle(value: string): CSSProperties | undefined {
+  const match = value.match(/^(\d+):(\d+)$/);
+  if (!match) return undefined;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return undefined;
+  const maxWidth = 38;
+  const maxHeight = 26;
+  const ratio = width / height;
+  const previewWidth = ratio >= maxWidth / maxHeight ? maxWidth : maxHeight * ratio;
+  const previewHeight = ratio >= maxWidth / maxHeight ? maxWidth / ratio : maxHeight;
+  return {
+    aspectRatio: ratioPreviewAspect(value),
+    width: `${previewWidth}px`,
+    height: `${previewHeight}px`,
+  };
+}
+
 const IMAGE_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-image-generation-runtime-v1";
 const IMAGE_GENERATION_RUNTIME_EVENT = "script-agent-image-generation-runtime-change";
 const IMAGE_REFERENCE_CACHE_STORAGE_KEY = "script-agent-image-reference-cache-v1";
@@ -1073,6 +1098,8 @@ export default function ImagePage() {
         ? ASPECT_RATIOS.map((ratio) => ({
             id: ratio,
             label: ratio === "auto" ? "自适应" : ratio,
+            previewAspectRatio: ratioPreviewAspect(ratio),
+            previewStyle: ratioPreviewStyle(ratio),
             active: aspectRatio === ratio,
             onSelect: () => setAspectRatio(ratio),
           }))
@@ -1395,6 +1422,14 @@ export default function ImagePage() {
               ))}
             </div>
             <div className={styles.toolbar}>
+              <ApiUsageModeToggle
+                module="image"
+                className={[styles.composerPickerButton, styles.composerSelectApi].join(" ")}
+                backdropClassName={styles.toolbarPickerBackdrop}
+                menuClassName={styles.toolbarPickerMenu}
+                optionClassName={styles.toolbarPickerOption}
+                optionActiveClassName={styles.toolbarPickerOptionActive}
+              />
               <button
                 type="button"
                 className={[styles.composerPickerButton, styles.composerSelectModel].join(" ")}
@@ -1563,7 +1598,10 @@ export default function ImagePage() {
                 onClick={() => setToolbarPickerMenu(null)}
               />
               <div
-                className={styles.toolbarPickerMenu}
+                className={[
+                  styles.toolbarPickerMenu,
+                  toolbarPickerMenu.kind === "ratio" ? styles.toolbarPickerMenuRatio : "",
+                ].filter(Boolean).join(" ")}
                 style={{
                   left: toolbarPickerMenu.anchor.left + toolbarPickerMenu.anchor.width / 2,
                   top: toolbarPickerMenu.anchor.top,
@@ -1574,7 +1612,11 @@ export default function ImagePage() {
                   <button
                     key={option.id}
                     type="button"
-                    className={[styles.toolbarPickerOption, option.active ? styles.toolbarPickerOptionActive : ""].filter(Boolean).join(" ")}
+                    className={[
+                      styles.toolbarPickerOption,
+                      toolbarPickerMenu.kind === "ratio" ? styles.toolbarPickerOptionRatio : "",
+                      option.active ? styles.toolbarPickerOptionActive : "",
+                    ].filter(Boolean).join(" ")}
                     role="menuitemradio"
                     aria-checked={option.active}
                     onClick={() => {
@@ -1582,7 +1624,21 @@ export default function ImagePage() {
                       setToolbarPickerMenu(null);
                     }}
                   >
-                    {option.label}
+                    {toolbarPickerMenu.kind === "ratio" ? (
+                      <>
+                        <span
+                          className={[
+                            styles.toolbarRatioPreview,
+                            option.id === "auto" ? styles.toolbarRatioPreviewAuto : "",
+                          ].filter(Boolean).join(" ")}
+                          style={"previewStyle" in option ? option.previewStyle : undefined}
+                          aria-hidden
+                        />
+                        <span className={styles.toolbarRatioLabel}>{option.label}</span>
+                      </>
+                    ) : (
+                      option.label
+                    )}
                   </button>
                 ))}
               </div>

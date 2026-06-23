@@ -5,7 +5,7 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
-import { ApiUsageModeSwitchAll } from "@/components/ApiUsageModeSwitch";
+import { ApiUsageModeSwitchAll, ApiUsageModeToggle, ApiUsageModeToggleAll } from "@/components/ApiUsageModeSwitch";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -2322,6 +2322,14 @@ export default function CanvasBoardPage() {
                         </>
                       ) : (node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
                         <>
+                          <ApiUsageModeToggle
+                            module={node.type === "image" ? "image" : "video"}
+                            className={styles.generatorPill}
+                            backdropClassName={styles.canvasPickerBackdrop}
+                            menuClassName={styles.canvasPickerMenu}
+                            optionClassName={styles.canvasPickerOption}
+                            optionActiveClassName={styles.canvasPickerOptionActive}
+                          />
                           <button
                             type="button"
                             title="上传本地文件"
@@ -2507,6 +2515,13 @@ export default function CanvasBoardPage() {
                           }}
                         />
                         <div className={styles.generatorToolbar}>
+                          <ApiUsageModeToggleAll
+                            className={styles.generatorPill}
+                            backdropClassName={styles.canvasPickerBackdrop}
+                            menuClassName={styles.canvasPickerMenu}
+                            optionClassName={styles.canvasPickerOption}
+                            optionActiveClassName={styles.canvasPickerOptionActive}
+                          />
                           {renderCanvasPickerButton(
                             llmSettings.models[node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId]?.label ??
                               node.metadata?.chatPreferredLlmModelId ??
@@ -2659,6 +2674,14 @@ export default function CanvasBoardPage() {
                           onPointerDown={(e) => e.stopPropagation()}
                         />
                         <div className={styles.generatorToolbar}>
+                          <ApiUsageModeToggle
+                            module={node.type === "image" ? "image" : "video"}
+                            className={styles.generatorPill}
+                            backdropClassName={styles.canvasPickerBackdrop}
+                            menuClassName={styles.canvasPickerMenu}
+                            optionClassName={styles.canvasPickerOption}
+                            optionActiveClassName={styles.canvasPickerOptionActive}
+                          />
                           {node.type === "image" ? (
                             <>
                               {renderCanvasPickerButton(

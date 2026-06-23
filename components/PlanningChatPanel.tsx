@@ -7,6 +7,7 @@ import MessageBubble from "./MessageBubble";
 import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
 import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
+import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./planning-chat-panel.module.css";
 
@@ -183,6 +184,7 @@ export default function PlanningChatPanel({
             placeholder={inputPlaceholder}
             className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
+          <ApiUsageModeToggle module="llm" />
           <button
             type="button"
             onClick={() => void handleSend()}

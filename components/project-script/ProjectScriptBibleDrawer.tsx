@@ -7,6 +7,7 @@ import { auditBibleVsCast } from "@/lib/bible-audit";
 import { downloadSeriesBibleMarkdownFile, downloadCreativeBriefMarkdownFile } from "@/lib/export-artifacts";
 import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
 import ArtifactSlotEditor from "@/components/ArtifactSlotEditor";
+import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 
 export type BibleDrawerTab = "brief" | "bible" | "locale";
@@ -270,6 +271,7 @@ export default function ProjectScriptBibleDrawer({
                   当前尚无系列圣经正文。
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                  <ApiUsageModeToggle module="llm" />
                   <button
                     type="button"
                     disabled={!canLlmFillBible || llmBibleLoading}
@@ -296,6 +298,8 @@ export default function ProjectScriptBibleDrawer({
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {canLlmRewriteBible ? (
+                <>
+                  <ApiUsageModeToggle module="llm" />
                 <button
                   type="button"
                   disabled={llmBibleLoading}
@@ -305,6 +309,7 @@ export default function ProjectScriptBibleDrawer({
                 >
                   {llmBibleLoading ? "生成中…" : "用 LLM 重新生成系列圣经"}
                 </button>
+                </>
               ) : null}
               <button
                 type="button"
@@ -361,6 +366,7 @@ export default function ProjectScriptBibleDrawer({
             ) : null}
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <ApiUsageModeToggle module="llm" />
               <button
                 type="button"
                 disabled={localeGenLoading || !hasApiKey || !localeBriefGenerateEnabled}

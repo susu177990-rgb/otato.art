@@ -14,6 +14,7 @@ import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import MessageBubble from "./MessageBubble";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
 import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
+import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 import { BRAND_NAME } from "@/lib/branding";
 import styles from "./chat-window.module.css";
@@ -275,6 +276,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
             placeholder={projectId ? "输入灵感、大纲或网文原文…" : "请先选择项目"}
             className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
+          <ApiUsageModeToggle module="llm" />
           <button
             type="button"
             onClick={() => void handleSend()}
