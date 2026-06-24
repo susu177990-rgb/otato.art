@@ -32,13 +32,17 @@ import {
 } from "@/lib/image-workspace";
 import {
   DEFAULT_VIDEO_SETTINGS,
+  VIDEO_GENERATION_MODES,
   VIDEO_MODEL_ORDER,
   VIDEO_MODES,
   VIDEO_MODE_LABELS,
   defaultVideoModePrompt,
   extractPromptPlaceholderOccurrences as extractVideoPromptPlaceholderOccurrences,
   getVideoModelDefinition,
+  isVideoModelModeSupported,
   newCustomVideoModeId,
+  type VideoGenerationModeId,
+  type VideoModelId,
   type VideoPromptModeId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
@@ -139,20 +143,6 @@ function categoryForTab(tab: Tab): SettingsCategory {
   if (tab === "users") return "users";
   if (tab === "promptSubmissions" || tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "skillPacks") return "prompts";
   return "api";
-}
-
-function isAutoDispatchedVideoModel(modelId: string): boolean {
-  return modelId === "seedance-2.0" ||
-    modelId === "seedance-2.0-fast" ||
-    modelId === "seedance-1.5-pro" ||
-    modelId === "doubao-seedance-1.0-pro-fast" ||
-    modelId === "kling-3.0" ||
-    modelId === "kling-2.6-motion" ||
-    modelId === "happyhorse-1.1" ||
-    modelId === "happyhorse-1.0" ||
-    modelId === "grok-imagine" ||
-    modelId === "veo-3.1" ||
-    modelId === "veo-3.1-fast";
 }
 
 function AdminPageInner() {
@@ -1781,7 +1771,6 @@ function VideoApiPanel({
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
-        const modelNameReadOnly = isAutoDispatchedVideoModel(id);
         return (
           <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
             <div className={styles.llmModelCardTopBar}>
@@ -1871,37 +1860,66 @@ function VideoApiPanel({
                     }
                   />
                 </label>
-                <label className={shellStyles.field}>
-                  <span className={shellStyles.fieldLabel}>{modelNameReadOnly ? "模型族（自动派发）" : "模型名"}</span>
-                  <input
-                    className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
-                    value={model.apiModelName}
-                    placeholder={definition.defaultApiModelName}
-                    readOnly={modelNameReadOnly}
-                    aria-readonly={modelNameReadOnly}
-                    disabled={modelNameReadOnly}
-                    title={modelNameReadOnly ? "系统会按当前生成模式自动派发真实上游模型" : undefined}
-                    onChange={(e) => {
-                      if (modelNameReadOnly) return;
-                      onChange({
-                        ...value,
-                        models: {
-                          ...value.models,
-                          [id]: {
-                            ...value.models[id],
-                            apiModelName: e.target.value,
-                          },
-                        },
-                      });
-                    }}
-                  />
-                </label>
               </div>
+              <VideoModeModelIdFields
+                modelId={id}
+                values={model.apiModelNameByMode}
+                onChange={(modeId, apiModelName) =>
+                  onChange({
+                    ...value,
+                    models: {
+                      ...value.models,
+                      [id]: {
+                        ...value.models[id],
+                        apiModelNameByMode: {
+                          ...value.models[id].apiModelNameByMode,
+                          [modeId]: apiModelName,
+                        },
+                      },
+                    },
+                  })
+                }
+              />
             </div>
           </div>
         );
       })}
     </section>
+  );
+}
+
+function VideoModeModelIdFields({
+  modelId,
+  values,
+  onChange,
+}: {
+  modelId: VideoModelId;
+  values: Partial<Record<VideoGenerationModeId, string>>;
+  onChange: (modeId: VideoGenerationModeId, apiModelName: string) => void;
+}) {
+  return (
+    <div className={styles.videoModeModelGrid}>
+      {VIDEO_GENERATION_MODES.map((mode) => {
+        const supported = isVideoModelModeSupported(modelId, mode.id);
+        return (
+          <label key={mode.id} className={shellStyles.field}>
+            <span className={shellStyles.fieldLabel}>{VIDEO_MODE_LABELS[mode.id]}模型 ID</span>
+            <input
+              className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
+              value={supported ? values[mode.id] ?? "" : "不支持"}
+              readOnly={!supported}
+              aria-readonly={!supported}
+              disabled={!supported}
+              title={supported ? undefined : "当前模型不支持该生视频模式"}
+              onChange={(e) => {
+                if (!supported) return;
+                onChange(mode.id, e.target.value);
+              }}
+            />
+          </label>
+        );
+      })}
+    </div>
   );
 }
 

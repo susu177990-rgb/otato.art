@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { API_KEY_CONFIGURED_PLACEHOLDER } from "@/lib/api-key-redaction";
 import { DEFAULT_IMAGE_SETTINGS } from "@/lib/image-workspace";
 import { DEFAULT_SETTINGS } from "@/lib/types";
-import { DEFAULT_VIDEO_SETTINGS } from "@/lib/video-workspace";
+import { DEFAULT_VIDEO_SETTINGS, mergeVideoSettings } from "@/lib/video-workspace";
 import { userApiSettingsStoreTestInternals } from "@/lib/db/user-api-settings-store";
 
 process.env.API_SETTINGS_ENCRYPTION_KEY = "test-user-api-settings-encryption-key";
@@ -295,5 +295,46 @@ describe("user API settings client snapshots", () => {
       savedVideo,
     );
     expect(clearedVideo["seedance-2.0"].apiKey).toBe("");
+  });
+
+  it("backfills per-mode video API model IDs for legacy video settings", () => {
+    const merged = mergeVideoSettings({
+      models: {
+        "seedance-2.0": {
+          id: "seedance-2.0",
+          label: "Seedance 2.0",
+          baseUrl: "https://api.evolink.ai",
+          apiKey: "sk-video",
+          enabled: true,
+        },
+      },
+    });
+
+    expect(merged.models["seedance-2.0"].apiModelNameByMode.text_to_video).toBe("seedance-2.0-text-to-video");
+    expect(merged.models["seedance-2.0"].apiModelNameByMode.start_frame).toBe("seedance-2.0-image-to-video");
+    expect(merged.models["seedance-2.0"].apiModelNameByMode.start_end_frame).toBe("seedance-2.0-image-to-video");
+    expect(merged.models["seedance-2.0"].apiModelNameByMode.multi_image_reference).toBe("seedance-2.0-reference-to-video");
+    expect(merged.models["seedance-2.0"].apiModelNameByMode.video_edit).toBeUndefined();
+  });
+
+  it("preserves per-mode video API model IDs when saving user settings", () => {
+    const savedVideo = userApiSettingsStoreTestInternals.sanitizeVideoModelsForStorage(
+      {
+        "seedance-2.0": {
+          ...DEFAULT_VIDEO_SETTINGS.models["seedance-2.0"],
+          apiKey: "sk-video-user",
+          apiModelNameByMode: {
+            ...DEFAULT_VIDEO_SETTINGS.models["seedance-2.0"].apiModelNameByMode,
+            text_to_video: "custom-seedance-text",
+            start_frame: "custom-seedance-start",
+          },
+        },
+      },
+      null,
+    );
+
+    expect(savedVideo["seedance-2.0"].apiModelNameByMode.text_to_video).toBe("custom-seedance-text");
+    expect(savedVideo["seedance-2.0"].apiModelNameByMode.start_frame).toBe("custom-seedance-start");
+    expect(savedVideo["seedance-2.0"].apiKey).toBe("sk-video-user");
   });
 });

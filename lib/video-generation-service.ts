@@ -9,6 +9,7 @@ import {
   isVideoDurationSupported,
   type UnifiedVideoGenerateRequest,
   type UnifiedVideoReference,
+  type VideoGenerationModeId,
   type VideoModelId,
   type VideoModelSettings,
   type VideoProviderOptions,
@@ -56,19 +57,25 @@ export class VideoGenerationError extends Error {
   }
 }
 
-function assertConfiguredModel(model: VideoModelSettings, modelId: VideoModelId) {
+function configuredApiModelName(model: VideoModelSettings, modeId: VideoGenerationModeId): string {
+  const value = String(model.apiModelNameByMode?.[modeId] ?? "").trim();
+  if (!value) {
+    throw new VideoGenerationError("model_not_configured", `模型「${model.label || model.id}」的「${modeId}」模式缺少 API 模型 ID，请先到设置页填写。`);
+  }
+  return value;
+}
+
+function assertConfiguredModel(model: VideoModelSettings, modelId: VideoModelId, modeId: VideoGenerationModeId) {
   if (!model.enabled) {
     throw new VideoGenerationError("model_not_configured", `模型「${model.label || modelId}」当前未启用。`);
   }
-  const apiModelNameRequired = !isAutoDispatchedVideoModel(modelId);
-  if (!model.baseUrl.trim() || !model.apiKey.trim() || (apiModelNameRequired && !model.apiModelName.trim())) {
+  if (!model.baseUrl.trim() || !model.apiKey.trim()) {
     throw new VideoGenerationError(
       "model_not_configured",
-      apiModelNameRequired
-        ? `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key / API Model Name。`
-        : `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key。`,
+      `模型「${model.label || modelId}」未配置完整，请先填写 Base URL / API Key。`,
     );
   }
+  configuredApiModelName(model, modeId);
 }
 
 function resolveAutoDispatchedVideoModelSettings(
@@ -95,7 +102,6 @@ function resolveAutoDispatchedVideoModelSettings(
     ...model,
     baseUrl: model.baseUrl.trim() || source.baseUrl,
     apiKey: model.apiKey.trim() || source.apiKey,
-    apiModelName: "",
     providerOptions: {
       ...source.providerOptions,
       ...model.providerOptions,
@@ -278,17 +284,11 @@ function isHappyHorseFamily(modelId: VideoModelId): boolean {
   return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
 }
 
-function isGrokImagine(modelId: VideoModelId): boolean {
-  return modelId === "grok-imagine";
-}
-
 function isVeo31Family(modelId: VideoModelId): boolean {
   return modelId === "veo-3.1" || modelId === "veo-3.1-fast";
 }
 
-function resolveSeedanceGenerationMode(
-  modeId: UnifiedVideoGenerateRequest["modeId"],
-): "text_to_video" | "image_to_video" | "reference_to_video" {
+function resolveSeedanceGenerationMode(modeId: UnifiedVideoGenerateRequest["modeId"]): "text_to_video" | "image_to_video" | "reference_to_video" {
   switch (modeId) {
     case "text_to_video":
       return "text_to_video";
@@ -298,36 +298,6 @@ function resolveSeedanceGenerationMode(
     default:
       return "reference_to_video";
   }
-}
-
-function resolveSeedanceApiModel(
-  requestedModel: string,
-  modelId: VideoModelId,
-  generationMode: "text_to_video" | "image_to_video" | "reference_to_video",
-): string {
-  const suffix =
-    generationMode === "image_to_video" ? "image-to-video" : generationMode === "reference_to_video" ? "reference-to-video" : "text-to-video";
-  const trimmedModel = requestedModel.trim();
-  if (modelId === "seedance-1.5-pro" || modelId === "doubao-seedance-1.0-pro-fast") return modelId;
-  if (!trimmedModel) {
-    return modelId === "seedance-2.0-fast"
-      ? `seedance-2.0-fast-${suffix}`
-      : `seedance-2.0-${suffix}`;
-  }
-
-  if (/^seedance-2\.0-(?:fast-|mini-|)(?:text|image|reference)-to-video$/.test(trimmedModel)) {
-    if (modelId === "seedance-2.0-fast") return `seedance-2.0-fast-${suffix}`;
-    if (trimmedModel.includes("mini-")) return `seedance-2.0-mini-${suffix}`;
-    return `seedance-2.0-${suffix}`;
-  }
-
-  if (trimmedModel === "seedance-2.0" || trimmedModel === "seedance-2.0-fast") {
-    return modelId === "seedance-2.0-fast"
-      ? `seedance-2.0-fast-${suffix}`
-      : `seedance-2.0-${suffix}`;
-  }
-
-  return trimmedModel;
 }
 
 function resolveTaskStatusUrl(baseUrl: string, modelSettings: VideoModelSettings, providerTaskId: string): string {
@@ -392,11 +362,7 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
     .map((item) => item.url);
   const images = startFrame ? [startFrame.url, ...(endFrame ? [endFrame.url] : [])] : imageReferences;
   const generationMode = resolveSeedanceGenerationMode(request.modeId);
-  const seedanceModel = resolveSeedanceApiModel(
-    modelSettings.apiModelName,
-    modelId,
-    generationMode,
-  );
+  const seedanceModel = configuredApiModelName(modelSettings, request.modeId);
   const legacyGenerateAudio = readBooleanOption(modelSettings.providerOptions, "generateAudio");
   const generateAudio = modelId === "doubao-seedance-1.0-pro-fast"
     ? undefined
@@ -536,26 +502,16 @@ async function submitSeedance(ctx: ProviderSubmitContext): Promise<ProviderTaskR
   }
 }
 
-function resolveKlingO3ApiModel(request: UnifiedVideoGenerateRequest): string {
-  if (request.modeId === "video_edit") return "kling-o3-video-edit";
-  if (request.modeId === "multi_image_reference" && request.references.some((item) => item.role === "video_reference")) {
-    return "kling-o3-reference-to-video";
-  }
-  if (request.modeId === "start_frame" || request.modeId === "start_end_frame" || request.references.some((item) => item.role === "image_reference")) {
-    return "kling-o3-image-to-video";
-  }
-  return "kling-o3-text-to-video";
-}
-
 function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
-  if (request.modelId === "kling-2.6-motion" && request.modeId === "motion_control" && !apiModelName.trim()) {
+  const configuredModel = apiModelName.trim();
+  if (request.modelId === "kling-2.6-motion" && request.modeId === "motion_control") {
     const startFrame = request.references.find((item) => item.role === "start_frame");
     const motionSource = request.references.find((item) => item.role === "motion_source_video");
     if (!startFrame?.url || !motionSource?.url) {
       throw new VideoGenerationError("invalid_mode", "动作迁移模式需要 1 张主体参考图和 1 个动作参考视频。");
     }
     return {
-      model: "kling-v3-motion-control",
+      model: configuredModel,
       ...(request.prompt.trim() ? { prompt: request.prompt } : {}),
       image_urls: [startFrame.url],
       video_urls: [motionSource.url],
@@ -567,41 +523,17 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
     };
   }
 
-  if (apiModelName.trim()) {
-    const startFrame = request.references.find((item) => item.role === "start_frame");
-    const endFrame = request.references.find((item) => item.role === "end_frame");
-    const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
-    const videoReferences = request.references.filter((item) => item.role === "video_reference").map((item) => item.url);
-    const audioReferences = request.references.filter((item) => item.role === "audio_reference").map((item) => item.url);
-    const motionSource = request.references.find((item) => item.role === "motion_source_video");
-    return {
-      prompt: request.prompt,
-      model_name: apiModelName,
-      mode: request.modeId,
-      duration: request.durationSeconds,
-      aspect_ratio: request.aspectRatio,
-      resolution: request.resolution,
-      start_frame_url: startFrame?.url,
-      end_frame_url: endFrame?.url,
-      image_reference_urls: imageReferences.length > 0 ? imageReferences : undefined,
-      video_reference_urls: videoReferences.length > 0 ? videoReferences : undefined,
-      audio_reference_urls: audioReferences.length > 0 ? audioReferences : undefined,
-      motion_video_url: motionSource?.url,
-    };
-  }
-
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const endFrame = request.references.find((item) => item.role === "end_frame");
   const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
   const videoReference = request.references.find((item) => item.role === "video_reference");
-  const model = resolveKlingO3ApiModel(request);
   const basePayload = {
-    model,
+    model: configuredModel,
     prompt: request.prompt,
     ...(request.resolution ? { quality: request.resolution } : {}),
   };
 
-  if (model === "kling-o3-video-edit") {
+  if (request.modeId === "video_edit") {
     if (!videoReference?.url) throw new VideoGenerationError("invalid_mode", "视频编辑模式需要 1 个原视频素材。");
     return {
       ...basePayload,
@@ -611,7 +543,7 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
     };
   }
 
-  if (model === "kling-o3-reference-to-video") {
+  if (request.modeId === "multi_image_reference" && videoReference?.url) {
     if (!videoReference?.url) throw new VideoGenerationError("invalid_mode", "全能参考视频参考需要 1 个参考视频素材。");
     return {
       ...basePayload,
@@ -623,7 +555,7 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
     };
   }
 
-  if (model === "kling-o3-image-to-video") {
+  if (request.modeId === "start_frame" || request.modeId === "start_end_frame" || imageReferences.length > 0) {
     return {
       ...basePayload,
       duration: request.durationSeconds,
@@ -643,25 +575,11 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
   };
 }
 
-function resolveHappyHorseApiModel(request: UnifiedVideoGenerateRequest, modelId: VideoModelId): string {
-  const version = modelId === "happyhorse-1.0" ? "1.0" : "1.1";
-  switch (request.modeId) {
-    case "start_frame":
-      return `happyhorse-${version}-image-to-video`;
-    case "multi_image_reference":
-      return `happyhorse-${version}-reference-to-video`;
-    case "video_edit":
-      return "happyhorse-1.0-video-edit";
-    default:
-      return `happyhorse-${version}-text-to-video`;
-  }
-}
-
-function buildHappyHorseCreatePayload(request: UnifiedVideoGenerateRequest, modelId: VideoModelId) {
+function buildHappyHorseCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const imageReferences = request.references.filter((item) => item.role === "image_reference").map((item) => item.url);
   const videoReference = request.references.find((item) => item.role === "video_reference");
-  const model = resolveHappyHorseApiModel(request, modelId);
+  const model = apiModelName.trim();
   if (request.modeId === "multi_image_reference") {
     return {
       model,
@@ -694,102 +612,7 @@ function buildHappyHorseCreatePayload(request: UnifiedVideoGenerateRequest, mode
 }
 
 async function submitHappyHorse(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  return submitEvoLinkVideoTask(ctx, buildHappyHorseCreatePayload(ctx.request, ctx.modelId));
-}
-
-async function submitGenericTaskApi(
-  ctx: ProviderSubmitContext,
-  payload: Record<string, unknown>,
-): Promise<ProviderTaskResult> {
-  const { modelSettings } = ctx;
-  const submitPath = typeof modelSettings.providerOptions.submitPath === "string" && modelSettings.providerOptions.submitPath.trim()
-    ? modelSettings.providerOptions.submitPath.trim()
-    : "/generate";
-  const statusPath = typeof modelSettings.providerOptions.statusPath === "string" && modelSettings.providerOptions.statusPath.trim()
-    ? modelSettings.providerOptions.statusPath.trim()
-    : "/status";
-
-  let submitRes: Response;
-  try {
-    submitRes = await fetch(buildUrl(modelSettings.baseUrl, submitPath), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${modelSettings.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (error) {
-    throw new VideoGenerationError("provider_submit_failed", error instanceof Error ? error.message : "提交任务失败");
-  }
-  const submitData = (await submitRes.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!submitRes.ok) {
-    throw new VideoGenerationError(
-      "provider_submit_failed",
-      String(submitData.error || submitData.message || submitData.msg || "提交任务失败"),
-    );
-  }
-
-  const providerTaskId = String(
-    submitData.task_id ||
-      submitData.id ||
-      (submitData.data && typeof submitData.data === "object" && "task_id" in submitData.data ? (submitData.data as { task_id?: unknown }).task_id : "") ||
-      "",
-  ).trim();
-  if (!providerTaskId) {
-    throw new VideoGenerationError("provider_submit_failed", "上游未返回任务 ID。");
-  }
-
-  const timeoutMs = Number(modelSettings.providerOptions.timeoutMs) || 10 * 60_000;
-  const intervalMs = Number(modelSettings.providerOptions.intervalMs) || 3000;
-  const startedAt = Date.now();
-  for (;;) {
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new VideoGenerationError("provider_timeout", "任务超时，请稍后重试。");
-    }
-    let statusRes: Response;
-    try {
-      statusRes = await fetch(
-        `${buildUrl(modelSettings.baseUrl, statusPath)}?task_id=${encodeURIComponent(providerTaskId)}`,
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${modelSettings.apiKey}` },
-          cache: "no-store",
-        },
-      );
-    } catch (error) {
-      throw new VideoGenerationError("provider_poll_failed", error instanceof Error ? error.message : "查询任务失败");
-    }
-    const statusData = (await statusRes.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!statusRes.ok) {
-      throw new VideoGenerationError(
-        "provider_poll_failed",
-        String(statusData.error || statusData.message || statusData.msg || "查询任务失败"),
-      );
-    }
-    const container = statusData.data && typeof statusData.data === "object" ? statusData.data as Record<string, unknown> : statusData;
-    const status = String(container.status || container.state || "").trim().toUpperCase();
-    if (status === "SUCCESS" || status === "SUCCEEDED" || status === "DONE" || status === "COMPLETED") {
-      const remoteVideoUrl = String(
-        container.video_url ||
-          container.url ||
-          container.result_url ||
-          (Array.isArray(container.response) ? container.response[0] : "") ||
-          "",
-      ).trim();
-      if (!remoteVideoUrl) {
-        throw new VideoGenerationError("result_missing", "任务完成但未返回视频地址。");
-      }
-      return { providerTaskId, remoteVideoUrl };
-    }
-    if (status === "FAILED" || status === "ERROR") {
-      throw new VideoGenerationError(
-        "provider_poll_failed",
-        String(container.error_message || container.error || container.message || "任务失败"),
-      );
-    }
-    await wait(intervalMs);
-  }
+  return submitEvoLinkVideoTask(ctx, buildHappyHorseCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId)));
 }
 
 async function submitEvoLinkVideoTask(ctx: ProviderSubmitContext, payload: Record<string, unknown>): Promise<ProviderTaskResult> {
@@ -880,23 +703,20 @@ async function submitEvoLinkVideoTask(ctx: ProviderSubmitContext, payload: Recor
 }
 
 async function submitKling(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  const payload = buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
-  if ((ctx.modelId === "kling-3.0" || ctx.modelId === "kling-2.6-motion") && !ctx.modelSettings.apiModelName.trim()) {
-    return submitEvoLinkVideoTask(ctx, payload);
-  }
-  return submitGenericTaskApi(ctx, payload);
+  const payload = buildKlingCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId));
+  return submitEvoLinkVideoTask(ctx, payload);
 }
 
 function normalizeGrokImagineMode(value: unknown): "normal" | "fun" | "spicy" {
   return value === "fun" || value === "spicy" || value === "normal" ? value : "normal";
 }
 
-function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest) {
+function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const imageUrls = startFrame ? [startFrame.url] : [];
   const isImageToVideo = request.modeId === "start_frame";
   return {
-    model: isImageToVideo ? "grok-imagine-image-to-video-beta" : "grok-imagine-text-to-video-beta",
+    model: apiModelName.trim(),
     prompt: request.prompt,
     duration: request.durationSeconds,
     mode: normalizeGrokImagineMode(request.grokImagineMode),
@@ -907,7 +727,7 @@ function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest) {
 }
 
 async function submitGrokImagine(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  return submitEvoLinkVideoTask(ctx, buildGrokImagineCreatePayload(ctx.request));
+  return submitEvoLinkVideoTask(ctx, buildGrokImagineCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId)));
 }
 
 function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
@@ -926,7 +746,7 @@ function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelNam
     : request.modeId === "text_to_video"
       ? "TEXT"
       : "FIRST&LAST";
-  const model = apiModelName.trim() || (request.modelId === "veo-3.1-fast" ? "veo-3.1-fast-generate-preview" : "veo-3.1-generate-preview");
+  const model = apiModelName.trim();
   return {
     model,
     prompt: request.prompt,
@@ -940,7 +760,7 @@ function buildVeoCreatePayload(request: UnifiedVideoGenerateRequest, apiModelNam
 }
 
 async function submitVeo(ctx: ProviderSubmitContext): Promise<ProviderTaskResult> {
-  return submitEvoLinkVideoTask(ctx, buildVeoCreatePayload(ctx.request, ctx.modelSettings.apiModelName));
+  return submitEvoLinkVideoTask(ctx, buildVeoCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId)));
 }
 
 async function submitGeminiOmni(): Promise<ProviderTaskResult> {
@@ -971,7 +791,7 @@ export function buildVideoCreatePayloadForTest(ctx: ProviderSubmitContext): Reco
         aspect_ratio: ctx.request.aspectRatio,
         duration: ctx.request.durationSeconds,
         ...(ctx.request.resolution ? { quality: ctx.request.resolution } : {}),
-        model: resolveSeedanceApiModel(ctx.modelSettings.apiModelName, ctx.modelId, generationMode),
+        model: configuredApiModelName(ctx.modelSettings, ctx.request.modeId),
         ...(seedanceImages.length > 0 ? { image_urls: seedanceImages } : {}),
         ...(isSeedance20Family(ctx.modelId) && seedanceVideos.length > 0 ? { video_urls: seedanceVideos } : {}),
         ...(isSeedance20Family(ctx.modelId) && seedanceAudios.length > 0 ? { audio_urls: seedanceAudios } : {}),
@@ -1002,13 +822,13 @@ export function buildVideoCreatePayloadForTest(ctx: ProviderSubmitContext): Reco
           : {}),
       };
     case "kling":
-      return buildKlingCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
+      return buildKlingCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId));
     case "happyhorse":
-      return buildHappyHorseCreatePayload(ctx.request, ctx.modelId);
+      return buildHappyHorseCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId));
     case "grok":
-      return buildGrokImagineCreatePayload(ctx.request);
+      return buildGrokImagineCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId));
     case "veo":
-      return buildVeoCreatePayload(ctx.request, ctx.modelSettings.apiModelName);
+      return buildVeoCreatePayload(ctx.request, configuredApiModelName(ctx.modelSettings, ctx.request.modeId));
     case "gemini-omni":
       return {
         model: ctx.modelSettings.apiModelName,
@@ -1041,7 +861,7 @@ export async function generateUnifiedVideo(params: {
     params.workspaceSnapshot.videoWorkspace.models,
     request.modelId,
   );
-  assertConfiguredModel(modelSettings, request.modelId);
+  assertConfiguredModel(modelSettings, request.modelId, request.modeId);
 
   const adapter = PROVIDER_ADAPTERS[modelDefinition.provider];
   const result = await adapter.submit({

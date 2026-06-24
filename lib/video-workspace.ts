@@ -253,6 +253,7 @@ export interface VideoModelSettings {
   baseUrl: string;
   apiKey: string;
   apiModelName: string;
+  apiModelNameByMode: Partial<Record<VideoGenerationModeId, string>>;
   enabled: boolean;
   providerOptions: VideoProviderOptions;
 }
@@ -306,9 +307,59 @@ function defaultModelSettings(modelId: VideoModelId): VideoModelSettings {
     baseUrl: "",
     apiKey: "",
     apiModelName: model.defaultApiModelName,
+    apiModelNameByMode: defaultVideoApiModelNameByMode(modelId),
     enabled: !isDisabledVideoModel(modelId),
     providerOptions: {},
   };
+}
+
+export function isVideoModelModeSupported(modelId: VideoModelId, modeId: VideoGenerationModeId): boolean {
+  if (isDisabledVideoModel(modelId)) return false;
+  return getVideoCapabilities(modelId).supportedModes.includes(modeId);
+}
+
+export function defaultVideoApiModelNameForMode(modelId: VideoModelId, modeId: VideoGenerationModeId): string {
+  if (!isVideoModelModeSupported(modelId, modeId)) return "";
+  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast") {
+    const prefix = modelId === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0";
+    if (modeId === "text_to_video") return `${prefix}-text-to-video`;
+    if (modeId === "start_frame" || modeId === "start_end_frame") return `${prefix}-image-to-video`;
+    if (modeId === "multi_image_reference") return `${prefix}-reference-to-video`;
+  }
+  if (modelId === "seedance-1.5-pro" || modelId === "doubao-seedance-1.0-pro-fast") {
+    return modelId;
+  }
+  if (modelId === "kling-3.0") {
+    if (modeId === "text_to_video") return "kling-o3-text-to-video";
+    if (modeId === "start_frame" || modeId === "start_end_frame") return "kling-o3-image-to-video";
+    if (modeId === "multi_image_reference") return "kling-o3-reference-to-video";
+    if (modeId === "video_edit") return "kling-o3-video-edit";
+  }
+  if (modelId === "kling-2.6-motion" && modeId === "motion_control") return "kling-v3-motion-control";
+  if (modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0") {
+    const version = modelId === "happyhorse-1.0" ? "1.0" : "1.1";
+    if (modeId === "text_to_video") return `happyhorse-${version}-text-to-video`;
+    if (modeId === "start_frame") return `happyhorse-${version}-image-to-video`;
+    if (modeId === "multi_image_reference") return `happyhorse-${version}-reference-to-video`;
+    if (modelId === "happyhorse-1.0" && modeId === "video_edit") return "happyhorse-1.0-video-edit";
+  }
+  if (modelId === "grok-imagine") {
+    if (modeId === "text_to_video") return "grok-imagine-text-to-video-beta";
+    if (modeId === "start_frame") return "grok-imagine-image-to-video-beta";
+  }
+  if (modelId === "veo-3.1" || modelId === "veo-3.1-fast") {
+    return modelId === "veo-3.1-fast" ? "veo-3.1-fast-generate-preview" : "veo-3.1-generate-preview";
+  }
+  return getVideoModelDefinition(modelId).defaultApiModelName;
+}
+
+export function defaultVideoApiModelNameByMode(modelId: VideoModelId): Partial<Record<VideoGenerationModeId, string>> {
+  const out: Partial<Record<VideoGenerationModeId, string>> = {};
+  for (const mode of VIDEO_GENERATION_MODES) {
+    const name = defaultVideoApiModelNameForMode(modelId, mode.id);
+    if (name) out[mode.id] = name;
+  }
+  return out;
 }
 
 export function defaultVideoModePrompt(id: VideoPromptModeId): string {
@@ -376,15 +427,35 @@ function sanitizeProviderOptions(value: unknown): VideoProviderOptions {
   return out;
 }
 
+function coerceApiModelNameByMode(
+  modelId: VideoModelId,
+  value: unknown,
+  legacyModelName: unknown,
+): Partial<Record<VideoGenerationModeId, string>> {
+  const defaults = defaultVideoApiModelNameByMode(modelId);
+  const row = isObject(value) ? value : {};
+  const out: Partial<Record<VideoGenerationModeId, string>> = {};
+  for (const mode of VIDEO_GENERATION_MODES) {
+    if (!isVideoModelModeSupported(modelId, mode.id)) continue;
+    const rawConfigured = row[mode.id];
+    const configured = typeof rawConfigured === "string" ? rawConfigured.trim() : "";
+    const legacy = typeof legacyModelName === "string" ? legacyModelName.trim() : "";
+    out[mode.id] = configured || defaults[mode.id] || legacy;
+  }
+  return out;
+}
+
 function coerceVideoModelSettings(modelId: VideoModelId, value: unknown): VideoModelSettings {
   const baked = defaultModelSettings(modelId);
   const row = isObject(value) ? value : {};
+  const apiModelName = pickNonEmptyTrimmed(row.apiModelName ?? row.modelName, baked.apiModelName);
   return {
     id: modelId,
     label: pickNonEmptyTrimmed(row.label, baked.label),
     baseUrl: pickNonEmptyTrimmed(row.baseUrl, baked.baseUrl),
     apiKey: pickNonEmptyTrimmed(row.apiKey, baked.apiKey),
-    apiModelName: pickNonEmptyTrimmed(row.apiModelName ?? row.modelName, baked.apiModelName),
+    apiModelName,
+    apiModelNameByMode: coerceApiModelNameByMode(modelId, row.apiModelNameByMode, apiModelName),
     enabled: isDisabledVideoModel(modelId) ? false : typeof row.enabled === "boolean" ? row.enabled : baked.enabled,
     providerOptions: sanitizeProviderOptions(row.providerOptions),
   };

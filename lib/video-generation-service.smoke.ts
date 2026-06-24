@@ -3,9 +3,19 @@ import {
   buildVideoCreatePayloadForTest,
   validateUnifiedVideoRequest,
 } from "@/lib/video-generation-service";
-import { getVideoModelDefinition, type UnifiedVideoGenerateRequest, type VideoModelId } from "@/lib/video-workspace";
+import {
+  defaultVideoApiModelNameByMode,
+  getVideoModelDefinition,
+  type UnifiedVideoGenerateRequest,
+  type VideoGenerationModeId,
+  type VideoModelId,
+} from "@/lib/video-workspace";
 
-function ctxFor(modelId: VideoModelId, request: UnifiedVideoGenerateRequest) {
+function ctxFor(
+  modelId: VideoModelId,
+  request: UnifiedVideoGenerateRequest,
+  overrides: Partial<Record<VideoGenerationModeId, string>> = {},
+) {
   return {
     modelId,
     modelDefinition: getVideoModelDefinition(modelId),
@@ -15,6 +25,10 @@ function ctxFor(modelId: VideoModelId, request: UnifiedVideoGenerateRequest) {
       baseUrl: "https://example.com",
       apiKey: "sk-test",
       apiModelName: getVideoModelDefinition(modelId).defaultApiModelName,
+      apiModelNameByMode: {
+        ...defaultVideoApiModelNameByMode(modelId),
+        ...overrides,
+      },
       enabled: true,
       providerOptions: {},
     },
@@ -42,6 +56,8 @@ assert.deepEqual(seedancePayload, {
   image_urls: ["https://example.com/a.png"],
   generate_audio: false,
 });
+const customSeedancePayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedance, { start_frame: "custom-seedance-start" }));
+assert.equal(customSeedancePayload.model, "custom-seedance-start");
 
 const seedanceStartEnd = validateUnifiedVideoRequest({
   modelId: "seedance-2.0",
@@ -158,6 +174,8 @@ const klingText = validateUnifiedVideoRequest({
 const klingTextPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingText));
 assert.equal(klingTextPayload.model, "kling-o3-text-to-video");
 assert.equal(klingTextPayload.sound, "on");
+const customKlingTextPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingText, { text_to_video: "custom-kling-text" }));
+assert.equal(customKlingTextPayload.model, "custom-kling-text");
 
 const klingStart = validateUnifiedVideoRequest({
   modelId: "kling-3.0",
@@ -226,6 +244,8 @@ assert.equal(klingEditPayload.video_url, "https://example.com/original.mp4");
 assert.equal("duration" in klingEditPayload, false);
 assert.equal("aspect_ratio" in klingEditPayload, false);
 assert.equal(klingEditPayload.keep_original_sound, false);
+const customKlingEditPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingEdit, { video_edit: "custom-kling-edit" }));
+assert.equal(customKlingEditPayload.model, "custom-kling-edit");
 
 const happyHorse11Text = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.1",
@@ -240,6 +260,8 @@ const happyHorse11TextPayload = buildVideoCreatePayloadForTest(ctxFor("happyhors
 assert.equal(happyHorse11TextPayload.model, "happyhorse-1.1-text-to-video");
 assert.equal(happyHorse11TextPayload.aspect_ratio, "4:5");
 assert.equal(happyHorse11TextPayload.quality, "1080p");
+const customHappyHorsePayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.1", happyHorse11Text, { text_to_video: "custom-happyhorse-text" }));
+assert.equal(customHappyHorsePayload.model, "custom-happyhorse-text");
 
 const happyHorse11Start = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.1",
@@ -461,6 +483,8 @@ assert.equal(grokTextPayload.quality, "480p");
 assert.equal(grokTextPayload.mode, "fun");
 assert.equal("generate_audio" in grokTextPayload, false);
 assert.equal("sound" in grokTextPayload, false);
+const customGrokTextPayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokText, { text_to_video: "custom-grok-text" }));
+assert.equal(customGrokTextPayload.model, "custom-grok-text");
 
 const grokStart = validateUnifiedVideoRequest({
   modelId: "grok-imagine",
@@ -539,6 +563,8 @@ assert.equal(veoTextPayload.model, "veo-3.1-generate-preview");
 assert.equal(veoTextPayload.generation_type, "TEXT");
 assert.equal(veoTextPayload.generate_audio, false);
 assert.equal(veoTextPayload.aspect_ratio, "auto");
+const customVeoTextPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoText, { text_to_video: "custom-veo-text" }));
+assert.equal(customVeoTextPayload.model, "custom-veo-text");
 
 const veoFastText = validateUnifiedVideoRequest({
   modelId: "veo-3.1-fast",
@@ -641,6 +667,11 @@ assert.throws(
       references: [],
     }),
   /需要 1 张首帧图和 1 张尾帧图/,
+);
+
+assert.throws(
+  () => buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedance, { start_frame: "" })),
+  /缺少 API 模型 ID/,
 );
 
 const omniPayload = buildVideoCreatePayloadForTest(

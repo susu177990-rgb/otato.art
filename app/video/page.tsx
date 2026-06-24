@@ -28,7 +28,6 @@ import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
 import {
-  VIDEO_MODEL_ORDER,
   VIDEO_MODE_LABELS,
   VIDEO_MODES,
   buildVideoPromptFromSlots,
@@ -99,20 +98,6 @@ type ReferenceKind = "image" | "video" | "audio";
 type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string; file?: File } | null;
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
 
-function isAutoDispatchedVideoModel(modelId: VideoModelId): boolean {
-  return modelId === "seedance-2.0" ||
-    modelId === "seedance-2.0-fast" ||
-    modelId === "seedance-1.5-pro" ||
-    modelId === "doubao-seedance-1.0-pro-fast" ||
-    modelId === "kling-3.0" ||
-    modelId === "kling-2.6-motion" ||
-    modelId === "happyhorse-1.1" ||
-    modelId === "happyhorse-1.0" ||
-    modelId === "grok-imagine" ||
-    modelId === "veo-3.1" ||
-    modelId === "veo-3.1-fast";
-}
-
 function isHappyHorseVideoModel(modelId: VideoModelId): boolean {
   return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
 }
@@ -134,19 +119,19 @@ function referenceKindsForUiMode(uiModeId: UiVideoModeId, modelId: VideoModelId)
 }
 
 function isVideoModelConfiguredForMode(
-  modelId: VideoModelId,
   model: VideoModelSettings | undefined,
   apiMode: "site" | "user",
+  modeId: VideoGenerationModeId,
 ): boolean {
   if (!model?.baseUrl.trim()) return false;
   if (apiMode === "user" && !model.apiKey.trim()) return false;
-  if (!isAutoDispatchedVideoModel(modelId) && !model.apiModelName.trim()) return false;
+  if (!model.apiModelNameByMode?.[modeId]?.trim()) return false;
   return true;
 }
 
-function missingVideoConfigMessage(modelId: VideoModelId, label: string, apiMode: "site" | "user"): string {
+function missingVideoConfigMessage(label: string, apiMode: "site" | "user", modeId: VideoGenerationModeId): string {
   const parts = apiMode === "user" ? ["Base URL", "API Key"] : ["Base URL"];
-  if (!isAutoDispatchedVideoModel(modelId)) parts.push("API Model Name");
+  parts.push(`${VIDEO_MODE_LABELS[modeId]}模型 ID`);
   return `模型「${label}」未配置完整，请先到设置页填写 ${parts.join(" / ")}。`;
 }
 type ReferenceState = {
@@ -172,7 +157,6 @@ type PresetRailItem = {
 };
 
 const FREE_PRESET: PresetRailItem = { id: "free", label: "自由模式", promptTemplate: "", coverUrl: "" };
-const VIDEO_UI_MODEL_ORDER: VideoModelId[] = VIDEO_MODEL_ORDER.filter((id) => modelSupportsUiMode(id, "start_end_frame") || modelSupportsUiMode(id, "multi_image_reference") || modelSupportsUiMode(id, "video_edit"));
 const GROK_IMAGINE_MODES: ReadonlyArray<{ id: VideoGrokImagineMode; label: string }> = [
   { id: "normal", label: "普通" },
   { id: "fun", label: "有趣" },
@@ -479,7 +463,7 @@ export default function VideoPage() {
   const composerSlotCount = composerSlotCountForTemplate(selectedPreset.promptTemplate);
   const modelReady = apiUsageMode.video === "site"
     ? true
-    : isVideoModelConfiguredForMode(safeModelId, videoWorkspace.models[safeModelId], apiUsageMode.video);
+    : isVideoModelConfiguredForMode(videoWorkspace.models[safeModelId], apiUsageMode.video, effectiveModeId);
   const sidebarHistoryRecords = useMemo(() => {
     const success = records.filter((item) => item.status === "success" && Boolean(item.videoUrl)).slice(0, 24);
     return success.slice().reverse();
@@ -1054,8 +1038,8 @@ export default function VideoPage() {
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
     const liveApiMode = liveSnapshot.apiUsageMode?.video ?? "site";
-    if (liveApiMode === "user" && !isVideoModelConfiguredForMode(safeModelId, liveModel, liveApiMode)) {
-      setError(missingVideoConfigMessage(safeModelId, liveModel.label || safeModelId, liveApiMode));
+    if (liveApiMode === "user" && !isVideoModelConfiguredForMode(liveModel, liveApiMode, finalEffectiveModeId)) {
+      setError(missingVideoConfigMessage(liveModel.label || safeModelId, liveApiMode, finalEffectiveModeId));
       return;
     }
 

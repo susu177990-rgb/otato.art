@@ -16,8 +16,11 @@ import {
   DEFAULT_VIDEO_SETTINGS,
   VIDEO_MODE_LABELS,
   VIDEO_MODEL_ORDER,
+  VIDEO_GENERATION_MODES,
   getVideoModelDefinition,
+  isVideoModelModeSupported,
   type VideoModelId,
+  type VideoGenerationModeId,
   type VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
@@ -45,20 +48,6 @@ function moduleLabel(module: PersonalApiModule): string {
 
 function resultKey(module: PersonalApiModule, modelId: string): string {
   return `${module}:${modelId}`;
-}
-
-function isAutoDispatchedVideoModel(modelId: string): boolean {
-  return modelId === "seedance-2.0" ||
-    modelId === "seedance-2.0-fast" ||
-    modelId === "seedance-1.5-pro" ||
-    modelId === "doubao-seedance-1.0-pro-fast" ||
-    modelId === "kling-3.0" ||
-    modelId === "kling-2.6-motion" ||
-    modelId === "happyhorse-1.1" ||
-    modelId === "happyhorse-1.0" ||
-    modelId === "grok-imagine" ||
-    modelId === "veo-3.1" ||
-    modelId === "veo-3.1-fast";
 }
 
 function nextLlmModelId(models: Settings["models"]): string {
@@ -372,7 +361,6 @@ function VideoApiPanel({
       {VIDEO_MODEL_ORDER.map((id) => {
         const model = value.models[id];
         const definition = getVideoModelDefinition(id);
-        const modelNameReadOnly = isAutoDispatchedVideoModel(id);
         return (
           <div key={id} className={[settingsCardClass, styles.llmModelCard].join(" ")}>
             <div className={styles.llmModelCardTopBar}>
@@ -397,22 +385,62 @@ function VideoApiPanel({
               </div>
               <div className={styles.llmModelCardRow}>
                 <Field label="显示名" value={model.label} onChange={(label) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], label } } })} />
-                <Field
-                  label={modelNameReadOnly ? "模型族（自动派发）" : "API Model Name"}
-                  mono
-                  value={model.apiModelName}
-                  readOnly={modelNameReadOnly}
-                  disabled={modelNameReadOnly}
-                  title={modelNameReadOnly ? "系统会按当前生成模式自动派发真实上游模型" : undefined}
-                  onChange={(apiModelName) => onChange({ ...value, models: { ...value.models, [id]: { ...value.models[id], apiModelName } } })}
-                />
               </div>
+              <VideoModeModelIdFields
+                modelId={id}
+                values={model.apiModelNameByMode}
+                onChange={(modeId, apiModelName) =>
+                  onChange({
+                    ...value,
+                    models: {
+                      ...value.models,
+                      [id]: {
+                        ...value.models[id],
+                        apiModelNameByMode: {
+                          ...value.models[id].apiModelNameByMode,
+                          [modeId]: apiModelName,
+                        },
+                      },
+                    },
+                  })
+                }
+              />
             </div>
             <ApiTestResultView result={testResults[resultKey("video", id)]} />
           </div>
         );
       })}
     </section>
+  );
+}
+
+function VideoModeModelIdFields({
+  modelId,
+  values,
+  onChange,
+}: {
+  modelId: VideoModelId;
+  values: Partial<Record<VideoGenerationModeId, string>>;
+  onChange: (modeId: VideoGenerationModeId, apiModelName: string) => void;
+}) {
+  return (
+    <div className={styles.videoModeModelGrid}>
+      {VIDEO_GENERATION_MODES.map((mode) => {
+        const supported = isVideoModelModeSupported(modelId, mode.id);
+        return (
+          <Field
+            key={mode.id}
+            label={`${VIDEO_MODE_LABELS[mode.id]}模型 ID`}
+            mono
+            value={supported ? values[mode.id] ?? "" : "不支持"}
+            disabled={!supported}
+            readOnly={!supported}
+            title={supported ? undefined : "当前模型不支持该生视频模式"}
+            onChange={(apiModelName) => onChange(mode.id, apiModelName)}
+          />
+        );
+      })}
+    </div>
   );
 }
 

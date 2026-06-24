@@ -3,7 +3,7 @@ import type { ApiUsageMode, WorkspaceSnapshot } from "@/lib/db/workspace-setting
 import type { ImageModelId, ImageModelSettings } from "@/lib/image-workspace";
 import { resolveLlmModel } from "@/lib/llm-models";
 import type { LlmModelConfig } from "@/lib/types";
-import type { VideoModelId, VideoModelSettings } from "@/lib/video-workspace";
+import { getVideoCapabilities, VIDEO_MODE_LABELS, type VideoModelId, type VideoModelSettings } from "@/lib/video-workspace";
 
 export type PersonalApiModule = keyof ApiUsageMode;
 
@@ -127,20 +127,6 @@ function validateImageConfig(model: ImageModelSettings): PersonalApiTestResult {
   });
 }
 
-function isAutoDispatchedVideoModel(modelId: string): boolean {
-  return modelId === "seedance-2.0" ||
-    modelId === "seedance-2.0-fast" ||
-    modelId === "seedance-1.5-pro" ||
-    modelId === "doubao-seedance-1.0-pro-fast" ||
-    modelId === "kling-3.0" ||
-    modelId === "kling-2.6-motion" ||
-    modelId === "happyhorse-1.1" ||
-    modelId === "happyhorse-1.0" ||
-    modelId === "grok-imagine" ||
-    modelId === "veo-3.1" ||
-    modelId === "veo-3.1-fast";
-}
-
 function validateVideoConfig(model: VideoModelSettings): PersonalApiTestResult {
   const endpoint = safeEndpoint(model.baseUrl);
   if (!model.enabled) {
@@ -154,16 +140,18 @@ function validateVideoConfig(model: VideoModelSettings): PersonalApiTestResult {
       safeEndpoint: endpoint,
     });
   }
-  const apiModelNameRequired = !isAutoDispatchedVideoModel(model.id);
-  if (!model.baseUrl.trim() || !model.apiKey.trim() || (apiModelNameRequired && !model.apiModelName.trim())) {
+  const missingModeLabels = getVideoCapabilities(model.id).supportedModes
+    .filter((modeId) => !model.apiModelNameByMode?.[modeId]?.trim())
+    .map((modeId) => VIDEO_MODE_LABELS[modeId]);
+  if (!model.baseUrl.trim() || !model.apiKey.trim() || missingModeLabels.length > 0) {
     return result({
       ok: false,
       code: "MODEL_CONFIG_INCOMPLETE",
       module: "video",
       modelId: model.id,
       stage: "model_config",
-      message: apiModelNameRequired
-        ? `视频模型「${model.label || model.id}」缺少 Base URL / API Key / API Model Name。`
+      message: missingModeLabels.length > 0
+        ? `视频模型「${model.label || model.id}」缺少 ${missingModeLabels.join(" / ")}模型 ID。`
         : `视频模型「${model.label || model.id}」缺少 Base URL / API Key。`,
       safeEndpoint: endpoint,
     });

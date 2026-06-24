@@ -243,6 +243,18 @@
   min-width: 0;
 }
 
+.videoModeModelGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.videoModeModelGrid input:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .apiModeNotice {
   display: flex;
   align-items: center;
