@@ -96,7 +96,7 @@ function durationPresets(capability: VideoDurationCapability): number[] {
 }
 
 type ReferenceKind = "image" | "video" | "audio";
-type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string } | null;
+type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string; file?: File } | null;
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
 
 function isAutoDispatchedVideoModel(modelId: VideoModelId): boolean {
@@ -416,6 +416,7 @@ export default function VideoPage() {
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
+  const localPreviewUrlsRef = useRef<Set<string>>(new Set());
 
   const selectableModelIds = useMemo(() => videoModelsForUiMode(selectedUiModeId), [selectedUiModeId]);
   const safeModelId = selectableModelIds.includes(selectedModelId)
@@ -497,6 +498,16 @@ export default function VideoPage() {
 
   useEffect(() => {
     setPortalMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const localPreviewUrls = localPreviewUrlsRef.current;
+    return () => {
+      for (const url of localPreviewUrls) {
+        URL.revokeObjectURL(url);
+      }
+      localPreviewUrls.clear();
+    };
   }, []);
 
   useEffect(() => {
@@ -631,10 +642,85 @@ export default function VideoPage() {
     setSelectedSoundEnabled(soundControl?.defaultEnabled ?? false);
     setSelectedGrokMode("normal");
     if (!capabilities.supportsFirstLastFrames) {
-      setReferences((current) => current.frames[1] ? { ...current, frames: [current.frames[0], null] } : current);
+      setReferences((current) => {
+        if (!current.frames[1]) return current;
+        revokeLocalPreviewUrl(current.frames[1].previewUrl);
+        return { ...current, frames: [current.frames[0], null] };
+      });
     }
     setToolbarPickerMenu(null);
   }, [capabilities, durationCapability, effectiveModeId, parameterCapabilities, safeModelId, selectedUiModeId, soundControl, videoWorkspace.uiDefaults.defaultAspectRatio]);
+
+  function createLocalPreviewUrl(file: File): string {
+    const url = URL.createObjectURL(file);
+    localPreviewUrlsRef.current.add(url);
+    return url;
+  }
+
+  function revokeLocalPreviewUrl(url: string | undefined) {
+    if (!url || !url.startsWith("blob:") || !localPreviewUrlsRef.current.has(url)) return;
+    URL.revokeObjectURL(url);
+    localPreviewUrlsRef.current.delete(url);
+  }
+
+  function revokeReferencePreviews(state: ReferenceState) {
+    state.frames.forEach((slot) => revokeLocalPreviewUrl(slot?.previewUrl));
+    REFERENCE_KINDS.forEach((kind) => {
+      state.allPurpose[kind].forEach((slot) => revokeLocalPreviewUrl(slot.previewUrl));
+    });
+  }
+
+  function localReferenceSlotFromFile(kind: ReferenceKind, file: File): NonNullable<ReferenceSlot> {
+    const previewUrl = createLocalPreviewUrl(file);
+    return {
+      kind,
+      url: previewUrl,
+      previewUrl,
+      label: file.name,
+      mimeType: mediaContentType(file, kind),
+      file,
+    };
+  }
+
+  function findReferenceSlotByUrl(url: string): NonNullable<ReferenceSlot> | null {
+    for (const slot of references.frames) {
+      if (slot?.url === url || slot?.previewUrl === url) return slot;
+    }
+    for (const kind of REFERENCE_KINDS) {
+      for (const slot of references.allPurpose[kind]) {
+        if (slot.url === url || slot.previewUrl === url) return slot;
+      }
+    }
+    return null;
+  }
+
+  function replaceLocalReferenceUrls(uploadedUrlByPreviewUrl: Map<string, string>) {
+    if (uploadedUrlByPreviewUrl.size === 0) return;
+    setReferences((prev) => ({
+      frames: prev.frames.map((slot) =>
+        slot && uploadedUrlByPreviewUrl.has(slot.previewUrl)
+          ? { ...slot, url: uploadedUrlByPreviewUrl.get(slot.previewUrl)!, file: undefined }
+          : slot,
+      ) as [ReferenceSlot, ReferenceSlot],
+      allPurpose: {
+        image: prev.allPurpose.image.map((slot) =>
+          uploadedUrlByPreviewUrl.has(slot.previewUrl)
+            ? { ...slot, url: uploadedUrlByPreviewUrl.get(slot.previewUrl)!, file: undefined }
+            : slot,
+        ),
+        video: prev.allPurpose.video.map((slot) =>
+          uploadedUrlByPreviewUrl.has(slot.previewUrl)
+            ? { ...slot, url: uploadedUrlByPreviewUrl.get(slot.previewUrl)!, file: undefined }
+            : slot,
+        ),
+        audio: prev.allPurpose.audio.map((slot) =>
+          uploadedUrlByPreviewUrl.has(slot.previewUrl)
+            ? { ...slot, url: uploadedUrlByPreviewUrl.get(slot.previewUrl)!, file: undefined }
+            : slot,
+        ),
+      },
+    }));
+  }
 
   useEffect(() => {
     if (selectedPresetId === "free") return;
@@ -661,40 +747,24 @@ export default function VideoPage() {
       setError(`请选择${kindGroupLabel(kind)}素材。`);
       return;
     }
-    setIsUploading(true);
     try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("请先登录");
-
-      const uploaded = await Promise.all(
-        accepted.map(async (file) => {
-          const contentType = mediaContentType(file, kind);
-          const path = `${user.id}/video-inputs/${safeModelId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
-          const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
-            contentType,
-            upsert: false,
-          });
-          if (uploadError) throw uploadError;
-          const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-          if (!data.publicUrl) throw new Error("无法生成素材地址");
-          return { kind, url: data.publicUrl, previewUrl: data.publicUrl, label: file.name, mimeType: contentType } satisfies NonNullable<ReferenceSlot>;
-        }),
-      );
+      const staged = accepted.map((file) => localReferenceSlotFromFile(kind, file)) satisfies NonNullable<ReferenceSlot>[];
 
       setReferences((prev) => {
         if (selectedUiModeId === "start_end_frame") {
           const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
-          uploaded.slice(0, 2 - index).forEach((slot, offset) => {
+          staged.slice(0, 2 - index).forEach((slot, offset) => {
             const slotIndex = index + offset;
-            if (slotIndex === 0 || slotIndex === 1) frames[slotIndex] = slot;
+            if (slotIndex === 0 || slotIndex === 1) {
+              revokeLocalPreviewUrl(frames[slotIndex]?.previewUrl);
+              frames[slotIndex] = slot;
+            }
           });
           return { ...prev, frames };
         }
         const current = [...prev.allPurpose[kind]];
-        uploaded.forEach((slot, offset) => {
+        staged.forEach((slot, offset) => {
+          revokeLocalPreviewUrl(current[index + offset]?.previewUrl);
           current[index + offset] = slot;
         });
         return {
@@ -706,12 +776,58 @@ export default function VideoPage() {
         };
       });
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : `${kindGroupLabel(kind)}素材上传失败`);
+      setError(uploadError instanceof Error ? uploadError.message : `${kindGroupLabel(kind)}素材读取失败`);
     } finally {
-      setIsUploading(false);
       for (const key of Object.keys(fileInputRefs.current)) {
         if (fileInputRefs.current[key]) fileInputRefs.current[key]!.value = "";
       }
+    }
+  }
+
+  async function ensureReferenceUrlsForGenerate(inputReferences: UnifiedVideoReference[]): Promise<UnifiedVideoReference[]> {
+    const localRefs = inputReferences
+      .map((ref) => ({ ref, slot: findReferenceSlotByUrl(ref.url) }))
+      .filter((item): item is { ref: UnifiedVideoReference; slot: NonNullable<ReferenceSlot> } =>
+        Boolean(item.slot?.file && item.ref.url.startsWith("blob:")),
+      );
+    if (localRefs.length === 0) return inputReferences;
+
+    setIsUploading(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("请先登录");
+
+      const uploadedUrlByPreviewUrl = new Map<string, string>();
+      const uniqueLocalSlots = Array.from(
+        new Map(localRefs.map(({ slot }) => [slot.previewUrl, slot])).values(),
+      );
+      await Promise.all(
+        uniqueLocalSlots.map(async (slot) => {
+          if (!slot.file) return;
+          const path = `${user.id}/video-inputs/${safeModelId}/${slot.kind}/${crypto.randomUUID()}.${mediaFileExtension(slot.file, slot.kind)}`;
+          const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, slot.file, {
+            contentType: slot.mimeType,
+            upsert: false,
+          });
+          if (uploadError) throw uploadError;
+          const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+          if (!data.publicUrl) throw new Error("无法生成素材地址");
+          uploadedUrlByPreviewUrl.set(slot.previewUrl, data.publicUrl);
+        }),
+      );
+      replaceLocalReferenceUrls(uploadedUrlByPreviewUrl);
+      return inputReferences.map((ref) => {
+        const uploadedUrl = uploadedUrlByPreviewUrl.get(ref.url);
+        if (uploadedUrl) return { ...ref, url: uploadedUrl };
+        const slot = findReferenceSlotByUrl(ref.url);
+        const slotUploadedUrl = slot ? uploadedUrlByPreviewUrl.get(slot.previewUrl) : undefined;
+        return slotUploadedUrl ? { ...ref, url: slotUploadedUrl } : ref;
+      });
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -726,10 +842,14 @@ export default function VideoPage() {
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
         const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
-        if (index === 0 || index === 1) frames[index] = slot;
+        if (index === 0 || index === 1) {
+          revokeLocalPreviewUrl(frames[index]?.previewUrl);
+          frames[index] = slot;
+        }
         return { ...prev, frames };
       }
       const current = [...prev.allPurpose[kind]];
+      revokeLocalPreviewUrl(current[index]?.previewUrl);
       current[index] = slot;
       return {
         ...prev,
@@ -746,9 +866,13 @@ export default function VideoPage() {
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
         const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
-        if (index === 0 || index === 1) frames[index] = null;
+        if (index === 0 || index === 1) {
+          revokeLocalPreviewUrl(frames[index]?.previewUrl);
+          frames[index] = null;
+        }
         return { ...prev, frames };
       }
+      revokeLocalPreviewUrl(prev.allPurpose[kind][index]?.previewUrl);
       return {
         ...prev,
         allPurpose: {
@@ -841,7 +965,7 @@ export default function VideoPage() {
               ? "audio/mpeg"
               : "image/png",
       }));
-    const allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, references);
+    let allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, references);
     if (modeError && !mentionResolution.hasMentions) {
       setError(modeError);
       return;
@@ -937,6 +1061,7 @@ export default function VideoPage() {
 
     setIsGenerating(true);
     try {
+      allReferences = await ensureReferenceUrlsForGenerate(allReferences);
       const res = await fetch("/api/video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1000,13 +1125,16 @@ export default function VideoPage() {
       if (slotIndex.kind === "frame") nextReferences.frames[slotIndex.index] = slot;
       else nextReferences.allPurpose[slotIndex.kind][slotIndex.index] = slot;
     });
-    setReferences({
-      ...nextReferences,
-      allPurpose: {
-        image: compactReferenceList(nextReferences.allPurpose.image),
-        video: compactReferenceList(nextReferences.allPurpose.video),
-        audio: compactReferenceList(nextReferences.allPurpose.audio),
-      },
+    setReferences((prev) => {
+      revokeReferencePreviews(prev);
+      return {
+        ...nextReferences,
+        allPurpose: {
+          image: compactReferenceList(nextReferences.allPurpose.image),
+          video: compactReferenceList(nextReferences.allPurpose.video),
+          audio: compactReferenceList(nextReferences.allPurpose.audio),
+        },
+      };
     });
     const template = selectedPreset.promptTemplate;
     const n = composerSlotCountForTemplate(template);
@@ -1190,7 +1318,7 @@ export default function VideoPage() {
                       ) : (
                         sidebarHistoryRecords.map((record) => (
                           <button key={record.id} type="button" onClick={() => applyHistoryRecord(record)} className={styles.historyItem}>
-                            {record.videoUrl ? <video src={record.videoUrl} muted playsInline /> : null}
+                            {record.videoUrl ? <video src={record.videoUrl} muted playsInline preload="metadata" /> : null}
                             <span className={styles.historyMeta}>
                               {record.modeName} · {record.durationSeconds}s
                             </span>
@@ -1318,7 +1446,7 @@ export default function VideoPage() {
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={slot.previewUrl} alt={slot.label} />
                             ) : kind === "video" ? (
-                              <video src={slot.previewUrl} muted playsInline />
+                              <video src={slot.previewUrl} muted playsInline preload="metadata" />
                             ) : (
                               <span className={styles.refMediaGlyph}>音频</span>
                             )
