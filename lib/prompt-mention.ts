@@ -24,7 +24,16 @@ export type CanvasMentionNode = {
   id: string;
   type: string;
   title: string;
-  metadata?: { text?: string; imageUrl?: string; previewImageUrl?: string; videoUrl?: string; previewVideoUrl?: string; audioUrl?: string; prompt?: string };
+  metadata?: {
+    text?: string;
+    imageUrl?: string;
+    previewImageUrl?: string;
+    videoUrl?: string;
+    previewVideoUrl?: string;
+    audioUrl?: string;
+    prompt?: string;
+    videoDurationSeconds?: number;
+  };
 };
 
 export type CanvasMentionReference = {
@@ -33,6 +42,7 @@ export type CanvasMentionReference = {
   url: string;
   label: string;
   role?: "prompt" | "image_reference" | "start_frame" | "end_frame" | "video_reference" | "motion_source_video" | "audio_reference";
+  durationSeconds?: number;
 };
 
 /**
@@ -63,6 +73,7 @@ function candidateForCanvasNode(node: CanvasMentionNode): AssetMentionCandidate 
     nodeType: node.type === "preset" ? "text" : (node.type === "image" || node.type === "video" || node.type === "audio" || node.type === "text" ? node.type : undefined),
     text: node.type === "preset" ? node.metadata?.prompt : node.metadata?.text,
     url: node.metadata?.imageUrl || node.metadata?.previewImageUrl || node.metadata?.videoUrl || node.metadata?.previewVideoUrl || node.metadata?.audioUrl,
+    durationSeconds: node.type === "video" ? node.metadata?.videoDurationSeconds : undefined,
   };
 }
 
@@ -97,6 +108,7 @@ function resolveCanvasNodeMention(
             url,
             label: node.title || mention.label,
             role: mention.role,
+            durationSeconds: node.type === "video" ? node.metadata?.videoDurationSeconds : undefined,
           }
         : undefined,
     };
@@ -137,6 +149,7 @@ export function resolveMentions(
           url: mention.candidate.url,
           label: mention.candidate.label || mention.label,
           role: mention.role ?? "image_reference",
+          durationSeconds: mention.candidate.durationSeconds,
         });
         for (const [index, url] of (mention.candidate.referenceUrls ?? []).entries()) {
           if (!url.trim()) continue;

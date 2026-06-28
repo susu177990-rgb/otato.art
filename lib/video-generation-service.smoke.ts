@@ -48,13 +48,15 @@ const seedance = validateUnifiedVideoRequest({
 });
 const seedancePayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedance));
 assert.deepEqual(seedancePayload, {
-  prompt: "test",
-  aspect_ratio: "16:9",
-  duration: 5,
-  quality: "1080p",
-  model: "seedance-2.0-image-to-video",
-  image_urls: ["https://example.com/a.png"],
-  generate_audio: false,
+  model: "bytedance/seedance2-0-i2v",
+  input: {
+    prompt: "test",
+    resolution: "1080p",
+    aspect_ratio: "16:9",
+    duration: 5,
+    audio: false,
+    img_urls: ["https://example.com/a.png"],
+  },
 });
 const customSeedancePayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedance, { start_frame: "custom-seedance-start" }));
 assert.equal(customSeedancePayload.model, "custom-seedance-start");
@@ -72,8 +74,8 @@ const seedanceStartEnd = validateUnifiedVideoRequest({
   ],
 });
 const seedanceStartEndPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedanceStartEnd));
-assert.equal(seedanceStartEndPayload.model, "seedance-2.0-image-to-video");
-assert.deepEqual(seedanceStartEndPayload.image_urls, ["https://example.com/start.png", "https://example.com/end.png"]);
+assert.equal(seedanceStartEndPayload.model, "bytedance/seedance2-0-i2v");
+assert.deepEqual((seedanceStartEndPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png", "https://example.com/end.png"]);
 
 const seedance15Text = validateUnifiedVideoRequest({
   modelId: "seedance-1.5-pro",
@@ -86,9 +88,9 @@ const seedance15Text = validateUnifiedVideoRequest({
   soundEnabled: false,
 });
 const seedance15TextPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-1.5-pro", seedance15Text));
-assert.equal(seedance15TextPayload.model, "seedance-1.5-pro");
-assert.equal(seedance15TextPayload.duration, 8);
-assert.equal(seedance15TextPayload.generate_audio, false);
+assert.equal(seedance15TextPayload.model, "bytedance/seedance1-5-pro-t2v");
+assert.equal((seedance15TextPayload.input as Record<string, unknown>).duration, 8);
+assert.equal((seedance15TextPayload.input as Record<string, unknown>).audio, false);
 
 const seedance15Start = validateUnifiedVideoRequest({
   modelId: "seedance-1.5-pro",
@@ -100,7 +102,8 @@ const seedance15Start = validateUnifiedVideoRequest({
   references: [{ role: "start_frame", url: "https://example.com/start.png" }],
 });
 const seedance15StartPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-1.5-pro", seedance15Start));
-assert.deepEqual(seedance15StartPayload.image_urls, ["https://example.com/start.png"]);
+assert.equal(seedance15StartPayload.model, "bytedance/seedance1-5-pro-i2v");
+assert.deepEqual((seedance15StartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png"]);
 
 const seedance15StartEnd = validateUnifiedVideoRequest({
   modelId: "seedance-1.5-pro",
@@ -115,34 +118,62 @@ const seedance15StartEnd = validateUnifiedVideoRequest({
   ],
 });
 const seedance15StartEndPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-1.5-pro", seedance15StartEnd));
-assert.equal(seedance15StartEndPayload.model, "seedance-1.5-pro");
-assert.deepEqual(seedance15StartEndPayload.image_urls, ["https://example.com/start.png", "https://example.com/end.png"]);
+assert.equal(seedance15StartEndPayload.model, "bytedance/seedance1-5-pro-i2v");
+assert.deepEqual((seedance15StartEndPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png", "https://example.com/end.png"]);
 
 const seedance10Text = validateUnifiedVideoRequest({
   modelId: "doubao-seedance-1.0-pro-fast",
   modeId: "text_to_video",
   prompt: "test10 text",
-  durationSeconds: 5,
+  durationSeconds: 8,
   aspectRatio: "16:9",
   resolution: "1080p",
   references: [],
   soundEnabled: true,
 });
 const seedance10TextPayload = buildVideoCreatePayloadForTest(ctxFor("doubao-seedance-1.0-pro-fast", seedance10Text));
-assert.equal(seedance10TextPayload.model, "doubao-seedance-1.0-pro-fast");
-assert.equal("generate_audio" in seedance10TextPayload, false);
+assert.equal(seedance10TextPayload.model, "bytedance/seedance1-0-pro-fast-t2v");
+assert.equal((seedance10TextPayload.input as Record<string, unknown>).duration, 8);
+assert.equal("audio" in (seedance10TextPayload.input as Record<string, unknown>), false);
 
 const seedance10Start = validateUnifiedVideoRequest({
   modelId: "doubao-seedance-1.0-pro-fast",
   modeId: "start_frame",
   prompt: "test10 start",
-  durationSeconds: 5,
+  durationSeconds: 8,
   aspectRatio: "16:9",
   resolution: "1080p",
   references: [{ role: "start_frame", url: "https://example.com/start.png" }],
 });
 const seedance10StartPayload = buildVideoCreatePayloadForTest(ctxFor("doubao-seedance-1.0-pro-fast", seedance10Start));
-assert.deepEqual(seedance10StartPayload.image_urls, ["https://example.com/start.png"]);
+assert.equal(seedance10StartPayload.model, "bytedance/seedance1-0-pro-fast-i2v");
+assert.deepEqual((seedance10StartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png"]);
+
+const seedanceMiniText = validateUnifiedVideoRequest({
+  modelId: "seedance-2.0-mini",
+  modeId: "text_to_video",
+  prompt: "mini text",
+  durationSeconds: 5,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  references: [],
+});
+const seedanceMiniTextPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0-mini", seedanceMiniText));
+assert.equal(seedanceMiniTextPayload.model, "bytedance/seedance2-0-mini-t2v");
+assert.equal((seedanceMiniTextPayload.input as Record<string, unknown>).resolution, "720p");
+
+const seedance10ProStart = validateUnifiedVideoRequest({
+  modelId: "seedance-1.0-pro",
+  modeId: "start_frame",
+  prompt: "test10 pro start",
+  durationSeconds: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  references: [{ role: "start_frame", url: "https://example.com/pro-start.png" }],
+});
+const seedance10ProStartPayload = buildVideoCreatePayloadForTest(ctxFor("seedance-1.0-pro", seedance10ProStart));
+assert.equal(seedance10ProStartPayload.model, "bytedance/seedance1-0-pro-i2v");
+assert.deepEqual((seedance10ProStartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/pro-start.png"]);
 
 assert.throws(
   () =>
@@ -172,8 +203,17 @@ const klingText = validateUnifiedVideoRequest({
   soundEnabled: true,
 });
 const klingTextPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingText));
-assert.equal(klingTextPayload.model, "kling-o3-text-to-video");
-assert.equal(klingTextPayload.sound, "on");
+assert.deepEqual(klingTextPayload, {
+  model: "kling/v3",
+  input: {
+    mode: "pro",
+    multi_shots: false,
+    prompt: "kling text",
+    duration: 5,
+    aspect_ratio: "16:9",
+    audio: true,
+  },
+});
 const customKlingTextPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingText, { text_to_video: "custom-kling-text" }));
 assert.equal(customKlingTextPayload.model, "custom-kling-text");
 
@@ -187,8 +227,9 @@ const klingStart = validateUnifiedVideoRequest({
   references: [{ role: "start_frame", url: "https://example.com/start.png" }],
 });
 const klingStartPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingStart));
-assert.equal(klingStartPayload.model, "kling-o3-image-to-video");
-assert.equal(klingStartPayload.image_start, "https://example.com/start.png");
+assert.equal(klingStartPayload.model, "kling/v3");
+assert.deepEqual((klingStartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png"]);
+assert.equal((klingStartPayload.input as Record<string, unknown>).mode, "pro");
 
 const kling = validateUnifiedVideoRequest({
   modelId: "kling-3.0",
@@ -203,9 +244,8 @@ const kling = validateUnifiedVideoRequest({
   ],
 });
 const klingPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", kling));
-assert.equal(klingPayload.model, "kling-o3-image-to-video");
-assert.equal(klingPayload.image_start, "https://example.com/start.png");
-assert.equal(klingPayload.image_end, "https://example.com/end.png");
+assert.equal(klingPayload.model, "kling/v3");
+assert.deepEqual((klingPayload.input as Record<string, unknown>).img_urls, ["https://example.com/start.png", "https://example.com/end.png"]);
 
 const klingReference = validateUnifiedVideoRequest({
   modelId: "kling-3.0",
@@ -215,37 +255,19 @@ const klingReference = validateUnifiedVideoRequest({
   aspectRatio: "16:9",
   resolution: "720p",
   references: [
-    { role: "video_reference", url: "https://example.com/ref.mp4" },
-    { role: "image_reference", url: "https://example.com/ref.png" },
+    { role: "image_reference", url: "https://example.com/ref.png", label: "hero" },
+    { role: "image_reference", url: "https://example.com/prop.png" },
   ],
   soundEnabled: false,
 });
 const klingReferencePayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingReference));
-assert.equal(klingReferencePayload.model, "kling-o3-reference-to-video");
-assert.equal(klingReferencePayload.video_url, "https://example.com/ref.mp4");
-assert.deepEqual(klingReferencePayload.image_urls, ["https://example.com/ref.png"]);
-assert.equal(klingReferencePayload.keep_original_sound, false);
-
-const klingEdit = validateUnifiedVideoRequest({
-  modelId: "kling-3.0",
-  modeId: "video_edit",
-  prompt: "kling edit",
-  durationSeconds: 0,
-  resolution: "1080p",
-  references: [
-    { role: "video_reference", url: "https://example.com/original.mp4" },
-    { role: "image_reference", url: "https://example.com/style.png" },
-  ],
-  soundEnabled: false,
-});
-const klingEditPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingEdit));
-assert.equal(klingEditPayload.model, "kling-o3-video-edit");
-assert.equal(klingEditPayload.video_url, "https://example.com/original.mp4");
-assert.equal("duration" in klingEditPayload, false);
-assert.equal("aspect_ratio" in klingEditPayload, false);
-assert.equal(klingEditPayload.keep_original_sound, false);
-const customKlingEditPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingEdit, { video_edit: "custom-kling-edit" }));
-assert.equal(customKlingEditPayload.model, "custom-kling-edit");
+assert.equal(klingReferencePayload.model, "kling/v3");
+assert.deepEqual((klingReferencePayload.input as Record<string, unknown>).element_list, [
+  { name: "element_1", description: "hero", element_image_urls: ["https://example.com/ref.png"] },
+  { name: "element_2", description: "reference image 2", element_image_urls: ["https://example.com/prop.png"] },
+]);
+assert.equal("video_url" in (klingReferencePayload.input as Record<string, unknown>), false);
+assert.equal("image_urls" in (klingReferencePayload.input as Record<string, unknown>), false);
 
 const happyHorse11Text = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.1",
@@ -257,9 +279,15 @@ const happyHorse11Text = validateUnifiedVideoRequest({
   references: [],
 });
 const happyHorse11TextPayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.1", happyHorse11Text));
-assert.equal(happyHorse11TextPayload.model, "happyhorse-1.1-text-to-video");
-assert.equal(happyHorse11TextPayload.aspect_ratio, "4:5");
-assert.equal(happyHorse11TextPayload.quality, "1080p");
+assert.deepEqual(happyHorse11TextPayload, {
+  model: "happyhorse-1-1-t2v",
+  input: {
+    prompt: "happyhorse 1.1 text",
+    resolution: "1080P",
+    duration: 6,
+    aspect_ratio: "4:5",
+  },
+});
 const customHappyHorsePayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.1", happyHorse11Text, { text_to_video: "custom-happyhorse-text" }));
 assert.equal(customHappyHorsePayload.model, "custom-happyhorse-text");
 
@@ -272,9 +300,9 @@ const happyHorse11Start = validateUnifiedVideoRequest({
   references: [{ role: "start_frame", url: "https://example.com/hh11.png" }],
 });
 const happyHorse11StartPayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.1", happyHorse11Start));
-assert.equal(happyHorse11StartPayload.model, "happyhorse-1.1-image-to-video");
-assert.deepEqual(happyHorse11StartPayload.image_urls, ["https://example.com/hh11.png"]);
-assert.equal("aspect_ratio" in happyHorse11StartPayload, false);
+assert.equal(happyHorse11StartPayload.model, "happyhorse-1-1-i2v");
+assert.deepEqual((happyHorse11StartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/hh11.png"]);
+assert.equal("aspect_ratio" in (happyHorse11StartPayload.input as Record<string, unknown>), false);
 
 const happyHorse11Reference = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.1",
@@ -289,10 +317,10 @@ const happyHorse11Reference = validateUnifiedVideoRequest({
   ],
 });
 const happyHorse11ReferencePayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.1", happyHorse11Reference));
-assert.equal(happyHorse11ReferencePayload.model, "happyhorse-1.1-reference-to-video");
-assert.deepEqual(happyHorse11ReferencePayload.image_urls, ["https://example.com/hh11-a.png", "https://example.com/hh11-b.png"]);
-assert.equal(happyHorse11ReferencePayload.aspect_ratio, "9:16");
-assert.equal(happyHorse11ReferencePayload.duration, 6);
+assert.equal(happyHorse11ReferencePayload.model, "happyhorse-1-1-r2v");
+assert.deepEqual((happyHorse11ReferencePayload.input as Record<string, unknown>).img_urls, ["https://example.com/hh11-a.png", "https://example.com/hh11-b.png"]);
+assert.equal((happyHorse11ReferencePayload.input as Record<string, unknown>).aspect_ratio, "9:16");
+assert.equal((happyHorse11ReferencePayload.input as Record<string, unknown>).duration, 6);
 
 const happyHorse10Text = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.0",
@@ -304,8 +332,8 @@ const happyHorse10Text = validateUnifiedVideoRequest({
   references: [],
 });
 const happyHorse10TextPayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.0", happyHorse10Text));
-assert.equal(happyHorse10TextPayload.model, "happyhorse-1.0-text-to-video");
-assert.equal(happyHorse10TextPayload.aspect_ratio, "5:4");
+assert.equal(happyHorse10TextPayload.model, "happyhorse-1-0-t2v");
+assert.equal((happyHorse10TextPayload.input as Record<string, unknown>).aspect_ratio, "5:4");
 
 const happyHorse10Start = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.0",
@@ -316,8 +344,8 @@ const happyHorse10Start = validateUnifiedVideoRequest({
   references: [{ role: "start_frame", url: "https://example.com/hh10.png" }],
 });
 const happyHorse10StartPayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.0", happyHorse10Start));
-assert.equal(happyHorse10StartPayload.model, "happyhorse-1.0-image-to-video");
-assert.deepEqual(happyHorse10StartPayload.image_urls, ["https://example.com/hh10.png"]);
+assert.equal(happyHorse10StartPayload.model, "happyhorse-1-0-i2v");
+assert.deepEqual((happyHorse10StartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/hh10.png"]);
 
 const happyHorse10Reference = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.0",
@@ -332,8 +360,8 @@ const happyHorse10Reference = validateUnifiedVideoRequest({
   ],
 });
 const happyHorse10ReferencePayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.0", happyHorse10Reference));
-assert.equal(happyHorse10ReferencePayload.model, "happyhorse-1.0-reference-to-video");
-assert.deepEqual(happyHorse10ReferencePayload.image_urls, ["https://example.com/hh10-a.png", "https://example.com/hh10-b.png"]);
+assert.equal(happyHorse10ReferencePayload.model, "happyhorse-1-0-r2v");
+assert.deepEqual((happyHorse10ReferencePayload.input as Record<string, unknown>).img_urls, ["https://example.com/hh10-a.png", "https://example.com/hh10-b.png"]);
 
 const happyHorse10Edit = validateUnifiedVideoRequest({
   modelId: "happyhorse-1.0",
@@ -348,12 +376,12 @@ const happyHorse10Edit = validateUnifiedVideoRequest({
   soundEnabled: true,
 });
 const happyHorse10EditPayload = buildVideoCreatePayloadForTest(ctxFor("happyhorse-1.0", happyHorse10Edit));
-assert.equal(happyHorse10EditPayload.model, "happyhorse-1.0-video-edit");
-assert.deepEqual(happyHorse10EditPayload.video_urls, ["https://example.com/source.mp4"]);
-assert.deepEqual(happyHorse10EditPayload.image_urls, ["https://example.com/style.png"]);
-assert.equal("duration" in happyHorse10EditPayload, false);
-assert.equal("aspect_ratio" in happyHorse10EditPayload, false);
-assert.equal(happyHorse10EditPayload.keep_original_sound, true);
+assert.equal(happyHorse10EditPayload.model, "happyhorse-1-0-video-edit");
+assert.deepEqual((happyHorse10EditPayload.input as Record<string, unknown>).video_url, "https://example.com/source.mp4");
+assert.deepEqual((happyHorse10EditPayload.input as Record<string, unknown>).img_urls, ["https://example.com/style.png"]);
+assert.equal("duration" in (happyHorse10EditPayload.input as Record<string, unknown>), false);
+assert.equal("aspect_ratio" in (happyHorse10EditPayload.input as Record<string, unknown>), false);
+assert.equal((happyHorse10EditPayload.input as Record<string, unknown>).audio_setting, "origin");
 
 assert.throws(
   () =>
@@ -410,28 +438,50 @@ assert.throws(
       resolution: "1080p",
       references: [],
     }),
-  /视频编辑模式需要/,
+  /不支持/,
 );
 
 const klingMotion = validateUnifiedVideoRequest({
-  modelId: "kling-2.6-motion",
+  modelId: "kling-3.0-motion",
   modeId: "motion_control",
   prompt: "motion",
   durationSeconds: 0,
-  resolution: "720p",
+  resolution: "1080p",
   soundEnabled: false,
   references: [
     { role: "start_frame", url: "https://example.com/character.png" },
     { role: "motion_source_video", url: "https://example.com/motion.mp4" },
   ],
 });
-const klingMotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-2.6-motion", klingMotion));
-assert.equal(klingMotionPayload.model, "kling-v3-motion-control");
-assert.deepEqual(klingMotionPayload.image_urls, ["https://example.com/character.png"]);
-assert.deepEqual(klingMotionPayload.video_urls, ["https://example.com/motion.mp4"]);
-assert.deepEqual(klingMotionPayload.model_params, { character_orientation: "image", keep_sound: false });
-assert.equal("duration" in klingMotionPayload, false);
-assert.equal("aspect_ratio" in klingMotionPayload, false);
+const klingMotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0-motion", klingMotion));
+assert.deepEqual(klingMotionPayload, {
+  model: "kling/v3-motion-control",
+  input: {
+    img_urls: ["https://example.com/character.png"],
+    video_urls: ["https://example.com/motion.mp4"],
+    character_orientation: "image",
+    prompt: "motion",
+    mode: "pro",
+    keep_original_sound: false,
+  },
+});
+
+const kling26Motion = validateUnifiedVideoRequest({
+  modelId: "kling-2.6-motion",
+  modeId: "motion_control",
+  prompt: "motion 26",
+  durationSeconds: 0,
+  resolution: "720p",
+  references: [
+    { role: "start_frame", url: "https://example.com/character-26.png" },
+    { role: "motion_source_video", url: "https://example.com/motion-26.mp4" },
+  ],
+});
+const kling26MotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-2.6-motion", kling26Motion));
+assert.equal(kling26MotionPayload.model, "kling/v2-6-motion-control");
+assert.deepEqual((kling26MotionPayload.input as Record<string, unknown>).img_urls, ["https://example.com/character-26.png"]);
+assert.deepEqual((kling26MotionPayload.input as Record<string, unknown>).video_urls, ["https://example.com/motion-26.mp4"]);
+assert.equal((kling26MotionPayload.input as Record<string, unknown>).keep_original_sound, true);
 
 assert.throws(
   () =>
@@ -460,10 +510,10 @@ const allPurpose = validateUnifiedVideoRequest({
   ],
 });
 const allPurposePayload = buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", allPurpose));
-assert.deepEqual(allPurposePayload.model, "seedance-2.0-reference-to-video");
-assert.deepEqual(allPurposePayload.image_urls, ["https://example.com/1.png"]);
-assert.deepEqual(allPurposePayload.video_urls, ["https://example.com/ref.mp4"]);
-assert.deepEqual(allPurposePayload.audio_urls, ["https://example.com/ref.mp3"]);
+assert.deepEqual(allPurposePayload.model, "bytedance/seedance2-0-r2v");
+assert.deepEqual((allPurposePayload.input as Record<string, unknown>).reference_images, ["https://example.com/1.png"]);
+assert.deepEqual((allPurposePayload.input as Record<string, unknown>).reference_videos, ["https://example.com/ref.mp4"]);
+assert.deepEqual((allPurposePayload.input as Record<string, unknown>).reference_audios, ["https://example.com/ref.mp3"]);
 
 const grokText = validateUnifiedVideoRequest({
   modelId: "grok-imagine",
@@ -476,29 +526,41 @@ const grokText = validateUnifiedVideoRequest({
   grokImagineMode: "fun",
 });
 const grokTextPayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokText));
-assert.equal(grokTextPayload.model, "grok-imagine-text-to-video-beta");
-assert.equal(grokTextPayload.duration, 6);
-assert.equal(grokTextPayload.aspect_ratio, "3:2");
-assert.equal(grokTextPayload.quality, "480p");
-assert.equal(grokTextPayload.mode, "fun");
-assert.equal("generate_audio" in grokTextPayload, false);
-assert.equal("sound" in grokTextPayload, false);
+assert.equal(grokTextPayload.model, "grok-imagine/t2v");
+assert.equal((grokTextPayload.input as Record<string, unknown>).duration, 6);
+assert.equal((grokTextPayload.input as Record<string, unknown>).aspect_ratio, "3:2");
+assert.equal((grokTextPayload.input as Record<string, unknown>).resolution, "480p");
+assert.equal((grokTextPayload.input as Record<string, unknown>).mode, "fun");
+assert.equal("generate_audio" in (grokTextPayload.input as Record<string, unknown>), false);
+assert.equal("sound" in (grokTextPayload.input as Record<string, unknown>), false);
 const customGrokTextPayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokText, { text_to_video: "custom-grok-text" }));
 assert.equal(customGrokTextPayload.model, "custom-grok-text");
+assert.deepEqual(customGrokTextPayload, {
+  model: "custom-grok-text",
+  input: {
+    prompt: "a robot paints a sunset",
+    duration: 6,
+    resolution: "480p",
+    aspect_ratio: "3:2",
+    mode: "fun",
+  },
+});
 
 const grokStart = validateUnifiedVideoRequest({
   modelId: "grok-imagine",
   modeId: "start_frame",
   prompt: "the person starts dancing",
   durationSeconds: 8,
+  aspectRatio: "auto",
   resolution: "720p",
   references: [{ role: "start_frame", url: "https://example.com/grok.png" }],
   grokImagineMode: "normal",
 });
 const grokStartPayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokStart));
-assert.equal(grokStartPayload.model, "grok-imagine-image-to-video-beta");
-assert.deepEqual(grokStartPayload.image_urls, ["https://example.com/grok.png"]);
-assert.equal("aspect_ratio" in grokStartPayload, false);
+assert.equal(grokStartPayload.model, "grok-imagine-video-1.5-preview");
+assert.deepEqual((grokStartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/grok.png"]);
+assert.equal((grokStartPayload.input as Record<string, unknown>).aspect_ratio, "auto");
+assert.equal("mode" in (grokStartPayload.input as Record<string, unknown>), false);
 
 assert.throws(
   () =>
@@ -559,10 +621,16 @@ const veoText = validateUnifiedVideoRequest({
   soundEnabled: false,
 });
 const veoTextPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoText));
-assert.equal(veoTextPayload.model, "veo-3.1-generate-preview");
-assert.equal(veoTextPayload.generation_type, "TEXT");
-assert.equal(veoTextPayload.generate_audio, false);
-assert.equal(veoTextPayload.aspect_ratio, "auto");
+assert.deepEqual(veoTextPayload, {
+  model: "google/veo3-1-t2v",
+  input: {
+    prompt: "veo text",
+    duration: 4,
+    aspect_ratio: "16:9",
+    resolution: "720p",
+    translate_prompt: true,
+  },
+});
 const customVeoTextPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoText, { text_to_video: "custom-veo-text" }));
 assert.equal(customVeoTextPayload.model, "custom-veo-text");
 
@@ -576,8 +644,8 @@ const veoFastText = validateUnifiedVideoRequest({
   references: [],
 });
 const veoFastTextPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1-fast", veoFastText));
-assert.equal(veoFastTextPayload.model, "veo-3.1-fast-generate-preview");
-assert.equal(veoFastTextPayload.generation_type, "TEXT");
+assert.equal(veoFastTextPayload.model, "google/veo3-1-fast-t2v");
+assert.equal((veoFastTextPayload.input as Record<string, unknown>).aspect_ratio, "16:9");
 
 const veoStart = validateUnifiedVideoRequest({
   modelId: "veo-3.1",
@@ -589,8 +657,8 @@ const veoStart = validateUnifiedVideoRequest({
   references: [{ role: "start_frame", url: "https://example.com/veo-start.png" }],
 });
 const veoStartPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoStart));
-assert.equal(veoStartPayload.generation_type, "FIRST&LAST");
-assert.deepEqual(veoStartPayload.image_urls, ["https://example.com/veo-start.png"]);
+assert.equal(veoStartPayload.model, "google/veo3-1-i2v");
+assert.deepEqual((veoStartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/veo-start.png"]);
 
 const veoStartEnd = validateUnifiedVideoRequest({
   modelId: "veo-3.1",
@@ -605,11 +673,11 @@ const veoStartEnd = validateUnifiedVideoRequest({
   ],
 });
 const veoStartEndPayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoStartEnd));
-assert.equal(veoStartEndPayload.generation_type, "FIRST&LAST");
-assert.deepEqual(veoStartEndPayload.image_urls, ["https://example.com/veo-start.png", "https://example.com/veo-end.png"]);
+assert.equal(veoStartEndPayload.model, "google/veo3-1-i2v");
+assert.deepEqual((veoStartEndPayload.input as Record<string, unknown>).img_urls, ["https://example.com/veo-start.png", "https://example.com/veo-end.png"]);
 
 const veoReference = validateUnifiedVideoRequest({
-  modelId: "veo-3.1",
+  modelId: "veo-3.1-fast",
   modeId: "multi_image_reference",
   prompt: "veo reference",
   durationSeconds: 8,
@@ -621,17 +689,29 @@ const veoReference = validateUnifiedVideoRequest({
   ],
   soundEnabled: true,
 });
-const veoReferencePayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1", veoReference));
-assert.equal(veoReferencePayload.generation_type, "REFERENCE");
-assert.deepEqual(veoReferencePayload.image_urls, ["https://example.com/veo-1.png", "https://example.com/veo-2.png"]);
-assert.equal(veoReferencePayload.duration, 8);
-assert.equal(veoReferencePayload.aspect_ratio, "16:9");
-assert.equal(veoReferencePayload.generate_audio, true);
+const veoReferencePayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1-fast", veoReference));
+assert.equal(veoReferencePayload.model, "google/veo3-1-fast-r2v");
+assert.deepEqual((veoReferencePayload.input as Record<string, unknown>).img_urls, ["https://example.com/veo-1.png", "https://example.com/veo-2.png"]);
+assert.equal((veoReferencePayload.input as Record<string, unknown>).duration, 8);
+assert.equal((veoReferencePayload.input as Record<string, unknown>).aspect_ratio, "16:9");
+
+const veoLiteReference = validateUnifiedVideoRequest({
+  modelId: "veo-3.1-lite",
+  modeId: "multi_image_reference",
+  prompt: "veo lite reference",
+  durationSeconds: 8,
+  aspectRatio: "16:9",
+  resolution: "720p",
+  references: [{ role: "image_reference", url: "https://example.com/lite.png" }],
+});
+const veoLiteReferencePayload = buildVideoCreatePayloadForTest(ctxFor("veo-3.1-lite", veoLiteReference));
+assert.equal(veoLiteReferencePayload.model, "google/veo3-1-lite-r2v");
+assert.deepEqual((veoLiteReferencePayload.input as Record<string, unknown>).img_urls, ["https://example.com/lite.png"]);
 
 assert.throws(
   () =>
     validateUnifiedVideoRequest({
-      modelId: "veo-3.1",
+      modelId: "veo-3.1-fast",
       modeId: "multi_image_reference",
       prompt: "bad veo video ref",
       durationSeconds: 8,
@@ -640,6 +720,20 @@ assert.throws(
       references: [{ role: "video_reference", url: "https://example.com/ref.mp4" }],
     }),
   /Veo 3.1/,
+);
+
+assert.throws(
+  () =>
+    validateUnifiedVideoRequest({
+      modelId: "veo-3.1",
+      modeId: "multi_image_reference",
+      prompt: "bad ordinary veo r2v",
+      durationSeconds: 8,
+      aspectRatio: "16:9",
+      resolution: "720p",
+      references: [{ role: "image_reference", url: "https://example.com/ref.png" }],
+    }),
+  /不支持/,
 );
 
 assert.throws(
@@ -671,20 +765,33 @@ assert.throws(
 
 assert.throws(
   () => buildVideoCreatePayloadForTest(ctxFor("seedance-2.0", seedance, { start_frame: "" })),
-  /缺少 API 模型 ID/,
+  /网站内部视频 API 暂未配置完整/,
 );
 
 const omniPayload = buildVideoCreatePayloadForTest(
-  ctxFor("gemini-omni", {
+  ctxFor("gemini-omni", validateUnifiedVideoRequest({
     modelId: "gemini-omni",
-    modeId: "text_to_video",
+    modeId: "multi_image_reference",
     prompt: "omni",
-    durationSeconds: 4,
+    durationSeconds: 6,
     aspectRatio: "16:9",
     resolution: "720p",
-    references: [],
-  }),
+    references: [
+      { role: "image_reference", url: "https://example.com/omni.png" },
+      { role: "video_reference", url: "https://example.com/omni.mp4" },
+    ],
+  })),
 );
-assert.equal(omniPayload.contractState, "pending");
+assert.deepEqual(omniPayload, {
+  model: "google/gemini-omni",
+  input: {
+    prompt: "omni",
+    duration: 6,
+    aspect_ratio: "16:9",
+    resolution: "720p",
+    img_urls: ["https://example.com/omni.png"],
+    video_list: [{ url: "https://example.com/omni.mp4", start: 0, ends: 6 }],
+  },
+});
 
 console.log("video generation service smoke: ok");

@@ -9,10 +9,15 @@ import {
   generateUnifiedVideo,
   type UnifiedVideoGenerationSuccess,
 } from "@/lib/video-generation-service";
+import { captureCreditReservation, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
+import { quoteVideoCredits } from "@/lib/credits/pricing";
+import { assertCreditGenerationAllowed } from "@/lib/credits/risk";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   VIDEO_MODE_LABELS,
   getVideoCapabilities,
   getVideoModelDefinition,
+  getVideoParameterCapabilities,
   type UnifiedVideoGenerateRequest,
   type UnifiedVideoReference,
   type VideoGenerationModeId,
@@ -80,6 +85,11 @@ function getVideoUrl(node: CanvasNode): string {
   return url;
 }
 
+function getVideoDurationSeconds(node: CanvasNode): number | undefined {
+  const value = Number(node.metadata?.videoDurationSeconds);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function getAudioUrl(node: CanvasNode): string {
   const url = node.metadata?.audioUrl?.trim() || "";
   if (!url) throw new Error(`节点「${node.title || "音频"}」还没有音频。`);
@@ -111,6 +121,7 @@ function collectReferences(board: CanvasBoard, node: CanvasNode): UnifiedVideoRe
           role: node.metadata?.videoModeId === "multi_image_reference" ? "video_reference" : "motion_source_video",
           url: getVideoUrl(sourceNode),
           label: sourceNode.title,
+          durationSeconds: getVideoDurationSeconds(sourceNode),
         });
         break;
       case "audioReference":
@@ -141,6 +152,7 @@ function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>):
         role: item.role === "video_reference" ? "video_reference" : "motion_source_video",
         url: item.url,
         label: item.label,
+        durationSeconds: item.durationSeconds,
       };
     }
     if (item.type === "audio") return { role: "audio_reference", url: item.url, label: item.label };
@@ -157,6 +169,16 @@ function collectMentionedReferences(promptInfo: ReturnType<typeof buildPrompt>):
     seen.add(key);
     return true;
   });
+}
+
+function billableSecondsForCanvasVideo(modeId: VideoGenerationModeId, requestDurationSeconds: number, references: UnifiedVideoReference[]): number {
+  if (modeId === "video_edit") {
+    return references.find((ref) => ref.role === "video_reference" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  if (modeId === "motion_control") {
+    return references.find((ref) => ref.role === "motion_source_video" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  return requestDurationSeconds;
 }
 
 function buildGalleryRecord(params: {
@@ -231,56 +253,103 @@ export async function executeCanvasVideoGeneration(params: {
     effectiveModeId = inferredMode;
   }
 
+  const parameterCapabilities = getVideoParameterCapabilities(modelId, effectiveModeId, references);
+  const resolution = sourceNode.metadata?.videoResolution ?? parameterCapabilities.resolutions[0];
+  if (!resolution) {
+    throw new Error("当前视频模型没有可用分辨率配置。");
+  }
+  const requestDurationSeconds = parameterCapabilities.supportsDuration
+    ? sourceNode.metadata?.videoDurationSeconds ?? capabilities.durations[0] ?? 5
+    : 0;
   const request: UnifiedVideoGenerateRequest = {
     modelId,
     modeId: effectiveModeId,
     prompt,
-    durationSeconds: sourceNode.metadata?.videoDurationSeconds ?? capabilities.durations[0] ?? 5,
+    durationSeconds: requestDurationSeconds,
     aspectRatio: sourceNode.metadata?.videoAspectRatio ?? capabilities.aspectRatios[0],
-    resolution: sourceNode.metadata?.videoResolution ?? capabilities.resolutions[0],
+    resolution,
     references,
   };
-
-  const result = await generateUnifiedVideo({
-    supabase: params.supabase,
-    userId: params.userId,
-    workspaceSnapshot: params.workspaceSnapshot,
-    request,
-  });
-
-  const nextSourceNode: CanvasNode = {
-    ...sourceNode,
-    metadata: {
-      ...sourceNode.metadata,
-      videoUrl: result.videoUrl,
-      previewVideoUrl: result.videoUrl,
-      videoModelId: modelId,
-      videoModeId: modeId,
-      videoAspectRatio: request.aspectRatio,
-      videoResolution: request.resolution,
-      videoDurationSeconds: request.durationSeconds,
-      status: "success",
-      lastRunAt: new Date().toISOString(),
-      lastError: undefined,
-    },
-  };
-
-  const galleryRecord = buildGalleryRecord({
-    result,
-    prompt,
-    node: nextSourceNode,
+  await assertCreditGenerationAllowed(params.userId);
+  const quote = await quoteVideoCredits(createSupabaseAdminClient(), {
+    feature: "canvas_video",
     modelId,
     modeId: effectiveModeId,
-    references,
+    resolution,
+    durationSeconds: billableSecondsForCanvasVideo(effectiveModeId, request.durationSeconds, references),
   });
-  await prependVideoGalleryRecord(
-    params.supabase,
-    galleryRecord,
-    params.projectId === undefined ? {} : { projectId: params.projectId },
-  );
+  const reservation = await reserveCreditsForQuote({
+    userId: params.userId,
+    projectId: params.projectId,
+    requestId: `canvas-video:${params.board.id}:${sourceNode.id}:${randomUUID()}`,
+    quote,
+    metadata: {
+      boardId: params.board.id,
+      nodeId: sourceNode.id,
+      promptLength: prompt.length,
+      referenceCount: references.length,
+    },
+  });
 
-  return {
-    sourceNode: nextSourceNode,
-    galleryRecord,
-  };
+  try {
+    const result = await generateUnifiedVideo({
+      supabase: params.supabase,
+      userId: params.userId,
+      workspaceSnapshot: params.workspaceSnapshot,
+      request,
+    });
+
+    const nextSourceNode: CanvasNode = {
+      ...sourceNode,
+      metadata: {
+        ...sourceNode.metadata,
+        videoUrl: result.videoUrl,
+        previewVideoUrl: result.videoUrl,
+        videoModelId: modelId,
+        videoModeId: modeId,
+        videoAspectRatio: request.aspectRatio,
+        videoResolution: request.resolution,
+        videoDurationSeconds: request.durationSeconds,
+        status: "success",
+        lastRunAt: new Date().toISOString(),
+        lastError: undefined,
+      },
+    };
+
+    const galleryRecord = buildGalleryRecord({
+      result,
+      prompt,
+      node: nextSourceNode,
+      modelId,
+      modeId: effectiveModeId,
+      references,
+    });
+    await prependVideoGalleryRecord(
+      params.supabase,
+      galleryRecord,
+      params.projectId === undefined ? {} : { projectId: params.projectId },
+    );
+    await captureCreditReservation({
+      reservationId: reservation.id,
+      resultRef: result.videoUrl,
+      metadata: { galleryRecordId: galleryRecord.id, providerTaskId: result.providerTaskId, boardId: params.board.id, nodeId: sourceNode.id },
+    });
+
+    return {
+      sourceNode: nextSourceNode,
+      galleryRecord,
+    };
+  } catch (error) {
+    await releaseCreditReservation({
+      reservationId: reservation.id,
+      reason: error instanceof Error ? error.message : "canvas_video_generation_failed",
+      metadata: { boardId: params.board.id, nodeId: sourceNode.id },
+    }).catch((releaseError) => {
+      console.error("[canvas/video-gen-runtime] release reservation failed", {
+        reservationId: reservation.id,
+        releaseError,
+      });
+    });
+    throw error;
+  }
 }

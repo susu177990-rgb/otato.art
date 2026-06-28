@@ -34,6 +34,7 @@
     "smoke:legacy-archive": "npx tsx scripts/check-script-agent-legacy-archive.ts",
     "report:script-agent-rule-diff": "npx tsx scripts/report-script-agent-rule-diff.ts",
     "report:script-agent-migration": "npx tsx scripts/report-script-agent-migration-readiness.ts",
+    "credits:crun-prices": "npx tsx scripts/generate-crun-credit-prices.ts",
     "migrate:supabase": "npx tsx scripts/migrate-local-data-to-supabase.ts",
     "db:push": "npx tsx scripts/push-supabase-migrations.ts"
   },
@@ -59,7 +60,8 @@
     "react-markdown": "^10.1.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "stripe": "^22.3.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

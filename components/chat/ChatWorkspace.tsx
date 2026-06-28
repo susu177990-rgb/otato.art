@@ -663,7 +663,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
       );
       const hasTool = updated.messages.some((m) => m.role === "tool");
       if (!hasAssistant && !hasTool) {
-        setError("模型未返回任何内容，请检查 设置 → LLM API 或更换模型后重试。");
+        setError("模型未返回任何内容，请联系管理员检查系统 LLM API 或更换模型后重试。");
         return;
       }
 

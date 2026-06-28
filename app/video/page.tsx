@@ -8,7 +8,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./video-page.module.css";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { ApiUsageModeSwitch, ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
@@ -27,6 +26,7 @@ import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
+import { formatGenerationErrorForDisplay } from "@/lib/generation-error-classifier";
 import {
   VIDEO_MODE_LABELS,
   VIDEO_MODES,
@@ -95,8 +95,23 @@ function durationPresets(capability: VideoDurationCapability): number[] {
 }
 
 type ReferenceKind = "image" | "video" | "audio";
-type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string; file?: File } | null;
+type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string; file?: File; durationSeconds?: number } | null;
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
+type PendingVideoGeneration = {
+  id: string;
+  createdAt: string;
+  modelId: VideoModelId;
+  modelName: string;
+  modeId: VideoGenerationModeId;
+  modeName: string;
+  finalPrompt: string;
+  durationSeconds: number;
+  resolution: VideoResolution;
+  previewUrl?: string;
+};
+type VideoSidebarHistoryItem =
+  | { kind: "pending"; pending: PendingVideoGeneration }
+  | { kind: "record"; record: VideoGalleryRecord };
 
 function isHappyHorseVideoModel(modelId: VideoModelId): boolean {
   return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
@@ -107,32 +122,28 @@ function isGrokImagineVideoModel(modelId: VideoModelId): boolean {
 }
 
 function isVeo31VideoModel(modelId: VideoModelId): boolean {
-  return modelId === "veo-3.1" || modelId === "veo-3.1-fast";
+  return modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite";
 }
 
 function referenceKindsForUiMode(uiModeId: UiVideoModeId, modelId: VideoModelId): ReferenceKind[] {
   if (uiModeId === "motion_control") return ["image", "video"];
   if (uiModeId === "video_edit") return ["video", "image"];
   if (isHappyHorseVideoModel(modelId) || isGrokImagineVideoModel(modelId) || isVeo31VideoModel(modelId)) return ["image"];
-  if (modelId === "kling-3.0") return ["image", "video"];
+  if (modelId === "kling-3.0") return ["image"];
   return REFERENCE_KINDS;
 }
 
 function isVideoModelConfiguredForMode(
   model: VideoModelSettings | undefined,
-  apiMode: "site" | "user",
   modeId: VideoGenerationModeId,
 ): boolean {
   if (!model?.baseUrl.trim()) return false;
-  if (apiMode === "user" && !model.apiKey.trim()) return false;
   if (!model.apiModelNameByMode?.[modeId]?.trim()) return false;
   return true;
 }
 
-function missingVideoConfigMessage(label: string, apiMode: "site" | "user", modeId: VideoGenerationModeId): string {
-  const parts = apiMode === "user" ? ["Base URL", "API Key"] : ["Base URL"];
-  parts.push(`${VIDEO_MODE_LABELS[modeId]}模型 ID`);
-  return `模型「${label}」未配置完整，请先到设置页填写 ${parts.join(" / ")}。`;
+function missingVideoConfigMessage(label: string, modeId: VideoGenerationModeId): string {
+  return `网站内部视频 API 暂未配置完整（${label} / ${VIDEO_MODE_LABELS[modeId]}），请联系管理员。`;
 }
 type ReferenceState = {
   frames: [ReferenceSlot, ReferenceSlot];
@@ -149,6 +160,14 @@ type ReferenceUploadMenuState = {
 type ToolbarPickerKind = "mode" | "model" | "ratio" | "duration" | "resolution" | "grokMode";
 type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
+type CreditQuoteState = {
+  loading: boolean;
+  credits?: number;
+  availableCredits?: number;
+  reservedCredits?: number;
+  enough?: boolean;
+  error?: string;
+};
 type PresetRailItem = {
   id: string;
   label: string;
@@ -284,6 +303,7 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         url: slot.url,
         label: "动作视频",
         mimeType: slot.mimeType,
+        durationSeconds: slot.durationSeconds,
       })),
     ];
   }
@@ -294,6 +314,7 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         url: slot.url,
         label: index === 0 ? "原视频" : kindSlotLabel("video", index),
         mimeType: slot.mimeType,
+        durationSeconds: slot.durationSeconds,
       })),
       ...references.allPurpose.image.map((slot, index) => ({
         role: "image_reference" as const,
@@ -310,6 +331,7 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         url: slot.url,
         label: kindSlotLabel(kind, index),
         mimeType: slot.mimeType,
+        durationSeconds: kind === "video" ? slot.durationSeconds : undefined,
       })),
     );
   }
@@ -332,6 +354,32 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
     });
   }
   return refs;
+}
+
+function readVideoDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      resolve(Number.isFinite(video.duration) && video.duration > 0 ? video.duration : undefined);
+    };
+    video.onerror = () => resolve(undefined);
+    video.src = url;
+  });
+}
+
+function billableVideoSecondsForMode(
+  modeId: VideoGenerationModeId,
+  durationSeconds: number,
+  references: UnifiedVideoReference[],
+): number {
+  if (modeId === "video_edit") {
+    return references.find((ref) => ref.role === "video_reference" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  if (modeId === "motion_control") {
+    return references.find((ref) => ref.role === "motion_source_video" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  return durationSeconds;
 }
 
 function historySlotKey(modeId: VideoGenerationModeId, role: UnifiedVideoReference["role"], index: number): { kind: "frame"; index: 0 | 1 } | { kind: ReferenceKind; index: number } | null {
@@ -373,7 +421,7 @@ export default function VideoPage() {
     if (pathname === "/video") router.replace("/projects");
   }, [pathname, router]);
 
-  const { videoWorkspace, apiUsageMode, workspaceReady } = useApiSettings();
+  const { videoWorkspace, workspaceReady } = useApiSettings();
   const [records, setRecords] = useState<VideoGalleryRecord[]>([]);
   const [selectedUiModeId, setSelectedUiModeId] = useState<UiVideoModeId>("start_end_frame");
   const [selectedPresetId, setSelectedPresetId] = useState("free");
@@ -387,8 +435,10 @@ export default function VideoPage() {
   const [references, setReferences] = useState<ReferenceState>(createEmptyReferences);
   const [resultUrl, setResultUrl] = useState("");
   const [error, setError] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [pendingGenerations, setPendingGenerations] = useState<PendingVideoGeneration[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [creditQuote, setCreditQuote] = useState<CreditQuoteState>({ loading: true });
+  const isGenerating = pendingGenerations.length > 0;
   const [referenceUploadMenu, setReferenceUploadMenu] = useState<ReferenceUploadMenuState>(null);
   const [toolbarPickerMenu, setToolbarPickerMenu] = useState<ToolbarPickerMenuState>(null);
   const [projectAssetPicker, setProjectAssetPicker] = useState<ProjectAssetPickerState>(null);
@@ -461,13 +511,18 @@ export default function VideoPage() {
     [selectedPreset.promptTemplate],
   );
   const composerSlotCount = composerSlotCountForTemplate(selectedPreset.promptTemplate);
-  const modelReady = apiUsageMode.video === "site"
-    ? true
-    : isVideoModelConfiguredForMode(videoWorkspace.models[safeModelId], apiUsageMode.video, effectiveModeId);
-  const sidebarHistoryRecords = useMemo(() => {
+  const modelReady = isVideoModelConfiguredForMode(videoWorkspace.models[safeModelId], effectiveModeId);
+  const currentBillableSeconds = parameterCapabilities.supportsDuration
+    ? selectedDuration
+    : billableVideoSecondsForMode(effectiveModeId, selectedDuration, currentParameterReferences);
+  const creditBlocked = creditQuote.loading || Boolean(creditQuote.error) || creditQuote.enough === false;
+  const sidebarHistoryRecords = useMemo<VideoSidebarHistoryItem[]>(() => {
     const success = records.filter((item) => item.status === "success" && Boolean(item.videoUrl)).slice(0, 24);
-    return success.slice().reverse();
-  }, [records]);
+    return [
+      ...success.slice().reverse().map((record) => ({ kind: "record" as const, record })),
+      ...pendingGenerations.map((pending) => ({ kind: "pending" as const, pending })),
+    ];
+  }, [pendingGenerations, records]);
   const presetRailVisibleCount = Math.min(Math.max(presetRailItems.length, 1), 5);
   const historyRailVisibleCount = Math.min(Math.max(sidebarHistoryRecords.length, 1), 5);
   const presetRailStyle = { "--rail-visible-count": presetRailVisibleCount } as CSSProperties;
@@ -542,6 +597,47 @@ export default function VideoPage() {
     loadVideoPromptPresets();
   }, [loadVideoPromptPresets, workspaceReady]);
 
+  useEffect(() => {
+    if (!workspaceReady || !selectedResolution) return;
+    const controller = new AbortController();
+    setCreditQuote((current) => ({ ...current, loading: true, error: undefined }));
+    void fetch("/api/credits/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "video",
+        modelId: safeModelId,
+        modeId: effectiveModeId,
+        resolution: selectedResolution,
+        durationSeconds: currentBillableSeconds,
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          quote?: { credits?: number };
+          balance?: { availableCredits?: number; reservedCredits?: number; enough?: boolean };
+        };
+        if (!response.ok) throw new Error(payload.error || "无法获取积分价格");
+        setCreditQuote({
+          loading: false,
+          credits: Number(payload.quote?.credits ?? 0),
+          availableCredits: Number(payload.balance?.availableCredits ?? 0),
+          reservedCredits: Number(payload.balance?.reservedCredits ?? 0),
+          enough: Boolean(payload.balance?.enough),
+        });
+      })
+      .catch((quoteError) => {
+        if (controller.signal.aborted) return;
+        setCreditQuote({
+          loading: false,
+          error: quoteError instanceof Error ? quoteError.message : "无法获取积分价格",
+        });
+      });
+    return () => controller.abort();
+  }, [currentBillableSeconds, effectiveModeId, safeModelId, selectedResolution, workspaceReady]);
+
   async function copyPromptToClipboard() {
     const text = buildVideoPromptFromSlots(selectedPreset.promptTemplate, slotInputs) || "";
     try {
@@ -597,6 +693,7 @@ export default function VideoPage() {
           description: slot.label,
           thumbnailUrl: kind === "image" ? slot.previewUrl : undefined,
           url: slot.url,
+          durationSeconds: slot.durationSeconds,
         });
       });
     });
@@ -654,8 +751,9 @@ export default function VideoPage() {
     });
   }
 
-  function localReferenceSlotFromFile(kind: ReferenceKind, file: File): NonNullable<ReferenceSlot> {
+  async function localReferenceSlotFromFile(kind: ReferenceKind, file: File): Promise<NonNullable<ReferenceSlot>> {
     const previewUrl = createLocalPreviewUrl(file);
+    const durationSeconds = kind === "video" ? await readVideoDuration(previewUrl) : undefined;
     return {
       kind,
       url: previewUrl,
@@ -663,6 +761,7 @@ export default function VideoPage() {
       label: file.name,
       mimeType: mediaContentType(file, kind),
       file,
+      durationSeconds,
     };
   }
 
@@ -732,7 +831,7 @@ export default function VideoPage() {
       return;
     }
     try {
-      const staged = accepted.map((file) => localReferenceSlotFromFile(kind, file)) satisfies NonNullable<ReferenceSlot>[];
+      const staged = await Promise.all(accepted.map((file) => localReferenceSlotFromFile(kind, file)));
 
       setReferences((prev) => {
         if (selectedUiModeId === "start_end_frame") {
@@ -815,13 +914,15 @@ export default function VideoPage() {
     }
   }
 
-  function applyProjectAssetAsReference(kind: Extract<ReferenceKind, "image" | "video">, index: number, asset: ProjectAsset) {
+  async function applyProjectAssetAsReference(kind: Extract<ReferenceKind, "image" | "video">, index: number, asset: ProjectAsset) {
+    const durationSeconds = kind === "video" ? await readVideoDuration(asset.primaryImageUrl) : undefined;
     const slot: NonNullable<ReferenceSlot> = {
       kind,
       url: asset.primaryImageUrl,
       previewUrl: asset.primaryImageUrl,
       label: asset.name,
       mimeType: mimeTypeFromAssetUrl(asset.primaryImageUrl, kind),
+      durationSeconds,
     };
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
@@ -943,11 +1044,15 @@ export default function VideoPage() {
         url: candidate.url!,
         label: candidate.label,
         mimeType:
-          candidate.role === "video_reference"
+          candidate.role === "video_reference" || candidate.role === "motion_source_video"
             ? "video/mp4"
             : candidate.role === "audio_reference"
               ? "audio/mpeg"
               : "image/png",
+        durationSeconds:
+          candidate.role === "video_reference" || candidate.role === "motion_source_video"
+            ? candidate.durationSeconds
+            : undefined,
       }));
     let allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, references);
     if (modeError && !mentionResolution.hasMentions) {
@@ -1000,6 +1105,10 @@ export default function VideoPage() {
       setError("HappyHorse 全能参考只支持 1~9 张图片参考，不支持视频或音频参考。");
       return;
     }
+    if (safeModelId === "kling-3.0" && finalEffectiveModeId === "multi_image_reference" && (!hasImageReferences || hasVideoReferences || hasAudioReferences)) {
+      setError("Kling 3.0 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
+      return;
+    }
     if (isVeo31VideoModel(safeModelId) && finalEffectiveModeId === "multi_image_reference" && (!hasImageReferences || hasVideoReferences || hasAudioReferences)) {
       setError("Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
       return;
@@ -1037,19 +1146,34 @@ export default function VideoPage() {
 
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
-    const liveApiMode = liveSnapshot.apiUsageMode?.video ?? "site";
-    if (liveApiMode === "user" && !isVideoModelConfiguredForMode(liveModel, liveApiMode, finalEffectiveModeId)) {
-      setError(missingVideoConfigMessage(liveModel.label || safeModelId, liveApiMode, finalEffectiveModeId));
+    if (!isVideoModelConfiguredForMode(liveModel, finalEffectiveModeId)) {
+      setError(missingVideoConfigMessage(liveModel.label || safeModelId, finalEffectiveModeId));
       return;
     }
 
-    setIsGenerating(true);
+    const requestId = crypto.randomUUID();
+    setPendingGenerations((prev) => [
+      ...prev,
+      {
+        id: requestId,
+        createdAt: new Date().toISOString(),
+        modelId: safeModelId,
+        modelName: getVideoModelDefinition(safeModelId).label,
+        modeId: finalEffectiveModeId,
+        modeName: VIDEO_MODE_LABELS[finalEffectiveModeId],
+        finalPrompt: cleanedPrompt,
+        durationSeconds: selectedDuration,
+        resolution: selectedResolution,
+        previewUrl: allReferences.find((ref) => ref.role === "start_frame" || ref.role === "image_reference" || ref.role === "video_reference" || ref.role === "motion_source_video")?.url,
+      },
+    ]);
     try {
       allReferences = await ensureReferenceUrlsForGenerate(allReferences);
       const res = await fetch("/api/video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          requestId,
           modelId: safeModelId,
           modeId: finalEffectiveModeId,
           prompt: cleanedPrompt,
@@ -1064,10 +1188,20 @@ export default function VideoPage() {
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
+        code?: string;
+        reasonCode?: string;
+        userMessage?: string;
         providerTaskId?: string;
         videoUrl?: string;
       };
-      if (!res.ok) throw new Error(data.error || "生视频失败");
+      if (!res.ok) {
+        throw new Error(formatGenerationErrorForDisplay({
+          code: data.code,
+          reasonCode: data.reasonCode,
+          userMessage: data.userMessage,
+          fallbackCode: `HTTP_${res.status}`,
+        }));
+      }
       const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl.trim() : "";
       if (!videoUrl) throw new Error("服务器未返回视频地址");
       setResultUrl(videoUrl);
@@ -1075,9 +1209,8 @@ export default function VideoPage() {
     } catch (generationError) {
       const message = generationError instanceof Error ? generationError.message : "生视频失败";
       setError(message);
-      await writeRecord("error", cleanedPrompt, undefined, undefined, message, finalEffectiveModeId, allReferences);
     } finally {
-      setIsGenerating(false);
+      setPendingGenerations((prev) => prev.filter((item) => item.id !== requestId));
     }
   }
 
@@ -1211,7 +1344,6 @@ export default function VideoPage() {
           </button>
         </div>
         <div className={shellStyles.topnav}>
-          <ApiUsageModeSwitch module="video" />
           <TopbarAccountActions />
         </div>
       </header> : null}
@@ -1278,7 +1410,9 @@ export default function VideoPage() {
             {isGenerating ? (
               <div className={styles.loadingOverlay} role="status" aria-live="polite">
                 <span className={styles.bigSpinner} aria-hidden />
-                <span className={styles.statusLabel}>生成中</span>
+                <span className={styles.statusLabel}>
+                  {pendingGenerations.length > 1 ? `生成中 · ${pendingGenerations.length}` : "生成中"}
+                </span>
               </div>
             ) : null}
             {!isGenerating && !modelReady ? (
@@ -1300,11 +1434,20 @@ export default function VideoPage() {
                       {sidebarHistoryRecords.length === 0 ? (
                         <div className={styles.emptyRail}>暂无记录</div>
                       ) : (
-                        sidebarHistoryRecords.map((record) => (
-                          <button key={record.id} type="button" onClick={() => applyHistoryRecord(record)} className={styles.historyItem}>
-                            {record.videoUrl ? <video src={record.videoUrl} muted playsInline preload="metadata" /> : null}
+                        sidebarHistoryRecords.map((item) => item.kind === "pending" ? (
+                          <div key={item.pending.id} className={[styles.historyItem, styles.historyItemPending].join(" ")} role="status" aria-live="polite">
+                            {item.pending.previewUrl ? <video src={item.pending.previewUrl} muted playsInline preload="metadata" /> : null}
+                            {!item.pending.previewUrl ? <span className={styles.historyPendingBlank} aria-hidden /> : null}
+                            <span className={styles.historyPendingSpinner} aria-hidden />
                             <span className={styles.historyMeta}>
-                              {record.modeName} · {record.durationSeconds}s
+                              {item.pending.modeName} · {item.pending.durationSeconds}s
+                            </span>
+                          </div>
+                        ) : (
+                          <button key={item.record.id} type="button" onClick={() => applyHistoryRecord(item.record)} className={styles.historyItem}>
+                            {item.record.videoUrl ? <video src={item.record.videoUrl} muted playsInline preload="metadata" /> : null}
+                            <span className={styles.historyMeta}>
+                              {item.record.modeName} · {item.record.durationSeconds}s
                             </span>
                           </button>
                         ))
@@ -1480,14 +1623,6 @@ export default function VideoPage() {
             </div>
 
             <div className={styles.toolbar}>
-              <ApiUsageModeToggle
-                module="video"
-                className={[styles.composerPickerButton, styles.composerPickerApi].join(" ")}
-                backdropClassName={styles.toolbarPickerBackdrop}
-                menuClassName={styles.toolbarPickerMenu}
-                optionClassName={styles.toolbarPickerOption}
-                optionActiveClassName={styles.toolbarPickerOptionActive}
-              />
               <button
                 type="button"
                 className={[styles.composerPickerButton, styles.composerPickerMode].join(" ")}
@@ -1602,8 +1737,25 @@ export default function VideoPage() {
                   </span>
                   <span>预设</span>
                 </button>
-                <button type="button" onClick={handleGenerate} disabled={isGenerating || isUploading} className={styles.generate}>
-                  {isGenerating ? "生成中" : "生成"}
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={isUploading || creditBlocked}
+                  className={styles.generate}
+                  title={creditQuote.error || (creditQuote.enough === false ? "积分余额不足" : "生成")}
+                >
+                  <span className={styles.generateCost} data-state={creditQuote.error ? "error" : creditQuote.enough === false ? "insufficient" : "ready"}>
+                    <span>{creditQuote.loading ? "计价中" : creditQuote.error ? "未计价" : creditQuote.credits ?? 0}</span>
+                    <svg className={styles.generateCostIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M7.2 8.1c2.1-2.4 6.1-3.4 8.8-1.7 2.8 1.7 3.9 5.9 2.2 8.9-1.6 2.8-5.6 4.4-8.8 3.2-3.4-1.2-4.9-4.7-4-7.4.3-1.1.9-2.1 1.8-3Z" />
+                      <path d="M14.7 6.2c.2-1.1.8-2 1.8-2.7" />
+                      <path d="M16.4 5.1c1-.2 1.9.1 2.6.9" />
+                      <path d="M9 11.1h.01" />
+                      <path d="M13.2 9.7h.01" />
+                      <path d="M14.8 14.2h.01" />
+                      <path d="M10.4 15.3h.01" />
+                    </svg>
+                  </span>
                 </button>
               </div>
             </div>
@@ -1799,7 +1951,7 @@ export default function VideoPage() {
               projectId={projectId}
               allowedKinds={[projectAssetPicker.kind]}
               onClose={() => setProjectAssetPicker(null)}
-              onSelect={(asset) => applyProjectAssetAsReference(projectAssetPicker.kind, projectAssetPicker.index, asset)}
+              onSelect={(asset) => void applyProjectAssetAsReference(projectAssetPicker.kind, projectAssetPicker.index, asset)}
             />,
             document.body,
           )

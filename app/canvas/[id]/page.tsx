@@ -5,7 +5,6 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { useParams } from "next/navigation";
 import shellStyles from "@/app/shared/shell.module.css";
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
-import { ApiUsageModeSwitchAll, ApiUsageModeToggle, ApiUsageModeToggleAll } from "@/components/ApiUsageModeSwitch";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -64,6 +63,7 @@ import {
 import { DEFAULT_CANVAS_VIEWPORT } from "@/lib/canvas/types";
 import { CanvasAudioPlayer, CanvasIcon, type CanvasIconName } from "./canvas-ui";
 import styles from "../canvas-page.module.css";
+import { formatGenerationErrorForDisplay } from "@/lib/generation-error-classifier";
 
 // ─── Interaction state types ───────────────────────────────────────────────────
 
@@ -175,6 +175,16 @@ function readVideoSize(url: string): Promise<{ width: number; height: number }> 
     const video = document.createElement("video");
     video.onloadedmetadata = () => resolve({ width: video.videoWidth || 16, height: video.videoHeight || 9 });
     video.onerror = () => resolve({ width: 16, height: 9 });
+    video.src = url;
+  });
+}
+
+function readVideoDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => resolve(Number.isFinite(video.duration) && video.duration > 0 ? video.duration : undefined);
+    video.onerror = () => resolve(undefined);
     video.src = url;
   });
 }
@@ -483,7 +493,7 @@ function makeEmptyVideoNode(
 function makeMediaNode(
   pos: CanvasPosition,
   kind: UploadKind,
-  media: { url: string; width: number; height: number; mimeType: string; filename?: string; audioDurationSeconds?: number },
+  media: { url: string; width: number; height: number; mimeType: string; filename?: string; videoDurationSeconds?: number; audioDurationSeconds?: number },
 ): CanvasNode {
   const size = kind === "audio" ? { width: 360, height: 116 } : fitMediaSize(media);
   const title = media.filename || (kind === "image" ? "图片" : kind === "video" ? "视频" : "音频");
@@ -497,6 +507,7 @@ function makeMediaNode(
       audioUrl: kind === "audio" ? media.url : undefined,
       naturalWidth: kind === "audio" ? undefined : media.width,
       naturalHeight: kind === "audio" ? undefined : media.height,
+      videoDurationSeconds: kind === "video" ? media.videoDurationSeconds : undefined,
       audioDurationSeconds: media.audioDurationSeconds,
       mimeType: media.mimeType,
       source: "upload",
@@ -1259,6 +1270,7 @@ export default function CanvasBoardPage() {
       if (!data.publicUrl) throw new Error("无法生成媒体地址");
       const objectUrl = URL.createObjectURL(file);
       const size = kind === "video" ? await readVideoSize(objectUrl) : kind === "audio" ? { width: 320, height: 96 } : await readImageSize(objectUrl);
+      const videoDurationSeconds = kind === "video" ? await readVideoDuration(objectUrl) : undefined;
       const audioDurationSeconds = kind === "audio" ? await readAudioDuration(objectUrl) : undefined;
       URL.revokeObjectURL(objectUrl);
       
@@ -1280,6 +1292,7 @@ export default function CanvasBoardPage() {
             audioUrl: kind === "audio" ? data.publicUrl : undefined,
             naturalWidth: kind === "audio" ? undefined : size.width,
             naturalHeight: kind === "audio" ? undefined : size.height,
+            videoDurationSeconds,
             audioDurationSeconds,
             mimeType: contentType,
             status: "success",
@@ -1287,7 +1300,7 @@ export default function CanvasBoardPage() {
         } : n));
         markDirty();
       } else {
-        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: contentType, filename: file.name, audioDurationSeconds }));
+        appendNode(makeMediaNode(position, kind, { url: data.publicUrl, width: size.width, height: size.height, mimeType: contentType, filename: file.name, videoDurationSeconds, audioDurationSeconds }));
       }
     } catch { setSaveStatus("error"); }
     finally {
@@ -1587,7 +1600,7 @@ export default function CanvasBoardPage() {
         rawText = "Failed to read response body";
       }
 
-      let data: Partial<CanvasImageGenerateResponse> & { error?: string } = {};
+      let data: Partial<CanvasImageGenerateResponse> & { error?: string; code?: string; reasonCode?: string; userMessage?: string } = {};
       try {
         data = rawText ? JSON.parse(rawText) : {};
       } catch {
@@ -1595,7 +1608,12 @@ export default function CanvasBoardPage() {
       }
 
       if (!res.ok || !data.sourceNode || !data.galleryRecord) {
-        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+        throw new Error(formatGenerationErrorForDisplay({
+          code: data.code,
+          reasonCode: data.reasonCode,
+          userMessage: data.userMessage,
+          fallbackCode: `HTTP_${res.status}`,
+        }));
       }
       // Update the image node with the generated result
       const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
@@ -1634,7 +1652,7 @@ export default function CanvasBoardPage() {
         rawText = "Failed to read response body";
       }
 
-      let data: Partial<CanvasVideoGenerateResponse> & { error?: string } = {};
+      let data: Partial<CanvasVideoGenerateResponse> & { error?: string; code?: string; reasonCode?: string; userMessage?: string } = {};
       try {
         data = rawText ? JSON.parse(rawText) : {};
       } catch {
@@ -1642,7 +1660,12 @@ export default function CanvasBoardPage() {
       }
 
       if (!res.ok || !data.sourceNode || !data.galleryRecord) {
-        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+        throw new Error(formatGenerationErrorForDisplay({
+          code: data.code,
+          reasonCode: data.reasonCode,
+          userMessage: data.userMessage,
+          fallbackCode: `HTTP_${res.status}`,
+        }));
       }
       const nextNodes = nodesRef.current.map((n) => n.id === nodeId ? data.sourceNode! : n);
       setNodes(nextNodes);
@@ -1716,7 +1739,7 @@ export default function CanvasBoardPage() {
         rawText = "Failed to read response body";
       }
 
-      let data: Partial<CanvasChatRunResponse> & { error?: string } = {};
+      let data: Partial<CanvasChatRunResponse> & { error?: string; code?: string; reasonCode?: string; userMessage?: string } = {};
       try {
         data = rawText ? JSON.parse(rawText) : {};
       } catch {
@@ -1724,7 +1747,12 @@ export default function CanvasBoardPage() {
       }
 
       if (!res.ok || !data.sourceNode || !data.conversation) {
-        throw new Error(data.error || `HTTP ${res.status}: ${rawText.slice(0, 100)}...`);
+        throw new Error(formatGenerationErrorForDisplay({
+          code: data.code,
+          reasonCode: data.reasonCode,
+          userMessage: data.userMessage,
+          fallbackCode: `HTTP_${res.status}`,
+        }));
       }
 
       const nextNodes = nodesRef.current.map((n) => (n.id === nodeId ? data.sourceNode! : n));
@@ -2058,7 +2086,6 @@ export default function CanvasBoardPage() {
           </div>
         </div>
         <nav className={shellStyles.topnav}>
-          <ApiUsageModeSwitchAll />
           <TopbarAccountActions />
         </nav>
       </header> : null}
@@ -2322,14 +2349,6 @@ export default function CanvasBoardPage() {
                         </>
                       ) : (node.type === "image" || node.type === "video") && node.metadata?.source !== "upload" ? (
                         <>
-                          <ApiUsageModeToggle
-                            module={node.type === "image" ? "image" : "video"}
-                            className={styles.generatorPill}
-                            backdropClassName={styles.canvasPickerBackdrop}
-                            menuClassName={styles.canvasPickerMenu}
-                            optionClassName={styles.canvasPickerOption}
-                            optionActiveClassName={styles.canvasPickerOptionActive}
-                          />
                           <button
                             type="button"
                             title="上传本地文件"
@@ -2515,13 +2534,6 @@ export default function CanvasBoardPage() {
                           }}
                         />
                         <div className={styles.generatorToolbar}>
-                          <ApiUsageModeToggleAll
-                            className={styles.generatorPill}
-                            backdropClassName={styles.canvasPickerBackdrop}
-                            menuClassName={styles.canvasPickerMenu}
-                            optionClassName={styles.canvasPickerOption}
-                            optionActiveClassName={styles.canvasPickerOptionActive}
-                          />
                           {renderCanvasPickerButton(
                             llmSettings.models[node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId]?.label ??
                               node.metadata?.chatPreferredLlmModelId ??
@@ -2674,14 +2686,6 @@ export default function CanvasBoardPage() {
                           onPointerDown={(e) => e.stopPropagation()}
                         />
                         <div className={styles.generatorToolbar}>
-                          <ApiUsageModeToggle
-                            module={node.type === "image" ? "image" : "video"}
-                            className={styles.generatorPill}
-                            backdropClassName={styles.canvasPickerBackdrop}
-                            menuClassName={styles.canvasPickerMenu}
-                            optionClassName={styles.canvasPickerOption}
-                            optionActiveClassName={styles.canvasPickerOptionActive}
-                          />
                           {node.type === "image" ? (
                             <>
                               {renderCanvasPickerButton(
@@ -2703,7 +2707,7 @@ export default function CanvasBoardPage() {
                               )}
                               {renderCanvasPickerButton(
                                 (node.metadata?.aspectRatio ?? "4:3") === "auto" ? "自适应" : (node.metadata?.aspectRatio ?? "4:3"),
-                                (["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"] as ImageAspectRatio[]).map((ratio) => ({
+                                (["auto", "1:1", "2:3", "3:2", "5:4", "4:5", "3:4", "4:3", "9:16", "16:9", "21:9", "9:21"] as ImageAspectRatio[]).map((ratio) => ({
                                   id: ratio,
                                   label: ratio === "auto" ? "自适应" : ratio,
                                   active: ratio === (node.metadata?.aspectRatio ?? "4:3"),

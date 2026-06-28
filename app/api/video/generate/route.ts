@@ -1,16 +1,28 @@
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import {
   generateUnifiedVideo,
   VideoGenerationError,
 } from "@/lib/video-generation-service";
+import {
+  captureCreditReservation,
+  ensureCreditAccount,
+  releaseCreditReservation,
+  reserveCreditsForQuote,
+} from "@/lib/credits/accounts";
+import { CreditPricingError, quoteVideoCredits } from "@/lib/credits/pricing";
+import { CreditRiskError, assertCreditGenerationAllowed } from "@/lib/credits/risk";
+import type { CreditReservation } from "@/lib/credits/types";
 import {
   getVideoParameterCapabilities,
   isDisabledVideoModel,
   isVideoDurationSupported,
   normalizeVideoDuration,
 } from "@/lib/video-workspace";
+import { classifyGenerationError } from "@/lib/generation-error-classifier";
 import type {
   UnifiedVideoGenerateRequest,
   UnifiedVideoReference,
@@ -20,20 +32,42 @@ import type {
   VideoResolution,
 } from "@/lib/video-workspace";
 
+function generationErrorJson(params: {
+  message: string;
+  code: string;
+  status: number;
+  fallbackReasonCode?: Parameters<typeof classifyGenerationError>[0]["fallbackReasonCode"];
+}) {
+  const classified = classifyGenerationError({
+    message: params.message,
+    status: params.status,
+    fallbackReasonCode: params.fallbackReasonCode,
+  });
+  return {
+    error: params.message,
+    code: params.code,
+    ...classified,
+  };
+}
+
 function mustBeVideoModelId(raw: unknown): VideoModelId {
   const v = String(raw ?? "");
   switch (v) {
     case "seedance-2.0":
     case "seedance-2.0-fast":
+    case "seedance-2.0-mini":
     case "seedance-1.5-pro":
     case "doubao-seedance-1.0-pro-fast":
+    case "seedance-1.0-pro":
     case "kling-3.0":
+    case "kling-3.0-motion":
     case "kling-2.6-motion":
     case "happyhorse-1.1":
     case "happyhorse-1.0":
     case "grok-imagine":
     case "veo-3.1":
     case "veo-3.1-fast":
+    case "veo-3.1-lite":
     case "gemini-omni":
       return v;
     default:
@@ -111,9 +145,26 @@ function parseReferences(raw: unknown): UnifiedVideoReference[] {
         url: String(row.url ?? "").trim(),
         label: typeof row.label === "string" ? row.label : undefined,
         mimeType: typeof row.mimeType === "string" ? row.mimeType : undefined,
+        durationSeconds: Number.isFinite(Number(row.durationSeconds)) && Number(row.durationSeconds) > 0
+          ? Number(row.durationSeconds)
+          : undefined,
       } satisfies UnifiedVideoReference;
     })
     .filter((item) => item.url);
+}
+
+function billableSecondsForVideo(params: {
+  modeId: VideoGenerationModeId;
+  durationSeconds: number;
+  references: UnifiedVideoReference[];
+}): number {
+  if (params.modeId === "video_edit") {
+    return params.references.find((ref) => ref.role === "video_reference" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  if (params.modeId === "motion_control") {
+    return params.references.find((ref) => ref.role === "motion_source_video" && Number.isFinite(ref.durationSeconds) && ref.durationSeconds! > 0)?.durationSeconds ?? 0;
+  }
+  return params.durationSeconds;
 }
 
 export async function POST(req: NextRequest) {
@@ -122,7 +173,7 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return Response.json({ error: "请先登录后再生视频" }, { status: 401 });
+    return Response.json(generationErrorJson({ message: "请先登录后再生视频", code: "auth_required", status: 401 }), { status: 401 });
   }
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -137,13 +188,19 @@ export async function POST(req: NextRequest) {
     references?: unknown;
     providerOptions?: unknown;
     projectId?: unknown;
+    requestId?: unknown;
   };
 
   const prompt = String(body.prompt ?? "").trim();
-  if (!prompt) return Response.json({ error: "提示词为空" }, { status: 400 });
+  if (!prompt) {
+    return Response.json(generationErrorJson({ message: "提示词为空", code: "prompt_empty", status: 400 }), { status: 400 });
+  }
   const projectId = String(body.projectId ?? "").trim();
   if (!projectId) {
-    return Response.json({ error: "缺少 projectId，项目工作台生成必须绑定项目。" }, { status: 400 });
+    return Response.json(
+      generationErrorJson({ message: "缺少 projectId，项目工作台生成必须绑定项目。", code: "project_id_missing", status: 400 }),
+      { status: 400 },
+    );
   }
   const { data: project, error: projectError } = await supabase
     .from("projects")
@@ -153,12 +210,15 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (projectError) throw projectError;
   if (!project) {
-    return Response.json({ error: "项目不存在或无权访问" }, { status: 403 });
+    return Response.json(generationErrorJson({ message: "项目不存在或无权访问", code: "project_forbidden", status: 403 }), { status: 403 });
   }
 
   const modelId = mustBeVideoModelId(body.modelId);
   if (isDisabledVideoModel(modelId)) {
-    return Response.json({ error: "Gemini Omni API 尚未开放，当前已停用。", code: "model_disabled" }, { status: 422 });
+    return Response.json(
+      generationErrorJson({ message: "当前视频模型已停用。", code: "model_disabled", status: 422 }),
+      { status: 422 },
+    );
   }
   const modeId = mustBeModeId(body.modeId);
   const aspectRatio = mustBeAspectRatio(body.aspectRatio);
@@ -170,25 +230,60 @@ export async function POST(req: NextRequest) {
     : undefined;
   const references = parseReferences(body.references);
 
-  const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
+  const snapshot = await getWorkspaceSnapshot(supabase);
   const parameterCapabilities = getVideoParameterCapabilities(modelId, modeId, references);
   const durationCapability = parameterCapabilities.durationCapability;
   if (durationProvided && parameterCapabilities.supportsDuration && durationCapability && !isVideoDurationSupported(duration, durationCapability)) {
-    return Response.json({ error: `当前模型不支持 ${duration}s 时长`, code: "unsupported_duration" }, { status: 422 });
+    return Response.json(
+      generationErrorJson({ message: `当前模型不支持 ${duration}s 时长`, code: "unsupported_duration", status: 422 }),
+      { status: 422 },
+    );
   }
   const durationSeconds = parameterCapabilities.supportsDuration && durationCapability
     ? durationProvided
       ? duration
       : normalizeVideoDuration(snapshot.videoWorkspace.uiDefaults.defaultDurationSeconds, durationCapability)
     : 0;
+  const billableDurationSeconds = billableSecondsForVideo({ modeId, durationSeconds, references });
+  const billingResolution = resolution ?? parameterCapabilities.resolutions[0];
+  if (!billingResolution) {
+    return Response.json(
+      generationErrorJson({ message: "当前视频模型没有可用分辨率配置。", code: "resolution_missing", status: 422, fallbackReasonCode: "INVALID_PROMPT" }),
+      { status: 422 },
+    );
+  }
+  const requestId = typeof body.requestId === "string" && body.requestId.trim() ? body.requestId.trim() : randomUUID();
+  let reservation: CreditReservation | null = null;
   try {
+    await assertCreditGenerationAllowed(user.id);
+    const quote = await quoteVideoCredits(createSupabaseAdminClient(), {
+      feature: "video",
+      modelId,
+      modeId,
+      resolution: billingResolution,
+      durationSeconds: billableDurationSeconds,
+    });
+    reservation = await reserveCreditsForQuote({
+      userId: user.id,
+      projectId,
+      requestId,
+      quote,
+      metadata: {
+        promptLength: prompt.length,
+        referenceCount: references.length,
+        requestedDurationSeconds: durationSeconds,
+        billableDurationSeconds,
+        aspectRatio,
+        soundEnabled: typeof body.soundEnabled === "boolean" ? body.soundEnabled : undefined,
+      },
+    });
     const requestPayload: UnifiedVideoGenerateRequest = {
       modelId,
       modeId,
       prompt,
       durationSeconds,
       aspectRatio,
-      resolution,
+      resolution: quote.resolution,
       soundEnabled: typeof body.soundEnabled === "boolean" ? body.soundEnabled : undefined,
       grokImagineMode,
       references,
@@ -203,8 +298,64 @@ export async function POST(req: NextRequest) {
       workspaceSnapshot: snapshot,
       request: requestPayload,
     });
-    return Response.json(result);
+    const captured = await captureCreditReservation({
+      reservationId: reservation.id,
+      resultRef: result.videoUrl,
+      metadata: { providerTaskId: result.providerTaskId },
+    });
+    const account = await ensureCreditAccount(user.id);
+    return Response.json({
+      ...result,
+      reservationId: captured.id,
+      creditsCharged: captured.capturedCredits ?? quote.credits,
+      balanceAfter: account.availableCredits,
+    });
   } catch (error) {
+    if (reservation?.id) {
+      await releaseCreditReservation({
+        reservationId: reservation.id,
+        reason: error instanceof Error ? error.message : "video_generation_failed",
+        metadata: { modelId, modeId },
+      }).catch((releaseError) => {
+        console.error("[api/video/generate] release reservation failed", {
+          reservationId: reservation?.id,
+          releaseError,
+        });
+      });
+    }
+    if (error instanceof CreditPricingError) {
+      return Response.json(
+        generationErrorJson({
+          message: error.message,
+          code: error.code,
+          status: error.status,
+          fallbackReasonCode: "QUOTA_OR_BILLING",
+        }),
+        { status: error.status },
+      );
+    }
+    if (error instanceof CreditRiskError) {
+      return Response.json(
+        generationErrorJson({
+          message: error.message,
+          code: error.code,
+          status: error.status,
+          fallbackReasonCode: "QUOTA_OR_BILLING",
+        }),
+        { status: error.status },
+      );
+    }
+    if (error instanceof Error && /insufficient credits/i.test(error.message)) {
+      return Response.json(
+        generationErrorJson({
+          message: "积分余额不足，请先充值。",
+          code: "insufficient_credits",
+          status: 402,
+          fallbackReasonCode: "QUOTA_OR_BILLING",
+        }),
+        { status: 402 },
+      );
+    }
     if (error instanceof VideoGenerationError) {
       const status =
         error.code === "model_not_configured" || error.code === "contract_pending"
@@ -213,13 +364,27 @@ export async function POST(req: NextRequest) {
             ? 422
             : 500;
       const message = error.code === "model_not_configured"
-        ? snapshot.apiUsageMode?.video === "user"
-          ? "请到设置页填写自己的视频 API Key。"
-          : "网站内部视频 API 暂未配置，请联系管理员。"
+        ? "网站内部视频 API 暂未配置，请联系管理员。"
         : error.message;
-      return Response.json({ error: message, code: error.code }, { status });
+      const classified = classifyGenerationError({
+        message,
+        status,
+        stage: error.code,
+        fallbackReasonCode:
+          error.code === "provider_timeout"
+            ? "TIMEOUT"
+            : error.code === "storage_persist_failed"
+              ? "STORAGE_FAILED"
+              : error.code === "provider_poll_failed" && /CRUN 任务失败，未返回具体原因/.test(message)
+                ? "UNKNOWN_PROVIDER_FAILURE"
+              : error.code === "invalid_mode" || error.code === "unsupported_capability"
+                ? "INVALID_PROMPT"
+                : undefined,
+      });
+      return Response.json({ error: message, code: error.code, ...classified }, { status });
     }
     const message = error instanceof Error ? error.message : "生视频失败";
-    return Response.json({ error: message, code: "provider_submit_failed" }, { status: 500 });
+    const classified = classifyGenerationError({ message, status: 500 });
+    return Response.json({ error: message, code: "provider_submit_failed", ...classified }, { status: 500 });
   }
 }

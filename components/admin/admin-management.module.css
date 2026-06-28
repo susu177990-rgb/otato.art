@@ -11,6 +11,13 @@
   gap: 16px;
 }
 
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -90,6 +97,53 @@
   color: var(--otato-text, #181818) !important;
 }
 
+.dangerText {
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inlineActions button {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.creditCell {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 190px;
+}
+
+.creditCell > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.creditCell strong {
+  color: var(--otato-text, #181818);
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.creditCell button {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .tableWrap {
   overflow: auto;
   border: 3px solid var(--otato-line, #181818);
@@ -103,6 +157,258 @@
   min-width: 960px;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+.compactTableWrap {
+  overflow: visible;
+}
+
+.compactTable {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.compactTable th,
+.compactTable td {
+  padding: 10px 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.compactTable th {
+  white-space: normal;
+}
+
+.packageTableWrap {
+  overflow: visible;
+  border-width: 2px;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 rgba(24, 24, 24, 0.86);
+}
+
+.packageTable {
+  min-width: 0;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.packageTable th,
+.packageTable td {
+  padding: 8px 8px;
+  vertical-align: middle;
+}
+
+.packageTable th {
+  white-space: normal;
+}
+
+.packageTable th:nth-child(1),
+.packageTable td:nth-child(1) {
+  width: 16%;
+}
+
+.packageTable th:nth-child(2),
+.packageTable td:nth-child(2) {
+  width: 20%;
+}
+
+.packageTable th:nth-child(3),
+.packageTable td:nth-child(3) {
+  width: 13%;
+}
+
+.packageTable th:nth-child(4),
+.packageTable td:nth-child(4),
+.packageTable th:nth-child(5),
+.packageTable td:nth-child(5),
+.packageTable th:nth-child(6),
+.packageTable td:nth-child(6) {
+  width: 14%;
+}
+
+.packageTable th:nth-child(7),
+.packageTable td:nth-child(7) {
+  width: 9%;
+}
+
+.packageTable .searchInput,
+.packageTable .select {
+  width: 100%;
+  max-width: none;
+  height: 32px;
+  min-width: 0;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+.priceManager {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.28fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.priceModelRail {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 2px solid rgba(24, 24, 24, 0.78);
+  border-radius: 16px;
+  background: rgba(250, 247, 239, 0.72);
+}
+
+.priceModelButton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 10px;
+  border: 2px solid rgba(24, 24, 24, 0.42);
+  border-radius: 12px;
+  background: var(--otato-surface-strong, #ffffff);
+  color: var(--otato-text, #181818);
+  text-align: left;
+  cursor: pointer;
+}
+
+.priceModelButton[data-active="true"] {
+  border-color: var(--otato-line, #181818);
+  background: var(--otato-yellow, #ffd86b);
+  box-shadow: 2px 2px 0 rgba(24, 24, 24, 0.86);
+}
+
+.priceModelButton span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priceModelButton strong {
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.priceEditor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.priceEditorHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 4px 2px 8px;
+  border-bottom: 2px solid rgba(24, 24, 24, 0.14);
+}
+
+.priceMatrixWrap {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(24, 24, 24, 0.16);
+  border-radius: 10px;
+  background: var(--otato-surface-strong, #ffffff);
+}
+
+.priceMatrix {
+  width: 100%;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.priceMatrix th,
+.priceMatrix td {
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid rgba(24, 24, 24, 0.1);
+  border-bottom: 1px solid rgba(24, 24, 24, 0.1);
+  vertical-align: top;
+}
+
+.priceMatrix th:last-child,
+.priceMatrix td:last-child {
+  border-right: 0;
+}
+
+.priceMatrix tr:last-child th,
+.priceMatrix tr:last-child td {
+  border-bottom: 0;
+}
+
+.priceMatrix thead th {
+  background: rgba(24, 24, 24, 0.035);
+  color: var(--otato-text, #181818);
+  font-size: 12px;
+  font-weight: 950;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.priceMatrix tbody th {
+  width: 116px;
+  background: rgba(24, 24, 24, 0.02);
+  color: var(--otato-text, #181818);
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.priceMatrixCell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.priceMatrixInputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.priceMatrixCell label,
+.priceMatrixInputs label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.priceMatrixCell label span {
+  display: block;
+  color: var(--otato-muted, #6f6a61);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.priceInput {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid rgba(24, 24, 24, 0.26);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--otato-text, #181818);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.priceMatrixEmpty {
+  color: var(--otato-muted, #6f6a61);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
 }
 
 .table th,
@@ -409,17 +715,6 @@
   white-space: pre-wrap;
 }
 
-.dangerNotice {
-  padding: 12px 14px;
-  border: 2px solid var(--otato-line, #181818);
-  border-radius: 12px;
-  background: #ffe0dc;
-  color: var(--otato-text, #181818);
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.55;
-}
-
 .confirmField {
   display: grid;
   gap: 8px;
@@ -431,6 +726,18 @@
 @media (max-width: 1100px) {
   .adminGrid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .priceManager {
+    grid-template-columns: 1fr;
+  }
+
+  .priceModelRail {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 
   .detailGrid {
@@ -461,6 +768,48 @@
   .detailLayout,
   .compactListItem {
     grid-template-columns: 1fr;
+  }
+
+  .priceMatrixWrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .priceMatrix,
+  .priceMatrix thead,
+  .priceMatrix tbody,
+  .priceMatrix tr,
+  .priceMatrix th,
+  .priceMatrix td {
+    display: block;
+    width: 100%;
+  }
+
+  .priceMatrix thead {
+    display: none;
+  }
+
+  .priceMatrix tbody tr {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid rgba(24, 24, 24, 0.14);
+    border-radius: 10px;
+    background: var(--otato-surface-strong, #ffffff);
+  }
+
+  .priceMatrix th,
+  .priceMatrix td {
+    padding: 0;
+    border: 0;
+  }
+
+  .priceMatrix tbody td {
+    padding-top: 8px;
+    border-top: 1px solid rgba(24, 24, 24, 0.1);
   }
 
   .overviewGrid {

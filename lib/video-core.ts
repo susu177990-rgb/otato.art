@@ -3,15 +3,19 @@ export type VideoProviderId = "seedance" | "kling" | "happyhorse" | "grok" | "ve
 export type VideoModelId =
   | "seedance-2.0"
   | "seedance-2.0-fast"
+  | "seedance-2.0-mini"
   | "seedance-1.5-pro"
   | "doubao-seedance-1.0-pro-fast"
+  | "seedance-1.0-pro"
   | "kling-3.0"
+  | "kling-3.0-motion"
   | "kling-2.6-motion"
   | "happyhorse-1.1"
   | "happyhorse-1.0"
   | "grok-imagine"
   | "veo-3.1"
   | "veo-3.1-fast"
+  | "veo-3.1-lite"
   | "gemini-omni";
 
 export type VideoGenerationModeId =
@@ -53,6 +57,7 @@ export type UnifiedVideoReference = {
   url: string;
   label?: string;
   mimeType?: string;
+  durationSeconds?: number;
 };
 
 export type VideoProviderOptions = Record<string, string | number | boolean | null | undefined>;

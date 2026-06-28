@@ -11,12 +11,21 @@ import type { CanvasNode } from "@/lib/canvas/types";
 import { createChatConversation, getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
 import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
-import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
+import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ImageModelId } from "@/lib/image-workspace";
 import { projectIdFromRequest, type ProjectScope } from "@/lib/db/project-scope";
+import { classifyGenerationError } from "@/lib/generation-error-classifier";
 
 export const maxDuration = 300;
+
+function generationErrorJson(message: string, code: string, status: number) {
+  return {
+    error: message,
+    code,
+    ...classifyGenerationError({ message, status }),
+  };
+}
 
 type CanvasChatRunBody = {
   boardId?: unknown;
@@ -123,7 +132,7 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return Response.json({ error: "请先登录后再运行画布对话节点" }, { status: 401 });
+      return Response.json(generationErrorJson("请先登录后再运行画布对话节点", "canvas_chat_auth_required", 401), { status: 401 });
     }
 
     const body = (await req.json().catch(() => ({}))) as CanvasChatRunBody;
@@ -133,17 +142,17 @@ export async function POST(req: NextRequest) {
     const scope = projectId === undefined ? {} : { projectId };
     const userMessage = parseUserMessage(body.userMessage);
     if (!boardId || !nodeId || !userMessage || userMessage.parts.length === 0) {
-      return Response.json({ error: "缺少 boardId、nodeId 或有效 userMessage" }, { status: 400 });
+      return Response.json(generationErrorJson("缺少 boardId、nodeId 或有效 userMessage", "canvas_chat_missing_input", 400), { status: 400 });
     }
 
     const board = await getCanvasBoard(supabase, boardId, scope);
     if (!board) {
-      return Response.json({ error: "画布不存在" }, { status: 404 });
+      return Response.json(generationErrorJson("画布不存在", "canvas_chat_board_not_found", 404), { status: 404 });
     }
     const sourceNode = mustBeTextNode(board.nodes.find((node) => node.id === nodeId));
 
     const conv = await resolveConversation({ supabase, userId: user.id, sourceNode, userMessage, scope });
-    const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
+    const snapshot = await getWorkspaceSnapshot(supabase);
     const preferredLlmModelId = typeof body.preferredLlmModelId === "string" && body.preferredLlmModelId.trim()
       ? body.preferredLlmModelId.trim()
       : conv.preferredLlmModelId || null;
@@ -208,6 +217,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "无线画布对话失败";
     console.error("[canvas/chat-run POST]", error);
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json(generationErrorJson(message, "canvas_chat_run_failed", 500), { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { SkillPacksPanel } from "@/components/settings/SkillPacksPanel";
 import { AdminUsersPanel } from "@/components/admin/AdminUserManagement";
+import { CreditBillingPanel } from "@/components/admin/CreditBillingManagement";
 import shellStyles from "../shared/shell.module.css";
 import styles from "../settings/settings-page.module.css";
 import type { Settings } from "@/lib/types";
@@ -28,6 +29,7 @@ import {
   extractPromptPlaceholderOccurrences,
   newCustomImageModeId,
   type ImageModeId,
+  type ImageModelId,
   type ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
 import {
@@ -56,9 +58,10 @@ import {
 } from "@/lib/prompt-preset-api-client";
 import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
-type SettingsCategory = "users" | "prompts" | "api";
+type SettingsCategory = "users" | "billing" | "prompts" | "api";
 type Tab =
   | "users"
+  | "creditBilling"
   | "llmApi"
   | "imageApi"
   | "videoApi"
@@ -70,12 +73,14 @@ type Tab =
 
 const CATEGORY_DEFS: ReadonlyArray<{ id: SettingsCategory; label: string; defaultTab: Tab }> = [
   { id: "users", label: "用户管理", defaultTab: "users" },
+  { id: "billing", label: "积分计费", defaultTab: "creditBilling" },
   { id: "prompts", label: "预设库", defaultTab: "imagePrompts" },
   { id: "api", label: "系统 API", defaultTab: "llmApi" },
 ];
 
 const SUBPAGE_DEFS: Record<SettingsCategory, ReadonlyArray<{ id: Tab; label: string }>> = {
   users: [],
+  billing: [],
   prompts: [
     { id: "promptSubmissions", label: "投稿审核" },
     { id: "imagePrompts", label: "生图提示词预设" },
@@ -125,6 +130,7 @@ function nextLlmModelId(models: Settings["models"]): string {
 function tabFromSearchParam(raw: string | null): Tab | null {
   if (
     raw === "users" ||
+    raw === "creditBilling" ||
     raw === "llmApi" ||
     raw === "imageApi" ||
     raw === "imagePrompts" ||
@@ -141,6 +147,7 @@ function tabFromSearchParam(raw: string | null): Tab | null {
 
 function categoryForTab(tab: Tab): SettingsCategory {
   if (tab === "users") return "users";
+  if (tab === "creditBilling") return "billing";
   if (tab === "promptSubmissions" || tab === "imagePrompts" || tab === "videoPrompts" || tab === "chatPrompts" || tab === "skillPacks") return "prompts";
   return "api";
 }
@@ -421,6 +428,8 @@ function AdminPageInner() {
             ) : null}
 
             {tab === "users" ? <AdminUsersPanel /> : null}
+
+            {tab === "creditBilling" ? <CreditBillingPanel /> : null}
 
             {tab === "imagePrompts" ? (
               <ImagePromptsPanel
@@ -1052,7 +1061,7 @@ function ImagePromptsPanel({
   const [draftPrompts, setDraftPrompts] = useState<Partial<Record<string, string>>>({});
   const [draftLabels, setDraftLabels] = useState<Partial<Record<string, string>>>({});
   const [draftPromptProviders, setDraftPromptProviders] = useState<
-    Partial<Record<string, ImageWorkspaceSettings["models"][keyof ImageWorkspaceSettings["models"]]["provider"][]>>
+    Partial<Record<string, Array<"gpt-image" | "nano-banana">>>
   >({});
   const [draftPromptTags, setDraftPromptTags] = useState<Partial<Record<string, string[]>>>({});
   const [draftPromptDescriptions, setDraftPromptDescriptions] = useState<Partial<Record<string, string>>>({});
@@ -1233,7 +1242,7 @@ function ImagePromptsPanel({
     }
     setDraftPromptProviders((prev) => ({
       ...prev,
-      [modeId]: value.promptModelProvidersByMode?.[modeId] ?? ["gpt-image", "nano-banana"],
+      [modeId]: editableImagePromptProviders(value.promptModelProvidersByMode?.[modeId]),
     }));
     setDraftPromptTags((prev) => ({
       ...prev,
@@ -1376,8 +1385,7 @@ function ImagePromptsPanel({
   function togglePromptProvider(modeId: string, provider: "gpt-image" | "nano-banana", isEditing: boolean) {
     const current: Array<"gpt-image" | "nano-banana"> =
       (isEditing ? draftPromptProviders[modeId] : undefined) ??
-      value.promptModelProvidersByMode?.[modeId] ??
-      ["gpt-image", "nano-banana"];
+      editableImagePromptProviders(value.promptModelProvidersByMode?.[modeId]);
     const nextProviders: Array<"gpt-image" | "nano-banana"> = current.includes(provider)
       ? current.length > 1
         ? current.filter((item) => item !== provider)
@@ -1656,6 +1664,22 @@ function ImagePromptsPanel({
   );
 }
 
+function imageProviderLabel(provider: ImageWorkspaceSettings["models"][ImageModelId]["provider"]): string {
+  if (provider === "gpt-image") return "GPT Image 请求格式";
+  if (provider === "grok-imagine") return "Grok Imagine 请求格式";
+  if (provider === "z-image") return "Z Image 请求格式";
+  return "Nano Banana 请求格式";
+}
+
+function editableImagePromptProviders(
+  providers: ImageWorkspaceSettings["models"][ImageModelId]["provider"][] | undefined,
+): Array<"gpt-image" | "nano-banana"> {
+  const out = providers?.filter(
+    (item): item is "gpt-image" | "nano-banana" => item === "gpt-image" || item === "nano-banana",
+  );
+  return out?.length ? out : ["gpt-image", "nano-banana"];
+}
+
 function ImageApiPanel({
   value,
   onChange,
@@ -1673,7 +1697,7 @@ function ImageApiPanel({
               <div className={styles.llmModelCardTopLeft}>
                 <h2 className={shellStyles.cardTitle} style={{ fontSize: '15px' }}>{model.label}</h2>
                 <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--settings-muted)' }}>
-                  {model.provider === "gpt-image" ? "GPT Image 请求格式" : "Nano Banana 请求格式"}
+                  {imageProviderLabel(model.provider)}
                 </span>
               </div>
             </div>

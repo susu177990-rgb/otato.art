@@ -77,7 +77,7 @@ function ProjectScriptEditorInner() {
   const onboardingHref = routeOptions?.onboardingHref ?? `/project/${projectId}/onboarding`;
   const onRestartOnboarding = routeOptions?.onRestartOnboarding;
   const requireOnboarding = routeOptions?.requireOnboarding ?? true;
-  const { settings, openSettings } = useApiSettings();
+  const { settings } = useApiSettings();
 
   const [mounted, setMounted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1113,7 +1113,7 @@ function ProjectScriptEditorInner() {
             className={styles.autoCluster}
             title={
               switchDisabled
-                ? "请先完成立项并在设置 → LLM API 中配置 API Key"
+                ? "请先完成立项；若系统 API 未配置，请联系管理员"
                 : fullAutoEnabled
                   ? "关闭：暂停全自动流水线"
                   : "开启：STAGE 1~7 全自动流水线（Gate 通过即自动验收并推进）"
@@ -1190,7 +1190,6 @@ function ProjectScriptEditorInner() {
             projectId={projectId}
             creativeDirectionId={creativeDirectionId}
             projectContext={projectContext}
-            onOpenSettings={openSettings}
             onMessagesChange={handleMessagesChange}
             onAssistantDone={handleAssistantDone}
             autoKickoffUserMessage={projectScriptAutoKickoffMessage}
@@ -1230,7 +1229,6 @@ function ProjectScriptEditorInner() {
         onCreativeBriefChange={handleCreativeBriefChange}
         settings={settings}
         hasProjectScriptProgress={messages.length > 0 || artifacts.length > 0}
-        onOpenSettings={openSettings}
         seriesBible={seriesBible}
         artifacts={artifacts}
         onSeriesBibleChange={handleSeriesBibleChange}

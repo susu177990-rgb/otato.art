@@ -140,7 +140,7 @@ function buildAgentDecisionSystemText(params: {
 
 JSON 结构二选一：
 {"action":"reply","reason":"一句话原因"}
-{"action":"generate_image","reason":"一句话原因","generate_image":{"prompt":"完整生图提示词","preset_id":"${params.defaultImageModelId}","aspect_ratio":"auto","image_size":"2K","image_quality":"auto","ref_image_urls":[]}}
+{"action":"generate_image","reason":"一句话原因","generate_image":{"prompt":"完整生图提示词","preset_id":"${params.defaultImageModelId}","aspect_ratio":"auto","image_size":"2K","image_quality":"low","ref_image_urls":[]}}
 
 决策规则：
 - 用户要求“生成图片 / 生图 / 画图 / 出图 / 做海报 / 画分镜图 / 改图 / 根据上传图片生成或重绘”时，选择 generate_image。
@@ -151,7 +151,8 @@ JSON 结构二选一：
 - 如果用户上传了参考图并要求参考/改图/图生图，把对应附件 id 填到 ref_image_urls；不要填不存在的 id。
 - 分辨率必须按用户要求判断：用户明确说 1K/2K/4K、低清/高清/超清、草稿/快速预览/高质量/最高画质 时，对应填写 image_size。
 - 只有在用户没提清晰度时，才把 image_size 设为 "2K"；不要习惯性写成 "1K"。
-- 未指定参数时使用默认模型：${params.defaultImageModelId}（${params.modelLabel}），aspect_ratio 用 "auto"，image_quality 用 "auto"。
+- aspect_ratio 只能填写 "auto"、"1:1"、"2:3"、"3:2"、"5:4"、"4:5"、"3:4"、"4:3"、"9:16"、"16:9"、"21:9"、"9:21"。
+- 未指定参数时使用默认模型：${params.defaultImageModelId}（${params.modelLabel}），aspect_ratio 用 "auto"，image_quality 用 "low"。
 
 可用生图模型：
 ${models}
@@ -187,8 +188,8 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
 }
 
 function isImageAspectRatio(v: unknown): v is ImageAspectRatio {
-  return v === "auto" || v === "1:1" || v === "3:4" || v === "4:3" || v === "9:16" ||
-    v === "16:9" || v === "21:9" || v === "3:2" || v === "2:3";
+  return v === "auto" || v === "1:1" || v === "2:3" || v === "3:2" || v === "5:4" || v === "4:5" ||
+    v === "3:4" || v === "4:3" || v === "9:16" || v === "16:9" || v === "21:9" || v === "9:21";
 }
 
 function isImageSizeTier(v: unknown): v is ImageSizeTier {
@@ -196,7 +197,7 @@ function isImageSizeTier(v: unknown): v is ImageSizeTier {
 }
 
 function isGptImageQuality(v: unknown): v is GptImageQuality {
-  return v === "auto" || v === "low" || v === "medium" || v === "high";
+  return v === "low" || v === "medium" || v === "high";
 }
 
 function parseAgentDecision(text: string, defaultImageModelId: ImageModelId): AgentDecision | null {
@@ -475,6 +476,6 @@ export async function runAgentChatTurn(params: {
   }
 
   throw new Error(
-    "模型返回为空。请检查 设置 → LLM API；若为生图指令，请确认 设置 → 生图 API 已配置且可用。",
+    "模型返回为空。请联系管理员检查系统 LLM API；若为生图指令，请确认系统生图 API 已配置且可用。",
   );
 }

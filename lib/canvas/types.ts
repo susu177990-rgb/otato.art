@@ -1,4 +1,4 @@
-import type { GptImageQuality, ImageAspectRatio, ImageModelId, ImageSizeTier } from "@/lib/image-workspace";
+import type { GptImageBackground, GptImageQuality, ImageAspectRatio, ImageModelId, ImageSizeTier } from "@/lib/image-workspace";
 import type { VideoAspectRatio, VideoGenerationModeId, VideoModelId, VideoResolution } from "@/lib/video-workspace";
 
 export type CanvasPosition = {
@@ -42,6 +42,7 @@ export type CanvasNodeMetadata = {
   audioUrl?: string;
   naturalWidth?: number;
   naturalHeight?: number;
+  videoDurationSeconds?: number;
   audioDurationSeconds?: number;
   mimeType?: string;
   source?: "upload" | "manual";
@@ -54,12 +55,12 @@ export type CanvasNodeMetadata = {
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
   gptImageQuality?: GptImageQuality;
+  gptImageBackground?: GptImageBackground;
   /** video node generation runtime */
   videoModelId?: VideoModelId;
   videoModeId?: VideoGenerationModeId;
   videoAspectRatio?: VideoAspectRatio;
   videoResolution?: VideoResolution;
-  videoDurationSeconds?: number;
   status?: "idle" | "running" | "success" | "error";
   lastRunAt?: string;
   lastError?: string;

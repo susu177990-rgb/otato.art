@@ -14,7 +14,6 @@ import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import MessageBubble from "./MessageBubble";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
 import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
-import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 import { BRAND_NAME } from "@/lib/branding";
 import styles from "./chat-window.module.css";
@@ -31,7 +30,6 @@ interface Props {
   creativeDirectionId?: string;
   /** 工程侧状态摘要，注入系统提示 */
   projectContext?: string;
-  onOpenSettings: () => void;
   onMessagesChange: (messages: Message[]) => void;
   onAssistantDone: (fullReply: string, messagesSnapshot: Message[]) => void;
   /** 非空时：在对话为空且满足内部校验时自动代发一条 user 消息（仅一次） */
@@ -40,6 +38,11 @@ interface Props {
   onLoadingChange?: (loading: boolean) => void;
 }
 
+const API_NOT_CONFIGURED_MESSAGE: Message = {
+  role: "assistant",
+  content: "**错误**: 网站内部 LLM API 暂未配置，请联系管理员。",
+};
+
 const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
   {
     settings,
@@ -47,7 +50,6 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
     projectId,
     creativeDirectionId,
     projectContext,
-    onOpenSettings,
     onMessagesChange,
     onAssistantDone,
     autoKickoffUserMessage,
@@ -84,7 +86,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
       if (!trimmed) return "";
 
       if (!settings.apiKey) {
-        onOpenSettings();
+        onMessagesChange([...baseMessages, API_NOT_CONFIGURED_MESSAGE]);
         return "";
       }
       if (!projectId) return "";
@@ -164,7 +166,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
         setIsLoading(false);
       }
     },
-    [settings, projectId, creativeDirectionId, projectContext, onMessagesChange, onAssistantDone, onOpenSettings]
+    [settings, projectId, creativeDirectionId, projectContext, onMessagesChange, onAssistantDone]
   );
 
   useImperativeHandle(
@@ -174,7 +176,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
         const trimmed = text.trim();
         if (!trimmed) return "";
         if (!settings.apiKey) {
-          onOpenSettings();
+          onMessagesChange([...messagesRef.current, API_NOT_CONFIGURED_MESSAGE]);
           return "";
         }
         if (!projectId) return "";
@@ -182,7 +184,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
         return runChatRound(trimmed, messagesRef.current);
       },
     }),
-    [settings.apiKey, projectId, runChatRound, onOpenSettings]
+    [settings.apiKey, projectId, runChatRound, onMessagesChange]
   );
 
   async function handleSend() {
@@ -190,7 +192,7 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
     if (!text || isLoading) return;
 
     if (!settings.apiKey) {
-      onOpenSettings();
+      onMessagesChange([...messages, API_NOT_CONFIGURED_MESSAGE]);
       return;
     }
 
@@ -276,7 +278,6 @@ const ChatWindow = forwardRef<ChatWindowHandle, Props>(function ChatWindow(
             placeholder={projectId ? "输入灵感、大纲或网文原文…" : "请先选择项目"}
             className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
-          <ApiUsageModeToggle module="llm" />
           <button
             type="button"
             onClick={() => void handleSend()}

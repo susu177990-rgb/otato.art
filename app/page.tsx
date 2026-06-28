@@ -13,9 +13,9 @@ const problems = [
 ] as const;
 
 const useModes = [
-  ["自有密钥模式", "绑定自己的 API 密钥", "把模型和网关配置放进自己的账号里。适合已有 OpenAI、Gemini、Claude、火山、可灵或其他中转站资源的用户。"],
-  ["积分模式", "无密钥也能使用", "没有自己的 API 密钥时，可以通过充值积分调用站内已配置的模型能力，减少前期接入成本。"],
-  ["混合模式", "不同任务灵活切换", "常用任务走自己的密钥，临时视频、图片或高成本模型走积分。个人创作者和小团队都能按需控制成本。"],
+  ["系统 API 模式", "站点统一模型配置", "管理员在后台维护模型和网关，普通用户直接使用已配置的创作能力。"],
+  ["积分模式", "无密钥也能使用", "用户无需接入第三方 API Key，可以通过站内额度调用已配置的模型能力。"],
+  ["统一管理", "模型能力集中维护", "LLM、图片、视频配置由站点统一管理，避免用户在多个平台之间反复配置。"],
 ] as const;
 
 const models = [
@@ -88,7 +88,7 @@ function HomeContent() {
               把 AI 内容创作，放进一个<span className={styles.mark}>真正连续</span>的工作台。
             </h1>
             <p className={styles.lead}>
-              oTATo Art 把对话、图片、视频、剧本、画布、画廊、模型配置和提示词预设放在同一个流程里。你可以绑定自己的 API 密钥直接使用，也可以在没有密钥时充值积分继续创作。
+              oTATo Art 把对话、图片、视频、剧本、画布、画廊、系统模型配置和提示词预设放在同一个流程里。用户无需接入第三方 API Key，即可使用站点已配置的创作能力。
             </p>
             <div className={styles.heroActions}>
               <Link className={[styles.btn, styles.red].join(" ")} href="/projects">
@@ -286,7 +286,7 @@ function HomeContent() {
         <div className={[styles.container, styles.ctaBox].join(" ")}>
           <div>
             <h2>从一个灵感开始，把完整项目沉淀下来。</h2>
-            <p>进入 oTATo Art，绑定自己的 API 密钥，或者直接使用积分。把你的对话、提示词、剧本、图片、视频、画布和画廊放进同一个创作系统。</p>
+            <p>进入 oTATo Art，直接使用站点已配置的系统 API 和额度。把你的对话、提示词、剧本、图片、视频、画布和画廊放进同一个创作系统。</p>
           </div>
           <Link className={styles.btn} href="/projects">进入工作台</Link>
         </div>
@@ -366,7 +366,7 @@ function HeroWorkspace() {
               <div className={styles.creditBox}>
                 <h3>可用积分</h3>
                 <div className={styles.creditNum}>8,420</div>
-                <p>没有自有密钥时，也可以直接用积分调用模型。</p>
+                <p>无需自带密钥，直接用站点额度调用模型。</p>
               </div>
             </div>
             <div className={styles.flowBoard}>

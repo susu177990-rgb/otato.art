@@ -7,7 +7,6 @@ import { auditBibleVsCast } from "@/lib/bible-audit";
 import { downloadSeriesBibleMarkdownFile, downloadCreativeBriefMarkdownFile } from "@/lib/export-artifacts";
 import { useProjectScriptRouteOptions } from "@/components/project-script/project-script-route-context";
 import ArtifactSlotEditor from "@/components/ArtifactSlotEditor";
-import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 
 export type BibleDrawerTab = "brief" | "bible" | "locale";
@@ -28,7 +27,6 @@ interface Props {
   settings: Settings;
   /** 编剧室是否已有对话或产物（须传 allowWithProgress 才能生成） */
   hasProjectScriptProgress?: boolean;
-  onOpenSettings?: () => void;
   artifacts: Artifact[];
   onSeriesBibleChange: (next: string) => void;
   /** 全剧一份英语 Locale 简报 */
@@ -50,7 +48,6 @@ export default function ProjectScriptBibleDrawer({
   onCreativeBriefChange,
   settings,
   hasProjectScriptProgress = false,
-  onOpenSettings,
   seriesBible,
   artifacts,
   onSeriesBibleChange,
@@ -130,7 +127,7 @@ export default function ProjectScriptBibleDrawer({
   async function handleGenerateLocaleBrief() {
     if (!projectId) return;
     if (!hasApiKey) {
-      alert("请先在设置 → LLM API 中填写 API Key（与对话相同）。");
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     setLocaleGenLoading(true);
@@ -271,7 +268,6 @@ export default function ProjectScriptBibleDrawer({
                   当前尚无系列圣经正文。
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                  <ApiUsageModeToggle module="llm" />
                   <button
                     type="button"
                     disabled={!canLlmFillBible || llmBibleLoading}
@@ -281,13 +277,7 @@ export default function ProjectScriptBibleDrawer({
                     {llmBibleLoading ? "生成中…" : "用 LLM 生成系列圣经"}
                   </button>
                   {!settings.apiKey ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenSettings?.()}
-                      className={shellStyles.navLink}
-                    >
-                      去配置 LLM API
-                    </button>
+                    <span className={shellStyles.helpText}>网站内部 LLM API 暂未配置，请联系管理员。</span>
                   ) : null}
                   {!creativeBrief.trim() ? (
                     <span className={shellStyles.helpText}>需项目已有《创作思路确认书》。</span>
@@ -299,7 +289,6 @@ export default function ProjectScriptBibleDrawer({
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {canLlmRewriteBible ? (
                 <>
-                  <ApiUsageModeToggle module="llm" />
                 <button
                   type="button"
                   disabled={llmBibleLoading}
@@ -366,7 +355,6 @@ export default function ProjectScriptBibleDrawer({
             ) : null}
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <ApiUsageModeToggle module="llm" />
               <button
                 type="button"
                 disabled={localeGenLoading || !hasApiKey || !localeBriefGenerateEnabled}
@@ -375,15 +363,7 @@ export default function ProjectScriptBibleDrawer({
               >
                 {localeGenLoading ? "生成中…" : "生成 / 更新简报"}
               </button>
-              {!hasApiKey ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenSettings?.()}
-                  className={shellStyles.navLink}
-                >
-                  去填写 API Key
-                </button>
-              ) : null}
+              {!hasApiKey ? <span className={shellStyles.cardSubtitle}>网站内部 LLM API 暂未配置，请联系管理员。</span> : null}
             </div>
 
             <div style={{ minHeight: 0, flex: 1, overflowY: "auto" }}>

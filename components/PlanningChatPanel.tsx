@@ -7,7 +7,6 @@ import MessageBubble from "./MessageBubble";
 import { isImeCompositionKeyEvent } from "@/lib/ime-enter";
 import { useMessagesScrollEnd } from "@/hooks/useMessagesScrollEnd";
 import { syncComposerTextareaHeight } from "@/lib/composer-autosize";
-import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./planning-chat-panel.module.css";
 
@@ -15,7 +14,6 @@ interface Props {
   settings: Settings;
   messages: Message[];
   planningBootstrap: string;
-  onOpenSettings: () => void;
   onMessagesChange: (messages: Message[]) => void;
   onAssistantDone: (fullReply: string, messagesSnapshot: Message[]) => void;
   /** 默认 /api/planning-chat；改编讨论用 /api/adaptation-discuss */
@@ -34,7 +32,6 @@ export default function PlanningChatPanel({
   settings,
   messages,
   planningBootstrap,
-  onOpenSettings,
   onMessagesChange,
   onAssistantDone,
   chatEndpoint = "/api/planning-chat",
@@ -58,7 +55,10 @@ export default function PlanningChatPanel({
     if (!text || isLoading) return;
 
     if (!settings.apiKey) {
-      onOpenSettings();
+      onMessagesChange([
+        ...messages,
+        { role: "assistant", content: "**错误**: 网站内部 LLM API 暂未配置，请联系管理员。" },
+      ]);
       return;
     }
 
@@ -184,7 +184,6 @@ export default function PlanningChatPanel({
             placeholder={inputPlaceholder}
             className={[shellStyles.textareaComposer, styles.inputArea].join(" ")}
           />
-          <ApiUsageModeToggle module="llm" />
           <button
             type="button"
             onClick={() => void handleSend()}

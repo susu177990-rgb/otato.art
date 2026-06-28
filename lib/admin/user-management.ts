@@ -4,12 +4,12 @@ import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 import {
   canAdmin,
   normalizeAdminRole,
-  normalizeApiUsageMode,
   type AdminActor,
   type AdminAuditLog,
   type AdminPermission,
   type AdminRole,
   type AdminRoleRecord,
+  type AdminUserCreditSummary,
   type AdminUserDeleteResult,
   type AdminUserDeleteStep,
   type AdminUserDetail,
@@ -32,7 +32,6 @@ const USER_DATA_TABLES: Array<{ table: string; column: string }> = [
   { table: "chat_skill_packs", column: "user_id" },
   { table: "site_prompt_preset_favorites", column: "user_id" },
   { table: "site_prompt_preset_submissions", column: "submitter_user_id" },
-  { table: "user_api_settings", column: "user_id" },
   { table: "workspace_settings", column: "user_id" },
   { table: "admin_roles", column: "user_id" },
   { table: "projects", column: "user_id" },
@@ -65,7 +64,16 @@ const ZERO_OVERVIEW: AdminUserOverview = {
   promptSubmissionsPending: 0,
   promptSubmissionsApproved: 0,
   promptSubmissionsRejected: 0,
-  personalApiUsers: 0,
+};
+
+const ZERO_CREDIT_SUMMARY: AdminUserCreditSummary = {
+  accountId: null,
+  availableCredits: 0,
+  reservedCredits: 0,
+  lifetimePurchasedCredits: 0,
+  lifetimeBonusCredits: 0,
+  lifetimeSpentCredits: 0,
+  pendingReservations: 0,
 };
 
 type AdminRoleRow = {
@@ -155,6 +163,40 @@ async function countRows(supabase: SupabaseClient, table: string, userId: string
     .eq("user_id", userId);
   if (error) throw error;
   return count ?? 0;
+}
+
+async function countSuccessfulMediaRows(
+  supabase: SupabaseClient,
+  table: "image_gallery_records" | "video_gallery_records",
+  urlColumn: "image_url" | "video_url",
+  dataUrlKey: "imageUrl" | "videoUrl",
+  userId?: string,
+): Promise<number> {
+  let currentQuery = supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("status", "success")
+    .not(urlColumn, "is", null);
+  if (userId) currentQuery = currentQuery.eq("user_id", userId);
+  const current = await currentQuery;
+  if (current.error) {
+    if (isMissingTableError(current.error)) return 0;
+    throw current.error;
+  }
+
+  let legacyQuery = supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .is("status", null)
+    .eq("data->>status", "success")
+    .not(`data->>${dataUrlKey}`, "is", null);
+  if (userId) legacyQuery = legacyQuery.eq("user_id", userId);
+  const legacy = await legacyQuery;
+  if (legacy.error) {
+    if (isMissingTableError(legacy.error)) return current.count ?? 0;
+    throw legacy.error;
+  }
+  return (current.count ?? 0) + (legacy.count ?? 0);
 }
 
 function isMissingTableError(error: unknown): boolean {
@@ -300,8 +342,8 @@ async function userStats(supabase: SupabaseClient, userId: string): Promise<Admi
   ] = await Promise.all([
     countRows(supabase, "projects", userId),
     countRows(supabase, "chat_conversations", userId),
-    countRows(supabase, "image_gallery_records", userId),
-    countRows(supabase, "video_gallery_records", userId),
+    countSuccessfulMediaRows(supabase, "image_gallery_records", "image_url", "imageUrl", userId),
+    countSuccessfulMediaRows(supabase, "video_gallery_records", "video_url", "videoUrl", userId),
     countRows(supabase, "canvas_boards", userId),
     countRows(supabase, "project_assets", userId).catch((error) => {
       if (error instanceof Error && /project_assets|Could not find the table|schema cache/i.test(error.message)) return 0;
@@ -321,20 +363,41 @@ async function userStats(supabase: SupabaseClient, userId: string): Promise<Admi
   };
 }
 
-async function userApiMode(supabase: SupabaseClient, userId: string) {
-  const { data, error } = await supabase
-    .from("user_api_settings")
-    .select("api_usage_mode")
+async function userCreditSummary(supabase: SupabaseClient, userId: string): Promise<AdminUserCreditSummary> {
+  const account = await supabase
+    .from("credit_accounts")
+    .select("account_id, available_credits, reserved_credits, lifetime_purchased_credits, lifetime_bonus_credits, lifetime_spent_credits")
     .eq("user_id", userId)
     .maybeSingle();
-  if (error) {
-    if (/user_api_settings|Could not find the table|schema cache/i.test(error.message)) return normalizeApiUsageMode(null);
-    throw error;
+  if (account.error) {
+    if (isMissingTableError(account.error)) return ZERO_CREDIT_SUMMARY;
+    throw account.error;
   }
-  return normalizeApiUsageMode((data as { api_usage_mode?: unknown } | null)?.api_usage_mode);
+
+  const pending = await supabase
+    .from("credit_reservations")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  if (pending.error) {
+    if (isMissingTableError(pending.error)) return ZERO_CREDIT_SUMMARY;
+    throw pending.error;
+  }
+
+  const row = account.data as Record<string, unknown> | null;
+  if (!row) return { ...ZERO_CREDIT_SUMMARY, pendingReservations: pending.count ?? 0 };
+  return {
+    accountId: typeof row.account_id === "string" ? row.account_id : null,
+    availableCredits: Number(row.available_credits ?? 0),
+    reservedCredits: Number(row.reserved_credits ?? 0),
+    lifetimePurchasedCredits: Number(row.lifetime_purchased_credits ?? 0),
+    lifetimeBonusCredits: Number(row.lifetime_bonus_credits ?? 0),
+    lifetimeSpentCredits: Number(row.lifetime_spent_credits ?? 0),
+    pendingReservations: pending.count ?? 0,
+  };
 }
 
-function userToListItem(user: User, stats: AdminUserStats, apiUsageMode: ReturnType<typeof normalizeApiUsageMode>): AdminUserListItem {
+function userToListItem(user: User, stats: AdminUserStats, credits: AdminUserCreditSummary): AdminUserListItem {
   const providers = userProviders(user);
   return {
     id: user.id,
@@ -345,7 +408,7 @@ function userToListItem(user: User, stats: AdminUserStats, apiUsageMode: ReturnT
     createdAt: user.created_at ?? null,
     lastSignInAt: user.last_sign_in_at ?? null,
     stats,
-    apiUsageMode,
+    credits,
   };
 }
 
@@ -402,19 +465,17 @@ async function adminUserOverview(supabase: SupabaseClient, users: User[]): Promi
     promptSubmissionsPending,
     promptSubmissionsApproved,
     promptSubmissionsRejected,
-    personalApiUsers,
   ] = await Promise.all([
     countAllRows(supabase, "admin_roles"),
     countAllRows(supabase, "projects"),
     countAllRows(supabase, "chat_conversations"),
-    countAllRows(supabase, "image_gallery_records"),
-    countAllRows(supabase, "video_gallery_records"),
+    countSuccessfulMediaRows(supabase, "image_gallery_records", "image_url", "imageUrl"),
+    countSuccessfulMediaRows(supabase, "video_gallery_records", "video_url", "videoUrl"),
     countAllRows(supabase, "canvas_boards"),
     countAllRows(supabase, "project_assets"),
     countRowsByColumn(supabase, "site_prompt_preset_submissions", "status", "pending"),
     countRowsByColumn(supabase, "site_prompt_preset_submissions", "status", "approved"),
     countRowsByColumn(supabase, "site_prompt_preset_submissions", "status", "rejected"),
-    countAllRows(supabase, "user_api_settings"),
   ]);
   return {
     totalUsers: users.length,
@@ -430,7 +491,6 @@ async function adminUserOverview(supabase: SupabaseClient, users: User[]): Promi
     promptSubmissionsPending,
     promptSubmissionsApproved,
     promptSubmissionsRejected,
-    personalApiUsers,
   };
 }
 
@@ -505,7 +565,11 @@ export async function listAdminUsers(params: {
   const safePage = pageCount > 0 ? Math.min(page, pageCount) : 1;
   const pageUsers = paginateUsers(sortedUsers, safePage, perPage);
   const items = await Promise.all(pageUsers.map(async (user) => {
-    return userToListItem(user, await userStats(admin, user.id), await userApiMode(admin, user.id));
+    const [stats, credits] = await Promise.all([
+      userStats(admin, user.id),
+      userCreditSummary(admin, user.id),
+    ]);
+    return userToListItem(user, stats, credits);
   }));
 
   return {
@@ -530,15 +594,15 @@ export async function getAdminUserDetail(actor: AdminActor, userId: string): Pro
   if (error) throw error;
   if (!data.user) throw new Error("用户不存在");
 
-  const [stats, apiUsageMode, submissions, auditLogs] = await Promise.all([
+  const [stats, credits, submissions, auditLogs] = await Promise.all([
     userStats(admin, userId),
-    userApiMode(admin, userId),
+    userCreditSummary(admin, userId),
     listUserPromptSubmissions(admin, userId),
     listAuditLogs(admin, { targetUserId: userId, limit: 20 }),
   ]);
 
   return {
-    ...userToListItem(data.user, stats, apiUsageMode),
+    ...userToListItem(data.user, stats, credits),
     promptSubmissions: submissions,
     auditLogs,
   };

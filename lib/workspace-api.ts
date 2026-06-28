@@ -1,8 +1,7 @@
 import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
 import type { VideoWorkspaceSettings } from "@/lib/video-workspace";
 import type { Settings } from "@/lib/types";
-import type { ApiUsageMode, WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
-import type { PersonalApiModule, PersonalApiTestResult } from "@/lib/personal-api-test";
+import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 
 export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", { cache: "no-store" });
@@ -11,48 +10,6 @@ export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
     throw new Error(data.error?.trim() || "无法加载工作区设置");
   }
   return (await res.json()) as WorkspaceSnapshot;
-}
-
-export async function saveWorkspaceSnapshot(payload: {
-  llm?: Settings;
-  imageWorkspace?: ImageWorkspaceSettings;
-  videoWorkspace?: VideoWorkspaceSettings;
-  apiUsageMode?: ApiUsageMode;
-  publicApiAccess?: Record<string, unknown>;
-}): Promise<WorkspaceSnapshot> {
-  const res = await fetch("/api/workspace-settings", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error?.trim() || "无法保存工作区设置");
-  }
-  return (await res.json()) as WorkspaceSnapshot;
-}
-
-export async function testWorkspaceApiConnection(payload: {
-  module: PersonalApiModule;
-  modelId: string;
-}): Promise<PersonalApiTestResult> {
-  const res = await fetch("/api/workspace-settings/test-connection", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = (await res.json().catch(() => ({}))) as Partial<PersonalApiTestResult> & { error?: string };
-  if (data.code && data.module && data.stage && data.message) {
-    return data as PersonalApiTestResult;
-  }
-  return {
-    ok: false,
-    code: res.ok ? "TEST_RESPONSE_INVALID" : "TEST_CONNECTION_FAILED",
-    module: payload.module,
-    modelId: payload.modelId,
-    stage: "upstream_submit",
-    message: data.error?.trim() || "测试连接失败",
-  };
 }
 
 export async function fetchAdminWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {

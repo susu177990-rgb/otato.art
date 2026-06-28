@@ -17,12 +17,6 @@ export type AdminRoleRecord = {
   createdBy: string | null;
 };
 
-export type UserApiUsageSummary = {
-  llm: "site" | "user";
-  image: "site" | "user";
-  video: "site" | "user";
-};
-
 export type AdminUserStats = {
   projects: number;
   chatConversations: number;
@@ -36,6 +30,16 @@ export type AdminUserStats = {
   promptSubmissionsRejected: number;
 };
 
+export type AdminUserCreditSummary = {
+  accountId: string | null;
+  availableCredits: number;
+  reservedCredits: number;
+  lifetimePurchasedCredits: number;
+  lifetimeBonusCredits: number;
+  lifetimeSpentCredits: number;
+  pendingReservations: number;
+};
+
 export type AdminUserListItem = {
   id: string;
   email: string;
@@ -45,7 +49,7 @@ export type AdminUserListItem = {
   createdAt: string | null;
   lastSignInAt: string | null;
   stats: AdminUserStats;
-  apiUsageMode: UserApiUsageSummary;
+  credits: AdminUserCreditSummary;
 };
 
 export type AdminUserDetail = AdminUserListItem & {
@@ -85,7 +89,6 @@ export type AdminUserOverview = {
   promptSubmissionsPending: number;
   promptSubmissionsApproved: number;
   promptSubmissionsRejected: number;
-  personalApiUsers: number;
 };
 
 export type AdminUsersResponse = {
@@ -140,13 +143,4 @@ export function normalizeAdminRole(value: unknown): AdminRole {
 
 export function canAdmin(role: AdminRole, permission: AdminPermission): boolean {
   return ROLE_RANK[role] >= ROLE_RANK[PERMISSION_MIN_ROLE[permission]];
-}
-
-export function normalizeApiUsageMode(value: unknown): UserApiUsageSummary {
-  const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  return {
-    llm: row.llm === "user" ? "user" : "site",
-    image: row.image === "user" ? "user" : "site",
-    video: row.video === "user" ? "user" : "site",
-  };
 }

@@ -17,6 +17,17 @@ import pg from "pg";
 
 config({ path: path.join(process.cwd(), ".env.local") });
 
+type SqlRunner = {
+  query: (sql: string) => Promise<unknown[]>;
+  close?: () => Promise<void>;
+};
+
+type MigrationFile = {
+  file: string;
+  version: string;
+  name: string;
+};
+
 function projectRef(): string {
   const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   if (rawUrl) {
@@ -35,21 +46,28 @@ function migrationsDir(): string {
   return path.join(process.cwd(), "supabase", "migrations");
 }
 
-function listMigrationFiles(): string[] {
+function parseMigrationFile(file: string): MigrationFile {
+  const match = file.match(/^(\d{14})_(.+)\.sql$/);
+  if (!match) throw new Error(`迁移文件名不符合 Supabase 格式：${file}`);
+  return { file, version: match[1], name: match[2] };
+}
+
+function listMigrationFiles(): MigrationFile[] {
   const only = process.env.SUPABASE_MIGRATION_FILE?.trim();
   if (only) {
     if (!only.endsWith(".sql")) throw new Error("SUPABASE_MIGRATION_FILE 必须是 .sql 文件");
     const filePath = path.join(migrationsDir(), only);
     if (!fs.existsSync(filePath)) throw new Error(`找不到迁移文件：${only}`);
-    return [only];
+    return [parseMigrationFile(only)];
   }
   return fs
     .readdirSync(migrationsDir())
     .filter((f) => f.endsWith(".sql"))
-    .sort();
+    .sort()
+    .map(parseMigrationFile);
 }
 
-async function runViaManagementApi(accessToken: string, sql: string): Promise<void> {
+async function queryViaManagementApi(accessToken: string, sql: string): Promise<unknown[]> {
   const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef()}/database/query`, {
     method: "POST",
     headers: {
@@ -62,22 +80,41 @@ async function runViaManagementApi(accessToken: string, sql: string): Promise<vo
     const text = await res.text();
     throw new Error(`Management API ${res.status}: ${text}`);
   }
+  return (await res.json()) as unknown[];
 }
 
-async function runViaPg(connectionString: string, sql: string): Promise<void> {
+function pgRunner(connectionString: string): SqlRunner {
   const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
-  await client.connect();
-  try {
-    await client.query(sql);
-  } finally {
-    await client.end();
-  }
+  let connected = false;
+  return {
+    async query(sql: string) {
+      if (!connected) {
+        await client.connect();
+        connected = true;
+      }
+      const result = await client.query(sql);
+      return result.rows;
+    },
+    async close() {
+      if (connected) await client.end();
+    },
+  };
 }
 
 function buildPoolerUrl(password: string): string {
   const enc = encodeURIComponent(password);
   const ref = projectRef();
-  return `postgresql://postgres.${ref}:${enc}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres`;
+  const tempPoolerUrl = path.join(process.cwd(), "supabase", ".temp", "pooler-url");
+  if (fs.existsSync(tempPoolerUrl)) {
+    const raw = fs.readFileSync(tempPoolerUrl, "utf8").trim();
+    if (raw) {
+      const url = new URL(raw);
+      url.username = `postgres.${ref}`;
+      url.password = enc;
+      return url.toString();
+    }
+  }
+  return `postgresql://postgres.${ref}:${enc}@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres`;
 }
 
 function buildDirectUrl(password: string): string {
@@ -85,11 +122,36 @@ function buildDirectUrl(password: string): string {
   return `postgresql://postgres:${enc}@db.${projectRef()}.supabase.co:5432/postgres`;
 }
 
-async function execSql(run: (sql: string) => Promise<void>, file: string): Promise<void> {
-  const sql = fs.readFileSync(path.join(migrationsDir(), file), "utf8");
-  console.log(`→ ${file}`);
-  await run(sql);
-  console.log(`  ✓ ${file}`);
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function listAppliedVersions(runner: SqlRunner): Promise<Set<string>> {
+  await runner.query("create schema if not exists supabase_migrations");
+  await runner.query(`
+    create table if not exists supabase_migrations.schema_migrations (
+      version text primary key,
+      statements text[],
+      name text
+    )
+  `);
+  const rows = await runner.query("select version from supabase_migrations.schema_migrations");
+  return new Set(rows.map((row) => String((row as { version?: unknown }).version ?? "")));
+}
+
+async function execMigration(runner: SqlRunner, migration: MigrationFile): Promise<void> {
+  const sql = fs.readFileSync(path.join(migrationsDir(), migration.file), "utf8");
+  const recordSql = `
+    insert into supabase_migrations.schema_migrations (version, name, statements)
+    values (${sqlLiteral(migration.version)}, ${sqlLiteral(migration.name)}, array[${sqlLiteral(migration.name)}])
+    on conflict (version) do update
+      set name = excluded.name,
+          statements = excluded.statements
+  `;
+  console.log(`→ ${migration.file}`);
+  await runner.query(sql);
+  await runner.query(recordSql);
+  console.log(`  ✓ ${migration.file}`);
 }
 
 async function main() {
@@ -103,24 +165,23 @@ async function main() {
     process.exit(1);
   }
 
-  let run!: (sql: string) => Promise<void>;
+  let runner!: SqlRunner;
 
   if (accessToken) {
     console.log(`使用 SUPABASE_ACCESS_TOKEN（Management API），项目 ${projectRef()}`);
-    run = (sql) => runViaManagementApi(accessToken, sql);
+    runner = { query: (sql) => queryViaManagementApi(accessToken, sql) };
   } else if (databaseUrl) {
     console.log("使用 DATABASE_URL");
-    run = (sql) => runViaPg(databaseUrl, sql);
+    runner = pgRunner(databaseUrl);
   } else if (dbPassword) {
     const urls = [buildPoolerUrl(dbPassword), buildDirectUrl(dbPassword)];
     let connected = false;
     for (const url of urls) {
       try {
-        const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
-        await client.connect();
-        await client.end();
+        const candidate = pgRunner(url);
+        await candidate.query("select 1");
         console.log(`使用 SUPABASE_DB_PASSWORD 连接数据库，项目 ${projectRef()}`);
-        run = (sql) => runViaPg(url, sql);
+        runner = candidate;
         connected = true;
         break;
       } catch {
@@ -147,11 +208,23 @@ async function main() {
     process.exit(1);
   }
 
-  for (const file of files) {
-    await execSql(run, file);
+  try {
+    const applied = await listAppliedVersions(runner);
+    const pending = files.filter((file) => !applied.has(file.version));
+    if (pending.length === 0) {
+      console.log("远程库没有待应用迁移。");
+      return;
+    }
+
+    console.log(`待应用迁移：${pending.map((migration) => migration.file).join(", ")}`);
+    for (const migration of pending) {
+      await execMigration(runner, migration);
+    }
+  } finally {
+    await runner.close?.();
   }
 
-  console.log("\n全部迁移已应用。");
+  console.log("\n待应用迁移已全部应用。");
 }
 
 main().catch((e) => {

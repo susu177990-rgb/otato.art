@@ -31,7 +31,6 @@ const ZERO_OVERVIEW: AdminUserOverview = {
   promptSubmissionsPending: 0,
   promptSubmissionsApproved: 0,
   promptSubmissionsRejected: 0,
-  personalApiUsers: 0,
 };
 
 type CurrentAdmin = {
@@ -39,6 +38,8 @@ type CurrentAdmin = {
   email: string | null;
   role: AdminRole;
 };
+
+type CreditAdjustType = "manual_topup" | "bonus" | "compensation" | "deduction" | "refund";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "暂无";
@@ -55,14 +56,6 @@ function providerLabel(provider: string): string {
   if (provider === "google") return "Google";
   if (provider === "email") return "邮箱密码";
   return provider || "邮箱密码";
-}
-
-function apiModeLabel(user: AdminUserListItem): string {
-  const mode = user.apiUsageMode;
-  const count = [mode.llm, mode.image, mode.video].filter((item) => item === "user").length;
-  if (count === 0) return "全站公共";
-  if (count === 3) return "全个人";
-  return `${count}/3 个人`;
 }
 
 function roleSelectValue(role: AdminRoleRecord | null): AdminRole | "none" {
@@ -128,10 +121,6 @@ function UserDetailPanel({
                   <span>最近登录</span>
                   <strong>{formatDate(detail.lastSignInAt)}</strong>
                 </div>
-                <div className={styles.accountMetaItem}>
-                  <span>API 模式</span>
-                  <strong>{apiModeLabel(detail)}</strong>
-                </div>
               </div>
             </section>
 
@@ -149,6 +138,23 @@ function UserDetailPanel({
                 <div className={styles.metric}><span className={styles.metricValue}>{detail.stats.videoRecords}</span><span className={styles.metricLabel}>视频</span></div>
                 <div className={styles.metric}><span className={styles.metricValue}>{detail.stats.canvasBoards}</span><span className={styles.metricLabel}>画布</span></div>
                 <div className={styles.metric}><span className={styles.metricValue}>{detail.stats.projectAssets}</span><span className={styles.metricLabel}>项目资产</span></div>
+              </div>
+            </section>
+
+            <section className={styles.detailPanel}>
+              <div className={styles.detailPanelHeader}>
+                <div>
+                  <h3 className={shellStyles.cardTitle}>积分账户</h3>
+                  <p className={shellStyles.cardSubtitle}>
+                    可用 {formatNumber(detail.credits.availableCredits)} · 冻结 {formatNumber(detail.credits.reservedCredits)}
+                  </p>
+                </div>
+              </div>
+              <div className={styles.detailGrid}>
+                <div className={styles.metric}><span className={styles.metricValue}>{formatNumber(detail.credits.lifetimePurchasedCredits)}</span><span className={styles.metricLabel}>累计充值</span></div>
+                <div className={styles.metric}><span className={styles.metricValue}>{formatNumber(detail.credits.lifetimeBonusCredits)}</span><span className={styles.metricLabel}>赠送/补偿</span></div>
+                <div className={styles.metric}><span className={styles.metricValue}>{formatNumber(detail.credits.lifetimeSpentCredits)}</span><span className={styles.metricLabel}>累计消费</span></div>
+                <div className={styles.metric}><span className={styles.metricValue}>{formatNumber(detail.credits.pendingReservations)}</span><span className={styles.metricLabel}>冻结单</span></div>
               </div>
             </section>
 
@@ -204,6 +210,12 @@ export function AdminUsersPanel() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [creditTarget, setCreditTarget] = useState<AdminUserListItem | null>(null);
+  const [creditType, setCreditType] = useState<CreditAdjustType>("manual_topup");
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditReason, setCreditReason] = useState("");
+  const [creditLoading, setCreditLoading] = useState(false);
+  const [creditMessage, setCreditMessage] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("last_sign_in_desc");
   const [page, setPage] = useState(1);
@@ -413,6 +425,47 @@ export function AdminUsersPanel() {
     setDeleteMessage("");
   }
 
+  function openCreditDialog(target: AdminUserListItem, type: CreditAdjustType) {
+    setCreditTarget(target);
+    setCreditType(type);
+    setCreditAmount("");
+    setCreditReason("");
+    setCreditMessage("");
+  }
+
+  function closeCreditDialog() {
+    if (creditLoading) return;
+    setCreditTarget(null);
+    setCreditMessage("");
+  }
+
+  async function adjustCredits() {
+    if (!creditTarget) return;
+    setCreditLoading(true);
+    setCreditMessage("");
+    try {
+      const res = await fetch(`/api/admin/credits/users/${encodeURIComponent(creditTarget.id)}/adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: creditType,
+          amountCredits: Number(creditAmount),
+          reason: creditReason,
+          targetEmail: creditTarget.email,
+        }),
+      });
+      await readJson(res);
+      setCreditMessage("积分已调整");
+      await loadUsers();
+      if (selectedId === creditTarget.id) await openDetail(creditTarget.id);
+      window.setTimeout(() => closeCreditDialog(), 600);
+    } catch (error) {
+      setCreditMessage(error instanceof Error ? error.message : "调整积分失败");
+    } finally {
+      setCreditLoading(false);
+    }
+  }
+
   async function deleteUserData() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
@@ -502,10 +555,6 @@ export function AdminUsersPanel() {
             <span>待审</span>
             <strong>{formatNumber(overview.promptSubmissionsPending)}</strong>
           </div>
-          <div className={styles.overviewMetric}>
-            <span>个人 API</span>
-            <strong>{formatNumber(overview.personalApiUsers)}</strong>
-          </div>
         </div>
         <div className={styles.toolbar}>
           <div className={[styles.filterGroup, styles.searchGroup].join(" ")}>
@@ -535,8 +584,8 @@ export function AdminUsersPanel() {
                 <th>后台权限</th>
                 <th>注册 / 登录</th>
                 <th>资源</th>
+                <th>积分</th>
                 <th>投稿</th>
-                <th>API</th>
                 <th>详情</th>
               </tr>
             </thead>
@@ -564,8 +613,16 @@ export function AdminUsersPanel() {
                     </td>
                     <td>{formatDate(user.createdAt)}<br /><span className={styles.muted}>{formatDate(user.lastSignInAt)}</span></td>
                     <td>项目 {user.stats.projects}<br /><span className={styles.muted}>图/视 {user.stats.imageRecords}/{user.stats.videoRecords}</span></td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <div className={styles.creditCell}>
+                        <div>
+                          <strong>{formatNumber(user.credits.availableCredits)}</strong>
+                          <span className={styles.muted}>冻 {formatNumber(user.credits.reservedCredits)} · 消 {formatNumber(user.credits.lifetimeSpentCredits)}</span>
+                        </div>
+                        <button type="button" className={shellStyles.buttonSubtle} onClick={() => openCreditDialog(user, "manual_topup")}>管理积分</button>
+                      </div>
+                    </td>
                     <td>{user.stats.promptSubmissions}</td>
-                    <td>{apiModeLabel(user)}</td>
                     <td><button type="button" className={shellStyles.buttonSubtle} onClick={(event) => { event.stopPropagation(); openDetail(user.id); }}>打开</button></td>
                   </tr>
                 );
@@ -599,6 +656,21 @@ export function AdminUsersPanel() {
           onChangeConfirmation={setDeleteConfirm}
           onClose={closeDeleteDialog}
           onConfirm={() => void deleteUserData()}
+        />
+      ) : null}
+      {creditTarget ? (
+        <CreditAdjustModal
+          target={creditTarget}
+          type={creditType}
+          amount={creditAmount}
+          reason={creditReason}
+          loading={creditLoading}
+          message={creditMessage}
+          onChangeType={setCreditType}
+          onChangeAmount={setCreditAmount}
+          onChangeReason={setCreditReason}
+          onClose={closeCreditDialog}
+          onConfirm={() => void adjustCredits()}
         />
       ) : null}
       {auditOpen ? (
@@ -645,7 +717,7 @@ function DeleteUserDataModal({
           <button type="button" className={shellStyles.buttonSubtle} onClick={onClose} disabled={loading}>关闭</button>
         </div>
         <div className={styles.dangerNotice}>
-          这会删除该用户的登录账号、项目、会话、图片记录、视频记录、画布、项目资产、投稿、收藏、个人 API 设置和云存储文件。
+          这会删除该用户的登录账号、项目、会话、图片记录、视频记录、画布、项目资产、投稿、收藏和云存储文件。
         </div>
         <label className={styles.confirmField}>
           <span>输入该用户邮箱确认</span>
@@ -662,6 +734,80 @@ function DeleteUserDataModal({
           <button type="button" className={shellStyles.buttonSubtle} onClick={onClose} disabled={loading}>取消</button>
           <button type="button" className={[shellStyles.buttonSubtle, styles.dangerButton].join(" ")} onClick={onConfirm} disabled={!canDelete || loading}>
             {loading ? "正在删除…" : "确认删除账号和数据"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreditAdjustModal({
+  target,
+  type,
+  amount,
+  reason,
+  loading,
+  message,
+  onChangeType,
+  onChangeAmount,
+  onChangeReason,
+  onClose,
+  onConfirm,
+}: {
+  target: AdminUserListItem;
+  type: CreditAdjustType;
+  amount: string;
+  reason: string;
+  loading: boolean;
+  message: string;
+  onChangeType: (value: CreditAdjustType) => void;
+  onChangeAmount: (value: string) => void;
+  onChangeReason: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const rawAmount = Math.max(0, Math.floor(Number(amount) || 0));
+  const signedAmount = type === "deduction" ? -rawAmount : rawAmount;
+  const after = target.credits.availableCredits + signedAmount;
+  const canConfirm = rawAmount > 0 && reason.trim().length > 0 && after >= 0 && !loading;
+  return (
+    <div className={styles.modalBackdrop} role="presentation" onMouseDown={onClose}>
+      <div className={styles.confirmPanel} role="dialog" aria-modal="true" aria-label="调整用户积分" onMouseDown={(event) => event.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <div>
+            <h2 className={shellStyles.cardTitle}>调整用户积分</h2>
+            <p className={shellStyles.cardSubtitle}>{target.email}</p>
+          </div>
+          <button type="button" className={shellStyles.buttonSubtle} onClick={onClose} disabled={loading}>关闭</button>
+        </div>
+        <div className={styles.accountMetaGrid}>
+          <div className={styles.accountMetaItem}><span>当前可用</span><strong>{formatNumber(target.credits.availableCredits)}</strong></div>
+          <div className={styles.accountMetaItem}><span>操作后</span><strong>{formatNumber(Math.max(0, after))}</strong></div>
+        </div>
+        <label className={styles.confirmField}>
+          <span>操作类型</span>
+          <select className={styles.select} value={type} disabled={loading} onChange={(event) => onChangeType(event.target.value as CreditAdjustType)}>
+            <option value="manual_topup">人工充值</option>
+            <option value="bonus">赠送积分</option>
+            <option value="compensation">补偿积分</option>
+            <option value="refund">退款补偿</option>
+            <option value="deduction">扣减积分</option>
+          </select>
+        </label>
+        <label className={styles.confirmField}>
+          <span>积分数量</span>
+          <input className={styles.searchInput} value={amount} disabled={loading} inputMode="numeric" onChange={(event) => onChangeAmount(event.target.value)} placeholder="例如 1000" />
+        </label>
+        <label className={styles.confirmField}>
+          <span>原因，必填</span>
+          <input className={styles.searchInput} value={reason} disabled={loading} onChange={(event) => onChangeReason(event.target.value)} placeholder="例如：线下收款后人工充值" />
+        </label>
+        {after < 0 ? <p className={styles.dangerText}>扣减后余额不能为负。</p> : null}
+        {message ? <p className={shellStyles.cardSubtitle}>{message}</p> : null}
+        <div className={styles.headerActions}>
+          <button type="button" className={shellStyles.buttonSubtle} onClick={onClose} disabled={loading}>取消</button>
+          <button type="button" className={shellStyles.buttonSubtle} onClick={onConfirm} disabled={!canConfirm}>
+            {loading ? "正在保存…" : "确认调整"}
           </button>
         </div>
       </div>

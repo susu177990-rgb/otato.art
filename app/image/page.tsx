@@ -14,16 +14,22 @@ import {
   IMAGE_MODEL_ORDER,
   IMAGE_MODES,
   IMAGE_REF_SLOT_COUNT,
+  imageReferenceLimitForContext,
+  imageAspectRatiosForContext,
+  imagePromptMaxLengthForContext,
+  normalizeImageAspectRatioForContext,
+  imageSupportsAspectRatioForContext,
   placeholderInnerHint,
+  type GptImageBackground,
   type GptImageQuality,
   type ImageAspectRatio,
   type ImageGalleryRecord,
   type ImageGalleryReferenceImage,
   type ImageModelId,
+  type ImageModelProvider,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
 import { AssetMentionEditor } from "@/components/AssetMentionEditor";
-import { ApiUsageModeSwitch, ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog } from "@/components/project-assets/ProjectAssetPickerDialog";
@@ -40,34 +46,39 @@ import {
   fetchGalleryRecords,
   fetchWorkspaceSnapshot,
   prependGalleryRecordApi,
-  saveWorkspaceSnapshot,
 } from "@/lib/workspace-api";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
+import { formatGenerationErrorForDisplay } from "@/lib/generation-error-classifier";
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
-const ASPECT_RATIOS: ImageAspectRatio[] = ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"];
 const IMAGE_SIZES: ImageSizeTier[] = ["1K", "2K", "4K"];
 const RESULT_ASPECT_RATIO_BY_VALUE: Partial<Record<ImageAspectRatio, string>> = {
   "1:1": "1 / 1",
   "2:3": "2 / 3",
   "3:2": "3 / 2",
+  "5:4": "5 / 4",
+  "4:5": "4 / 5",
   "3:4": "3 / 4",
   "4:3": "4 / 3",
   "9:16": "9 / 16",
   "16:9": "16 / 9",
   "21:9": "21 / 9",
+  "9:21": "9 / 21",
 };
 const RESULT_ASPECT_RATIO_NUMBER_BY_VALUE: Partial<Record<ImageAspectRatio, number>> = {
   "1:1": 1,
   "2:3": 2 / 3,
   "3:2": 3 / 2,
+  "5:4": 5 / 4,
+  "4:5": 4 / 5,
   "3:4": 3 / 4,
   "4:3": 4 / 3,
   "9:16": 9 / 16,
   "16:9": 16 / 9,
   "21:9": 21 / 9,
+  "9:21": 9 / 21,
 };
 
 function ratioPreviewAspect(value: string): string | undefined {
@@ -106,8 +117,29 @@ type RefUploadMenuState = { index: number; anchor: MenuAnchor } | null;
 type ToolbarPickerKind = "model" | "ratio" | "size" | "quality";
 type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ImagePromptPresetCard = SitePromptPreset & {
-  promptModelProviders: Array<"gpt-image" | "nano-banana">;
+  promptModelProviders: ImageModelProvider[];
 };
+type PendingImageGeneration = {
+  id: string;
+  createdAt: string;
+  modeId: string;
+  modeName: string;
+  modelId: ImageModelId;
+  modelName: string;
+  finalPrompt: string;
+  aspectRatio: ImageAspectRatio;
+  imageSize: ImageSizeTier;
+  gptImageQuality?: GptImageQuality;
+  gptImageBackground?: GptImageBackground;
+  previewUrl?: string;
+};
+type ImageSidebarHistoryItem =
+  | { kind: "pending"; pending: PendingImageGeneration }
+  | { kind: "record"; record: ImageGalleryRecord };
+
+function isImageModelId(value: unknown): value is ImageModelId {
+  return typeof value === "string" && IMAGE_MODEL_ORDER.includes(value as ImageModelId);
+}
 
 type ImageGenerationRuntimeState = {
   taskId: string;
@@ -119,6 +151,7 @@ type ImageGenerationRuntimeState = {
   aspectRatio: ImageAspectRatio;
   imageSize: ImageSizeTier;
   gptImageQuality?: GptImageQuality;
+  gptImageBackground?: GptImageBackground;
   slotInputs: string[];
   finalPrompt: string;
   referenceImages: ImageGalleryReferenceImage[];
@@ -133,42 +166,35 @@ type ImageGenerateFailureDetails = {
   status?: number;
   taskId?: string;
   modelId?: string;
-  apiUsageMode?: string;
   upstreamBody?: string;
 };
 
 type ImageGenerateFailurePayload = {
   error?: string;
   code?: string;
+  reasonCode?: string;
+  userMessage?: string;
   traceId?: string;
   details?: ImageGenerateFailureDetails;
 };
 
-const IMAGE_GENERATE_STAGE_LABELS: Record<string, string> = {
-  request_parse: "请求解析",
-  model_config: "模型配置",
-  upstream_submit: "提交到 API 中转站",
-  upstream_poll: "查询中转站任务结果",
-  upstream_parse: "解析中转站响应",
-  upstream_timeout: "等待中转站结果超时",
-  storage: "保存生成图到云存储",
-  unknown: "未知阶段",
+type CreditQuoteState = {
+  loading: boolean;
+  credits?: number;
+  availableCredits?: number;
+  reservedCredits?: number;
+  enough?: boolean;
+  error?: string;
 };
 
 function formatImageGenerateFailure(data: ImageGenerateFailurePayload, fallback = "生图失败"): string {
-  const message = typeof data.error === "string" && data.error.trim() ? data.error.trim() : fallback;
-  const details = data.details && typeof data.details === "object" ? data.details : {};
-  const parts: string[] = [];
-  if (details.stage) parts.push(`阶段：${IMAGE_GENERATE_STAGE_LABELS[details.stage] ?? details.stage}`);
-  if (details.routeKind) parts.push(`路由：${details.routeKind}`);
-  if (details.endpoint) parts.push(`Endpoint：${details.endpoint}`);
-  if (details.status) parts.push(`HTTP：${details.status}`);
-  if (details.taskId) parts.push(`任务ID：${details.taskId}`);
-  if (details.modelId) parts.push(`模型槽位：${details.modelId}`);
-  if (details.apiUsageMode) parts.push(`API模式：${details.apiUsageMode === "site" ? "全局" : "个人"}`);
-  if (data.traceId) parts.push(`Trace：${data.traceId}`);
-  if (details.upstreamBody) parts.push(`上游响应：${details.upstreamBody}`);
-  return parts.length ? `${message}\n${parts.join("\n")}` : message;
+  return formatGenerationErrorForDisplay({
+    code: data.code,
+    reasonCode: data.reasonCode,
+    userMessage: data.userMessage,
+    fallbackCode: data.details?.stage ? `IMAGE_${data.details.stage.toUpperCase()}` : undefined,
+    fallbackMessage: fallback === "服务器未返回图片地址" ? "IMAGE_RESPONSE_MISSING_URL" : "IMAGE_UNKNOWN",
+  });
 }
 
 function createEmptyRefSlots(): RefSlot[] {
@@ -288,7 +314,7 @@ function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
     const parsed = JSON.parse(raw) as Partial<ImageGenerationRuntimeState>;
     if (!parsed.taskId || !parsed.status || !parsed.startedAt) return null;
     if (parsed.status !== "running" && parsed.status !== "success" && parsed.status !== "error") return null;
-    if (parsed.modelId !== "gpt-image-2" && parsed.modelId !== "nano-banana-2" && parsed.modelId !== "nano-banana-pro") {
+    if (!isImageModelId(parsed.modelId)) {
       return null;
     }
     return {
@@ -301,6 +327,7 @@ function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
       aspectRatio: parsed.aspectRatio || "4:3",
       imageSize: parsed.imageSize || "1K",
       gptImageQuality: parsed.gptImageQuality,
+      gptImageBackground: parsed.gptImageBackground,
       slotInputs: Array.isArray(parsed.slotInputs) ? parsed.slotInputs.map((x) => String(x ?? "")) : [""],
       finalPrompt: String(parsed.finalPrompt || ""),
       referenceImages: Array.isArray(parsed.referenceImages) ? parsed.referenceImages : [],
@@ -434,7 +461,7 @@ export default function ImagePage() {
     if (pathname === "/image") router.replace("/projects");
   }, [pathname, router]);
 
-  const { settings: llmSettings, imageWorkspace, videoWorkspace, apiUsageMode, workspaceReady, refreshWorkspace } = useApiSettings();
+  const { imageWorkspace, workspaceReady } = useApiSettings();
   const [settings, setSettings] = useState(DEFAULT_IMAGE_SETTINGS);
   const [records, setRecords] = useState<ImageGalleryRecord[]>([]);
   const [promptPresets, setPromptPresets] = useState<SitePromptPreset[]>([]);
@@ -457,7 +484,9 @@ export default function ImagePage() {
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [pendingGenerations, setPendingGenerations] = useState<PendingImageGeneration[]>([]);
+  const [creditQuote, setCreditQuote] = useState<CreditQuoteState>({ loading: true });
+  const isGenerating = pendingGenerations.length > 0;
   const resultAspectRatio = resultNaturalAspectRatio || RESULT_ASPECT_RATIO_BY_VALUE[aspectRatio];
   const resultAspectRatioValue = resultNaturalAspectRatioValue || RESULT_ASPECT_RATIO_NUMBER_BY_VALUE[aspectRatio] || 0;
   const resultImageStackStyle = resultAspectRatio
@@ -475,9 +504,11 @@ export default function ImagePage() {
           : {}),
       } as CSSProperties)
     : undefined;
+  const referenceLimit = imageReferenceLimitForContext(selectedModelId);
+  const visibleRefSlots = useMemo(() => refSlots.slice(0, referenceLimit), [refSlots, referenceLimit]);
   const mentionCandidates = useMemo<AssetMentionCandidate[]>(() => {
     const candidates: AssetMentionCandidate[] = [];
-    refSlots.forEach((slot, index) => {
+    visibleRefSlots.forEach((slot, index) => {
       if (slot?.previewUrl) {
         candidates.push({
           id: String(index),
@@ -491,7 +522,7 @@ export default function ImagePage() {
       }
     });
     return candidates;
-  }, [refSlots]);
+  }, [visibleRefSlots]);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const resultClipRef = useRef<HTMLDivElement>(null);
   const refFileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -590,13 +621,12 @@ export default function ImagePage() {
 
     function onVisibility() {
       if (document.visibilityState === "visible" && workspaceReady) {
-        void refreshWorkspace();
         void refreshGallery();
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [workspaceReady, refreshWorkspace, projectId]);
+  }, [workspaceReady, projectId]);
 
   const loadImagePromptPresets = useCallback(() => {
     void fetchSitePromptPresets("image")
@@ -681,19 +711,97 @@ export default function ImagePage() {
   const refSlotHintsLines = settings.refSlotHintsByMode[selectedModeId] ?? displayedPromptPresetById.get(selectedModeId)?.refSlotHints ?? [];
   const modelReady = Boolean(
     selectedModel.endpointUrl.trim() &&
-      selectedModel.modelName.trim() &&
-      (apiUsageMode.image === "site" || selectedModel.apiKey.trim()),
+      selectedModel.modelName.trim(),
   );
-  const filledRefFileCount = useMemo(() => refSlots.filter(Boolean).length, [refSlots]);
-  const sidebarHistoryRecords = useMemo(() => {
+  const filledRefFileCount = useMemo(() => visibleRefSlots.filter(Boolean).length, [visibleRefSlots]);
+  const availableAspectRatios = useMemo(
+    () => imageAspectRatiosForContext(selectedModelId, filledRefFileCount),
+    [filledRefFileCount, selectedModelId],
+  );
+  const supportsAspectRatio = imageSupportsAspectRatioForContext(selectedModelId, filledRefFileCount);
+  const promptMaxLength = imagePromptMaxLengthForContext(selectedModelId, filledRefFileCount);
+  const promptCharCount = finalPrompt.length;
+  const promptOverLimit = typeof promptMaxLength === "number" && promptCharCount > promptMaxLength;
+  const creditBlocked = creditQuote.loading || Boolean(creditQuote.error) || creditQuote.enough === false;
+  const generateDisabled = promptOverLimit || creditBlocked;
+  const generateTitle = promptOverLimit
+    ? `提示词超过 ${promptMaxLength} 字符上限`
+    : creditQuote.error
+      ? creditQuote.error
+      : creditQuote.enough === false
+        ? "积分余额不足"
+        : "生成";
+  const sidebarHistoryRecords = useMemo<ImageSidebarHistoryItem[]>(() => {
     const success = records.filter((r) => r.status === "success" && Boolean(r.imageUrl)).slice(0, 24);
-    return success.slice().reverse();
-  }, [records]);
+    return [
+      ...success.slice().reverse().map((record) => ({ kind: "record" as const, record })),
+      ...pendingGenerations.map((pending) => ({ kind: "pending" as const, pending })),
+    ];
+  }, [pendingGenerations, records]);
+
+  useEffect(() => {
+    setAspectRatio((current) => normalizeImageAspectRatioForContext(current, selectedModelId, filledRefFileCount));
+  }, [filledRefFileCount, selectedModelId]);
+
+  useEffect(() => {
+    if (supportsAspectRatio) return;
+    setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : current);
+  }, [supportsAspectRatio]);
+
+  useEffect(() => {
+    setRefSlots((prev) => {
+      if (prev.every((slot, index) => index < referenceLimit || !slot)) return prev;
+      return prev.map((slot, index) => {
+        if (index < referenceLimit) return slot;
+        if (slot) revokeRefPreview(slot);
+        return null;
+      });
+    });
+  }, [referenceLimit]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    const controller = new AbortController();
+    setCreditQuote((current) => ({ ...current, loading: true, error: undefined }));
+    void fetch("/api/credits/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "image",
+        modelId: selectedModelId,
+        imageSize,
+        gptImageQuality: selectedModel.provider === "gpt-image" ? settings.gptImageQuality : undefined,
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          quote?: { credits?: number };
+          balance?: { availableCredits?: number; reservedCredits?: number; enough?: boolean };
+        };
+        if (!response.ok) throw new Error(payload.error || "无法获取积分价格");
+        setCreditQuote({
+          loading: false,
+          credits: Number(payload.quote?.credits ?? 0),
+          availableCredits: Number(payload.balance?.availableCredits ?? 0),
+          reservedCredits: Number(payload.balance?.reservedCredits ?? 0),
+          enough: Boolean(payload.balance?.enough),
+        });
+      })
+      .catch((quoteError) => {
+        if (controller.signal.aborted) return;
+        setCreditQuote({
+          loading: false,
+          error: quoteError instanceof Error ? quoteError.message : "无法获取积分价格",
+        });
+      });
+    return () => controller.abort();
+  }, [imageSize, selectedModel.provider, selectedModelId, settings.gptImageQuality, workspaceReady]);
 
   function persistGptImageQuality(q: GptImageQuality) {
     setSettings((prev) => {
       const next = { ...prev, gptImageQuality: q };
-      void saveWorkspaceSnapshot({ llm: llmSettings, imageWorkspace: next, videoWorkspace }).then(() => refreshWorkspace());
       return next;
     });
   }
@@ -858,7 +966,30 @@ export default function ImagePage() {
       if (shouldRestoreRefs) {
         void restoreReferenceImages(state.referenceImages);
       }
-      setIsGenerating(state.status === "running");
+      if (state.status === "running") {
+        setPendingGenerations((prev) => {
+          if (prev.some((item) => item.id === state.taskId)) return prev;
+          return [
+            ...prev,
+            {
+              id: state.taskId,
+              createdAt: state.startedAt,
+              modeId: state.modeId,
+              modeName: allModes.find((mode) => mode.id === state.modeId)?.label ?? displayedPromptPresetById.get(state.modeId)?.title ?? state.modeId,
+              modelId: state.modelId,
+              modelName: settings.models[state.modelId]?.modelName ?? state.modelId,
+              finalPrompt: state.finalPrompt,
+              aspectRatio: state.aspectRatio,
+              imageSize: state.imageSize,
+              gptImageQuality: state.gptImageQuality,
+              gptImageBackground: state.gptImageBackground,
+              previewUrl: state.referenceImages[0]?.dataUrl,
+            },
+          ];
+        });
+      } else {
+        setPendingGenerations((prev) => prev.filter((item) => item.id !== state.taskId));
+      }
       if (state.status === "success") {
         setResultUrl(state.imageUrl || "");
         setError("");
@@ -868,8 +999,11 @@ export default function ImagePage() {
       if (state.gptImageQuality) {
         setSettings((prev) => ({ ...prev, gptImageQuality: state.gptImageQuality! }));
       }
+      if (state.gptImageBackground) {
+        setSettings((prev) => ({ ...prev, gptImageBackground: state.gptImageBackground! }));
+      }
     },
-    [restoreReferenceImages],
+    [allModes, displayedPromptPresetById, restoreReferenceImages, settings.models],
   );
 
   useEffect(() => {
@@ -957,6 +1091,10 @@ export default function ImagePage() {
       setError("自由模式请填写完整提示词（无内置模版）。");
       return;
     }
+    if (promptOverLimit) {
+      setError(`提示词超过 ${promptMaxLength} 字符上限，请缩短后再生成。`);
+      return;
+    }
 
     /** 提交前强制与云端对齐 */
     const liveSnapshot = await fetchWorkspaceSnapshot();
@@ -972,25 +1110,23 @@ export default function ImagePage() {
     }
     const cleanedPrompt = mentionResolution.prompt;
 
-    const liveImageApiMode = liveSnapshot.apiUsageMode?.image ?? "site";
     const liveReady = Boolean(
       liveModel.endpointUrl &&
-        liveModel.modelName &&
-        (liveImageApiMode === "site" || liveModel.apiKey),
+        liveModel.modelName,
     );
 
     if (!liveReady) {
       setError(
-        `「${liveModel.label}」（槽位 ${liveModel.id}）缺少 Endpoint / API Key / 模型名。请在「设置 → 生图 API」里填写对应卡片并保存；作图页选中哪个模型就用哪一套配置。`,
+        `网站内部图片 API 暂未配置完整（${liveModel.label || liveModel.id}），请联系管理员。`,
       );
       return;
     }
 
-    setIsGenerating(true);
     let referenceImages: ImageGalleryReferenceImage[] = [];
     let runtimeState: ImageGenerationRuntimeState | null = null;
+    let pendingId = "";
     try {
-      const refSlotsSnapshot = normalizeRefSlots(refSlots);
+      const refSlotsSnapshot = normalizeRefSlots(refSlots).slice(0, referenceLimit);
       const mentionedSlots = new Set(
         mentionResolution.mentions
           .filter((mention) => mention.candidate?.type === "slot")
@@ -1002,8 +1138,9 @@ export default function ImagePage() {
       const fileRefs = await snapshotReferenceImages(requestSlots);
       referenceImages = fileRefs;
       refSlotsUserEditedRef.current = false;
+      pendingId = crypto.randomUUID();
       runtimeState = {
-        taskId: crypto.randomUUID(),
+        taskId: pendingId,
         status: "running",
         startedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1016,13 +1153,30 @@ export default function ImagePage() {
         finalPrompt: cleanedPrompt,
         referenceImages,
       };
+      setPendingGenerations((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          createdAt: runtimeState!.startedAt,
+          modeId: selectedModeId,
+          modeName: allModes.find((m) => m.id === selectedModeId)?.label ?? displayedPromptPresetById.get(selectedModeId)?.title ?? selectedModeId,
+          modelId: selectedModelId,
+          modelName: liveModel.modelName,
+          finalPrompt: cleanedPrompt,
+          aspectRatio,
+          imageSize,
+          gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
+          previewUrl: referenceImages[0]?.dataUrl,
+        },
+      ]);
       writeGenerationRuntimeState(runtimeState);
       const fd = new FormData();
       fd.append(
         "meta",
         JSON.stringify({
+          requestId: runtimeState.taskId,
           prompt: cleanedPrompt,
-          model: liveModel,
+          modelId: selectedModelId,
           aspectRatio,
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
@@ -1078,7 +1232,9 @@ export default function ImagePage() {
         console.warn("写入失败记录到本地画廊时出错:", persistErr);
       }
     } finally {
-      if (mountedRef.current) setIsGenerating(false);
+      if (pendingId && mountedRef.current) {
+        setPendingGenerations((prev) => prev.filter((item) => item.id !== pendingId));
+      }
     }
   }
 
@@ -1095,7 +1251,7 @@ export default function ImagePage() {
           onSelect: () => setSelectedModelId(id),
         }))
       : toolbarPickerMenu.kind === "ratio"
-        ? ASPECT_RATIOS.map((ratio) => ({
+        ? availableAspectRatios.map((ratio) => ({
             id: ratio,
             label: ratio === "auto" ? "自适应" : ratio,
             previewAspectRatio: ratioPreviewAspect(ratio),
@@ -1110,12 +1266,14 @@ export default function ImagePage() {
               active: imageSize === size,
               onSelect: () => setImageSize(size),
             }))
-          : GPT_IMAGE_QUALITY_ORDER.map((quality) => ({
+          : toolbarPickerMenu.kind === "quality"
+          ? GPT_IMAGE_QUALITY_ORDER.map((quality) => ({
               id: quality,
               label: `细节程度：${GPT_IMAGE_QUALITY_LABELS[quality]}`,
               active: settings.gptImageQuality === quality,
               onSelect: () => persistGptImageQuality(quality),
             }))
+          : []
     : [];
 
   return (
@@ -1134,7 +1292,6 @@ export default function ImagePage() {
           </button>
         </div>
         <div className={shellStyles.topnav}>
-          <ApiUsageModeSwitch module="image" />
           <TopbarAccountActions />
         </div>
       </header> : null}
@@ -1242,7 +1399,9 @@ export default function ImagePage() {
             {isGenerating ? (
               <div className={styles.loadingOverlay} role="status" aria-live="polite">
                 <span className={styles.bigSpinner} aria-hidden />
-                <span className={styles.statusLabel}>生成中</span>
+                <span className={styles.statusLabel}>
+                  {pendingGenerations.length > 1 ? `生成中 · ${pendingGenerations.length}` : "生成中"}
+                </span>
               </div>
             ) : null}
             {!isGenerating && !modelReady ? (
@@ -1271,11 +1430,25 @@ export default function ImagePage() {
                       {sidebarHistoryRecords.length === 0 ? (
                         <div className={styles.emptyHistory}>暂无记录</div>
                       ) : (
-                        sidebarHistoryRecords.map((record) => (
+                        sidebarHistoryRecords.map((item) => item.kind === "pending" ? (
+                          <div key={item.pending.id} className={[styles.historyItem, styles.historyItemPending].join(" ")} role="status" aria-live="polite">
+                            {item.pending.previewUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={item.pending.previewUrl} alt={item.pending.modeName} />
+                            ) : (
+                              <span className={styles.historyPendingBlank} aria-hidden />
+                            )}
+                            <span className={styles.historyPendingSpinner} aria-hidden />
+                            <span className={styles.historyMeta}>
+                              {item.pending.aspectRatio} · {item.pending.imageSize}
+                            </span>
+                          </div>
+                        ) : (
                           <button
-                            key={record.id}
+                            key={item.record.id}
                             type="button"
                             onClick={() => {
+                              const record = item.record;
                               setError("");
                               setResultUrl(record.imageUrl || "");
                               setSelectedModelId(record.modelId);
@@ -1296,11 +1469,6 @@ export default function ImagePage() {
                               if (record.gptImageQuality) {
                                 setSettings((prev) => {
                                   const next = { ...prev, gptImageQuality: record.gptImageQuality! };
-                                  void saveWorkspaceSnapshot({
-                                    llm: llmSettings,
-                                    imageWorkspace: next,
-                                    videoWorkspace,
-                                  }).then(() => refreshWorkspace());
                                   return next;
                                 });
                               }
@@ -1309,11 +1477,11 @@ export default function ImagePage() {
                             className={styles.historyItem}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={record.thumbnailUrl || record.imageUrl || ""} alt={record.modeName} />
+                            <img src={item.record.thumbnailUrl || item.record.imageUrl || ""} alt={item.record.modeName} />
                             <span className={styles.historyMeta}>
-                              {record.aspectRatio} · {record.imageSize}
-                              {record.gptImageQuality
-                                ? ` · 细节程度：${GPT_IMAGE_QUALITY_LABELS[record.gptImageQuality]}`
+                              {item.record.aspectRatio} · {item.record.imageSize}
+                              {item.record.gptImageQuality
+                                ? ` · 细节程度：${GPT_IMAGE_QUALITY_LABELS[item.record.gptImageQuality]}`
                                 : ""}
                             </span>
                           </button>
@@ -1332,7 +1500,7 @@ export default function ImagePage() {
 
           <div className={styles.composerDock}>
             <div className={styles.referenceStrip}>
-              {refSlots.map((slot, index) => (
+              {visibleRefSlots.map((slot, index) => (
                 <div
                   key={index}
                   className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
@@ -1420,16 +1588,13 @@ export default function ImagePage() {
                   />
                 </div>
               ))}
+              {typeof promptMaxLength === "number" ? (
+                <div className={[styles.promptLimitCounter, promptOverLimit ? styles.promptLimitCounterOver : ""].filter(Boolean).join(" ")}>
+                  {promptCharCount}/{promptMaxLength}
+                </div>
+              ) : null}
             </div>
             <div className={styles.toolbar}>
-              <ApiUsageModeToggle
-                module="image"
-                className={[styles.composerPickerButton, styles.composerSelectApi].join(" ")}
-                backdropClassName={styles.toolbarPickerBackdrop}
-                menuClassName={styles.toolbarPickerMenu}
-                optionClassName={styles.toolbarPickerOption}
-                optionActiveClassName={styles.toolbarPickerOptionActive}
-              />
               <button
                 type="button"
                 className={[styles.composerPickerButton, styles.composerSelectModel].join(" ")}
@@ -1443,18 +1608,20 @@ export default function ImagePage() {
                 <span className={styles.composerPickerLabel}>{selectedModel.label}</span>
               </button>
 
-              <button
-                type="button"
-                className={[styles.composerPickerButton, styles.composerSelectRatio].join(" ")}
-                aria-haspopup="menu"
-                aria-expanded={toolbarPickerMenu?.kind === "ratio"}
-                onClick={(event) => {
-                  const anchor = menuAnchorFromElement(event.currentTarget);
-                  setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
-                }}
-              >
-                <span className={styles.composerPickerLabel}>{aspectRatio === "auto" ? "自适应" : aspectRatio}</span>
-              </button>
+              {supportsAspectRatio ? (
+                <button
+                  type="button"
+                  className={[styles.composerPickerButton, styles.composerSelectRatio].join(" ")}
+                  aria-haspopup="menu"
+                  aria-expanded={toolbarPickerMenu?.kind === "ratio"}
+                  onClick={(event) => {
+                    const anchor = menuAnchorFromElement(event.currentTarget);
+                    setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : { kind: "ratio", anchor });
+                  }}
+                >
+                  <span className={styles.composerPickerLabel}>{aspectRatio === "auto" ? "自适应" : aspectRatio}</span>
+                </button>
+              ) : null}
 
               <button
                 type="button"
@@ -1470,20 +1637,22 @@ export default function ImagePage() {
               </button>
 
               {selectedModel.provider === "gpt-image" ? (
-                <button
-                  type="button"
-                  className={[styles.composerPickerButton, styles.composerSelectQuality].join(" ")}
-                  aria-haspopup="menu"
-                  aria-expanded={toolbarPickerMenu?.kind === "quality"}
-                  onClick={(event) => {
-                    const anchor = menuAnchorFromElement(event.currentTarget);
-                    setToolbarPickerMenu((current) => current?.kind === "quality" ? null : { kind: "quality", anchor });
-                  }}
-                >
-                  <span className={styles.composerPickerLabel}>
-                    {`细节程度：${GPT_IMAGE_QUALITY_LABELS[settings.gptImageQuality]}`}
-                  </span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={[styles.composerPickerButton, styles.composerSelectQuality].join(" ")}
+                    aria-haspopup="menu"
+                    aria-expanded={toolbarPickerMenu?.kind === "quality"}
+                    onClick={(event) => {
+                      const anchor = menuAnchorFromElement(event.currentTarget);
+                      setToolbarPickerMenu((current) => current?.kind === "quality" ? null : { kind: "quality", anchor });
+                    }}
+                  >
+                    <span className={styles.composerPickerLabel}>
+                      {`细节程度：${GPT_IMAGE_QUALITY_LABELS[settings.gptImageQuality]}`}
+                    </span>
+                  </button>
+                </>
               ) : null}
 
               <button
@@ -1501,8 +1670,19 @@ export default function ImagePage() {
                 </span>
                 <span>预设</span>
               </button>
-              <button type="button" onClick={handleGenerate} disabled={isGenerating} className={styles.generate} title="生成">
-                {isGenerating ? "生成中" : "生成"}
+              <button type="button" onClick={handleGenerate} disabled={generateDisabled} className={styles.generate} title={generateTitle}>
+                <span className={styles.generateCost} data-state={creditQuote.error ? "error" : creditQuote.enough === false ? "insufficient" : "ready"}>
+                  <span>{creditQuote.loading ? "计价中" : creditQuote.error ? "未计价" : creditQuote.credits ?? 0}</span>
+                  <svg className={styles.generateCostIcon} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M7.2 8.1c2.1-2.4 6.1-3.4 8.8-1.7 2.8 1.7 3.9 5.9 2.2 8.9-1.6 2.8-5.6 4.4-8.8 3.2-3.4-1.2-4.9-4.7-4-7.4.3-1.1.9-2.1 1.8-3Z" />
+                    <path d="M14.7 6.2c.2-1.1.8-2 1.8-2.7" />
+                    <path d="M16.4 5.1c1-.2 1.9.1 2.6.9" />
+                    <path d="M9 11.1h.01" />
+                    <path d="M13.2 9.7h.01" />
+                    <path d="M14.8 14.2h.01" />
+                    <path d="M10.4 15.3h.01" />
+                  </svg>
+                </span>
               </button>
             </div>
           </div>

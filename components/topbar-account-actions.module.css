@@ -7,6 +7,30 @@
   min-width: 0;
 }
 
+.creditLinkContent {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--otato-yellow, #ffd86b);
+  white-space: nowrap;
+}
+
+.creditIcon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.creditAmount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+}
+
 @media (max-width: 920px) {
   .accountActions {
     justify-content: flex-start;

@@ -27,6 +27,7 @@ export type AssetMentionCandidate = {
   referenceUrls?: string[];
   text?: string;
   nodeType?: "text" | "image" | "video" | "audio";
+  durationSeconds?: number;
 };
 
 export type ParsedAssetMention = {

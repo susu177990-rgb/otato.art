@@ -1,4 +1,5 @@
 import { pickNonEmptyTrimmed } from "@/lib/persisted-field";
+import { BAKED_LLM_SETTINGS, BAKED_VIDEO_MODEL_DEFAULTS } from "@/lib/baked-api-defaults";
 import { normalizePromptTags } from "@/lib/prompt-tags";
 import {
   VIDEO_MODEL_ORDER,
@@ -52,7 +53,7 @@ export function inferEffectiveVideoMode(
   return { modeId: "start_end_frame" };
 }
 
-export const DISABLED_VIDEO_MODEL_IDS = new Set<VideoModelId>(["gemini-omni"]);
+export const DISABLED_VIDEO_MODEL_IDS = new Set<VideoModelId>();
 
 const HIDDEN_VIDEO_MODEL_IDS = DISABLED_VIDEO_MODEL_IDS;
 
@@ -104,8 +105,9 @@ function soundControl(kind: VideoSoundControl["kind"], defaultEnabled: boolean):
 export function getVideoParameterCapabilities(
   modelId: VideoModelId,
   modeId: VideoGenerationModeId,
-  references: UnifiedVideoReference[] = [],
+  _references: UnifiedVideoReference[] = [],
 ): VideoParameterCapabilities {
+  void _references;
   const modelCapabilities = getVideoCapabilities(modelId);
   const base: VideoParameterCapabilities = {
     aspectRatios: modelCapabilities.aspectRatios,
@@ -115,12 +117,12 @@ export function getVideoParameterCapabilities(
     supportsDuration: true,
   };
 
-  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast") {
+  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast" || modelId === "seedance-2.0-mini") {
     return {
       ...base,
       aspectRatios: modeId === "text_to_video" || modeId === "multi_image_reference" ? STANDARD_RATIOS : SEEDANCE_IMAGE_RATIOS,
       durationCapability: durationRange(4, 15, 5, [4, 5, 8, 10, 15]),
-      resolutions: modelId === "seedance-2.0-fast" ? ["480p", "720p"] : ["480p", "720p", "1080p"],
+      resolutions: modelId === "seedance-2.0-fast" || modelId === "seedance-2.0-mini" ? ["480p", "720p"] : ["480p", "720p", "1080p"],
       soundControl: soundControl("generate_audio", true),
     };
   }
@@ -135,16 +137,16 @@ export function getVideoParameterCapabilities(
     };
   }
 
-  if (modelId === "doubao-seedance-1.0-pro-fast") {
+  if (modelId === "doubao-seedance-1.0-pro-fast" || modelId === "seedance-1.0-pro") {
     return {
       ...base,
       aspectRatios: modeId === "text_to_video" ? STANDARD_RATIOS : SEEDANCE_IMAGE_RATIOS,
-      durationCapability: durationRange(2, 12, 5, [2, 3, 4, 5, 8, 10, 12]),
+      durationCapability: { type: "presets", values: [4, 8, 12], defaultValue: 8 },
       resolutions: ["480p", "720p", "1080p"],
     };
   }
 
-  if (modelId === "kling-2.6-motion" && modeId === "motion_control") {
+  if ((modelId === "kling-3.0-motion" || modelId === "kling-2.6-motion") && modeId === "motion_control") {
     return {
       ...base,
       aspectRatios: [],
@@ -157,28 +159,12 @@ export function getVideoParameterCapabilities(
   }
 
   if (modelId === "kling-3.0") {
-    if (modeId === "video_edit") {
-      return {
-        ...base,
-        aspectRatios: [],
-        durationCapability: undefined,
-        resolutions: ["720p", "1080p"],
-        soundControl: soundControl("keep_original_sound", true),
-        supportsAspectRatio: false,
-        supportsDuration: false,
-      };
-    }
-    const hasVideoReference = references.some((item) => item.role === "video_reference");
     return {
       ...base,
       aspectRatios: ["16:9", "9:16", "1:1"],
-      durationCapability: modeId === "multi_image_reference" && hasVideoReference
-        ? durationRange(3, 10, 5, [3, 5, 8, 10])
-        : durationRange(3, 15, 5, [3, 5, 8, 10, 15]),
-      resolutions: ["720p", "1080p"],
-      soundControl: modeId === "multi_image_reference" && hasVideoReference
-        ? soundControl("keep_original_sound", true)
-        : soundControl("sound", false),
+      durationCapability: durationRange(3, 15, 5, [3, 5, 8, 10, 15]),
+      resolutions: ["720p", "1080p", "4k"],
+      soundControl: soundControl("generate_audio", false),
     };
   }
 
@@ -216,14 +202,13 @@ export function getVideoParameterCapabilities(
   if (modelId === "grok-imagine") {
     return {
       ...base,
-      aspectRatios: modeId === "start_frame" ? [] : GROK_RATIOS,
-      durationCapability: durationRange(6, 30, 6),
+      aspectRatios: modeId === "start_frame" ? ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "16:9", "9:16"] : GROK_RATIOS,
+      durationCapability: modeId === "start_frame" ? durationRange(1, 15, 6, [1, 3, 6, 10, 15]) : durationRange(6, 30, 6),
       resolutions: ["480p", "720p"],
-      supportsAspectRatio: modeId !== "start_frame",
     };
   }
 
-  if (modelId === "veo-3.1" || modelId === "veo-3.1-fast") {
+  if (modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite") {
     return {
       ...base,
       aspectRatios: modeId === "multi_image_reference" ? ["16:9"] : VEO_RATIOS,
@@ -231,7 +216,15 @@ export function getVideoParameterCapabilities(
         ? { type: "presets", values: [8], defaultValue: 8 }
         : { type: "presets", values: [4, 6, 8], defaultValue: 4 },
       resolutions: ["720p", "1080p", "4k"],
-      soundControl: soundControl("generate_audio", true),
+    };
+  }
+
+  if (modelId === "gemini-omni") {
+    return {
+      ...base,
+      aspectRatios: ["16:9", "9:16"],
+      durationCapability: { type: "presets", values: [4, 6, 8, 10], defaultValue: 4 },
+      resolutions: ["720p", "1080p", "4k"],
     };
   }
 
@@ -320,35 +313,58 @@ export function isVideoModelModeSupported(modelId: VideoModelId, modeId: VideoGe
 
 export function defaultVideoApiModelNameForMode(modelId: VideoModelId, modeId: VideoGenerationModeId): string {
   if (!isVideoModelModeSupported(modelId, modeId)) return "";
-  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast") {
-    const prefix = modelId === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0";
-    if (modeId === "text_to_video") return `${prefix}-text-to-video`;
-    if (modeId === "start_frame" || modeId === "start_end_frame") return `${prefix}-image-to-video`;
-    if (modeId === "multi_image_reference") return `${prefix}-reference-to-video`;
+  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast" || modelId === "seedance-2.0-mini") {
+    const prefix =
+      modelId === "seedance-2.0-fast"
+        ? "bytedance/seedance2-0-fast"
+        : modelId === "seedance-2.0-mini"
+          ? "bytedance/seedance2-0-mini"
+          : "bytedance/seedance2-0";
+    if (modeId === "text_to_video") return `${prefix}-t2v`;
+    if (modeId === "start_frame" || modeId === "start_end_frame") return `${prefix}-i2v`;
+    if (modeId === "multi_image_reference") return `${prefix}-r2v`;
   }
-  if (modelId === "seedance-1.5-pro" || modelId === "doubao-seedance-1.0-pro-fast") {
-    return modelId;
+  if (modelId === "seedance-1.5-pro") {
+    if (modeId === "text_to_video") return "bytedance/seedance1-5-pro-t2v";
+    if (modeId === "start_frame" || modeId === "start_end_frame") return "bytedance/seedance1-5-pro-i2v";
+  }
+  if (modelId === "doubao-seedance-1.0-pro-fast") {
+    if (modeId === "text_to_video") return "bytedance/seedance1-0-pro-fast-t2v";
+    if (modeId === "start_frame") return "bytedance/seedance1-0-pro-fast-i2v";
+  }
+  if (modelId === "seedance-1.0-pro") {
+    if (modeId === "text_to_video") return "bytedance/seedance1-0-pro-t2v";
+    if (modeId === "start_frame") return "bytedance/seedance1-0-pro-i2v";
   }
   if (modelId === "kling-3.0") {
-    if (modeId === "text_to_video") return "kling-o3-text-to-video";
-    if (modeId === "start_frame" || modeId === "start_end_frame") return "kling-o3-image-to-video";
-    if (modeId === "multi_image_reference") return "kling-o3-reference-to-video";
-    if (modeId === "video_edit") return "kling-o3-video-edit";
+    if (modeId === "text_to_video" || modeId === "start_frame" || modeId === "start_end_frame" || modeId === "multi_image_reference") return "kling/v3";
   }
-  if (modelId === "kling-2.6-motion" && modeId === "motion_control") return "kling-v3-motion-control";
+  if (modelId === "kling-3.0-motion" && modeId === "motion_control") return "kling/v3-motion-control";
+  if (modelId === "kling-2.6-motion" && modeId === "motion_control") return "kling/v2-6-motion-control";
   if (modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0") {
-    const version = modelId === "happyhorse-1.0" ? "1.0" : "1.1";
-    if (modeId === "text_to_video") return `happyhorse-${version}-text-to-video`;
-    if (modeId === "start_frame") return `happyhorse-${version}-image-to-video`;
-    if (modeId === "multi_image_reference") return `happyhorse-${version}-reference-to-video`;
-    if (modelId === "happyhorse-1.0" && modeId === "video_edit") return "happyhorse-1.0-video-edit";
+    const version = modelId === "happyhorse-1.0" ? "1-0" : "1-1";
+    if (modeId === "text_to_video") return `happyhorse-${version}-t2v`;
+    if (modeId === "start_frame") return `happyhorse-${version}-i2v`;
+    if (modeId === "multi_image_reference") return `happyhorse-${version}-r2v`;
+    if (modelId === "happyhorse-1.0" && modeId === "video_edit") return "happyhorse-1-0-video-edit";
   }
   if (modelId === "grok-imagine") {
-    if (modeId === "text_to_video") return "grok-imagine-text-to-video-beta";
-    if (modeId === "start_frame") return "grok-imagine-image-to-video-beta";
+    if (modeId === "text_to_video") return "grok-imagine/t2v";
+    if (modeId === "start_frame") return "grok-imagine-video-1.5-preview";
   }
-  if (modelId === "veo-3.1" || modelId === "veo-3.1-fast") {
-    return modelId === "veo-3.1-fast" ? "veo-3.1-fast-generate-preview" : "veo-3.1-generate-preview";
+  if (modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite") {
+    const prefix =
+      modelId === "veo-3.1-fast"
+        ? "google/veo3-1-fast"
+        : modelId === "veo-3.1-lite"
+          ? "google/veo3-1-lite"
+          : "google/veo3-1";
+    if (modeId === "text_to_video") return `${prefix}-t2v`;
+    if (modeId === "start_frame" || modeId === "start_end_frame") return `${prefix}-i2v`;
+    if (modeId === "multi_image_reference") return `${prefix}-r2v`;
+  }
+  if (modelId === "gemini-omni") {
+    return "google/gemini-omni";
   }
   return getVideoModelDefinition(modelId).defaultApiModelName;
 }
@@ -389,15 +405,19 @@ export const DEFAULT_VIDEO_SETTINGS: VideoWorkspaceSettings = {
     defaultModeByModel: {
       "seedance-2.0": "text_to_video",
       "seedance-2.0-fast": "text_to_video",
+      "seedance-2.0-mini": "text_to_video",
       "seedance-1.5-pro": "text_to_video",
       "doubao-seedance-1.0-pro-fast": "text_to_video",
+      "seedance-1.0-pro": "text_to_video",
       "kling-3.0": "text_to_video",
+      "kling-3.0-motion": "motion_control",
       "kling-2.6-motion": "motion_control",
       "happyhorse-1.1": "text_to_video",
       "happyhorse-1.0": "text_to_video",
       "grok-imagine": "text_to_video",
       "veo-3.1": "text_to_video",
       "veo-3.1-fast": "text_to_video",
+      "veo-3.1-lite": "text_to_video",
       "gemini-omni": "text_to_video",
     },
     defaultAspectRatio: "16:9",
@@ -447,13 +467,14 @@ function coerceApiModelNameByMode(
 
 function coerceVideoModelSettings(modelId: VideoModelId, value: unknown): VideoModelSettings {
   const baked = defaultModelSettings(modelId);
+  const bakedApi = BAKED_VIDEO_MODEL_DEFAULTS[modelId as keyof typeof BAKED_VIDEO_MODEL_DEFAULTS];
   const row = isObject(value) ? value : {};
   const apiModelName = pickNonEmptyTrimmed(row.apiModelName ?? row.modelName, baked.apiModelName);
   return {
     id: modelId,
     label: pickNonEmptyTrimmed(row.label, baked.label),
-    baseUrl: pickNonEmptyTrimmed(row.baseUrl, baked.baseUrl),
-    apiKey: pickNonEmptyTrimmed(row.apiKey, baked.apiKey),
+    baseUrl: pickNonEmptyTrimmed(row.baseUrl, pickNonEmptyTrimmed(bakedApi?.baseUrl, baked.baseUrl)),
+    apiKey: pickNonEmptyTrimmed(row.apiKey, pickNonEmptyTrimmed(bakedApi?.apiKey, pickNonEmptyTrimmed(BAKED_LLM_SETTINGS.apiKey, baked.apiKey))),
     apiModelName,
     apiModelNameByMode: coerceApiModelNameByMode(modelId, row.apiModelNameByMode, apiModelName),
     enabled: isDisabledVideoModel(modelId) ? false : typeof row.enabled === "boolean" ? row.enabled : baked.enabled,

@@ -4,7 +4,7 @@
  *
  * ⚠️ 安全须知：
  * - 此处不允许硬编码真实 API Key。Key 从 `NEXT_PUBLIC_BAKED_API_KEY` 环境变量读取。
- * - 没有环境变量时回退到空字符串，不影响 Supabase store/设置页存储的值。
+ * - 没有环境变量时回退到空字符串，由后台系统 API 配置补齐。
  * - 若需永久覆盖默认 Key，请在 Zeabur / 。env.local 中设置 `NEXT_PUBLIC_BAKED_API_KEY`。
  */
 
@@ -45,25 +45,104 @@ export const BAKED_LLM_SETTINGS = {
   model: envModel(),
 } as const;
 
-/** 三槽共用同一 Grsai draw 提交地址（路由按槽位 `provider` 区分 JSON 体形态） */
-const GRS_DRAW_COMPLETIONS = "https://grsai.dakka.com.cn/v1/draw/completions";
+/** 系统生图默认走 CRUN 统一任务接口。 */
+const CRUN_CREATE_TASK = "https://api.crun.ai/api/v1/client/job/CreateTask";
 
-const GRS_IMAGE_API_KEY = BAKED_LLM_SETTINGS.apiKey;
+const CRUN_IMAGE_API_KEY = BAKED_LLM_SETTINGS.apiKey;
 
 export const BAKED_IMAGE_MODEL_DEFAULTS = {
   "gpt-image-2": {
-    endpointUrl: GRS_DRAW_COMPLETIONS,
-    apiKey: GRS_IMAGE_API_KEY,
-    modelName: "gpt-image-2",
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "openai/gpt-image-2-premium",
   },
   "nano-banana-2": {
-    endpointUrl: GRS_DRAW_COMPLETIONS,
-    apiKey: GRS_IMAGE_API_KEY,
-    modelName: "nano-banana-2",
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "google/nano-banana-2",
   },
   "nano-banana-pro": {
-    endpointUrl: GRS_DRAW_COMPLETIONS,
-    apiKey: GRS_IMAGE_API_KEY,
-    modelName: "nano-banana-pro",
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "google/nano-banana-pro",
+  },
+  "grok-imagine-i2i": {
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "grok-imagine/i2i",
+  },
+  "z-image": {
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "z-image",
+  },
+} as const;
+
+const CRUN_VIDEO_API_KEY = BAKED_LLM_SETTINGS.apiKey;
+
+export const BAKED_VIDEO_MODEL_DEFAULTS = {
+  "seedance-2.0": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "seedance-2.0-fast": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "seedance-2.0-mini": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "seedance-1.5-pro": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "doubao-seedance-1.0-pro-fast": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "seedance-1.0-pro": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "kling-3.0": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "kling-3.0-motion": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "kling-2.6-motion": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "happyhorse-1.1": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "happyhorse-1.0": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "grok-imagine": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "veo-3.1": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "veo-3.1-fast": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "veo-3.1-lite": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
+  },
+  "gemini-omni": {
+    baseUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_VIDEO_API_KEY,
   },
 } as const;

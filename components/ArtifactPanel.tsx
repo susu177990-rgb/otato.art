@@ -4,7 +4,6 @@ import type { Artifact } from "@/lib/types";
 import { STAGES, STAGE_LABELS } from "@/lib/types";
 import { getProjectScriptAutoStageUserMessage } from "@/lib/project-script-auto-kickoff";
 import type { PipelineProgress } from "@/lib/stage5-pipeline";
-import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import StageGroup from "./StageGroup";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./artifact-panel.module.css";
@@ -137,7 +136,7 @@ export default function ArtifactPanel({
         ? "连续大纲"
         : "开始本阶段";
   const startTitle = !hasApiKey
-    ? "请先配置 LLM API（设置 → LLM API）"
+    ? "网站内部 LLM API 暂未配置，请联系管理员"
     : chatLoading
       ? "对话生成中，请稍候"
       : !kickoffReady
@@ -191,7 +190,6 @@ export default function ArtifactPanel({
             ) : null}
             {onStartThisStage ? (
               <>
-                <ApiUsageModeToggle module="llm" />
               <button
                 type="button"
                 onClick={() => onStartThisStage()}

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const allowWithProgress = Boolean(body.allowWithProgress);
   const replaceExisting = Boolean(body.replaceExisting);
   if (!projectId) {
-    return Response.json({ error: "缺少 projectId，或未在设置 → LLM API 中配置 API Key。" }, { status: 400 });
+    return Response.json({ error: "缺少 projectId，或网站内部 LLM API 暂未配置，请联系管理员。" }, { status: 400 });
   }
 
   const existing = await getProject(projectId);

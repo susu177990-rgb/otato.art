@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { loadSystemPrompt } from "@/lib/prompt-loader";
 import { normalizeCreativeDirectionId } from "@/lib/creative-directions";
-import { getUserWorkspaceSnapshot } from "@/lib/db/user-api-settings-store";
+import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { resolveLlmModel } from "@/lib/llm-models";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Message } from "@/lib/types";
@@ -36,15 +36,12 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json" },
     });
   }
-  const snapshot = await getUserWorkspaceSnapshot(supabase, user.id, { visibility: "server" });
+  const snapshot = await getWorkspaceSnapshot(supabase);
   const modelConfig = resolveLlmModel(snapshot.llm, body.preferredLlmModelId);
 
   if (!modelConfig.apiKey) {
-    const message = snapshot.apiUsageMode?.llm === "user"
-      ? "请到设置页填写自己的 LLM API Key。"
-      : "网站内部 LLM API 暂未配置，请联系管理员。";
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ error: "网站内部 LLM API 暂未配置，请联系管理员。" }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }

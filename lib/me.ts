@@ -42,6 +42,32 @@ async function countOwnedRows(supabase: SupabaseClient, table: string, userId: s
   return count ?? 0;
 }
 
+async function countSuccessfulMediaRows(
+  supabase: SupabaseClient,
+  table: "image_gallery_records" | "video_gallery_records",
+  urlColumn: "image_url" | "video_url",
+  dataUrlKey: "imageUrl" | "videoUrl",
+  userId: string,
+): Promise<number> {
+  const current = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("status", "success")
+    .not(urlColumn, "is", null);
+  if (current.error) throw current.error;
+
+  const legacy = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("status", null)
+    .eq("data->>status", "success")
+    .not(`data->>${dataUrlKey}`, "is", null);
+  if (legacy.error) throw legacy.error;
+  return (current.count ?? 0) + (legacy.count ?? 0);
+}
+
 function authProvidersForUser(user: User): string[] {
   const providers = new Set<string>();
   const primaryProvider = user.app_metadata?.provider;
@@ -67,8 +93,8 @@ export async function getMeSnapshot(supabase: SupabaseClient, user: User): Promi
   ] = await Promise.all([
     countOwnedRows(supabase, "projects", user.id),
     countOwnedRows(supabase, "chat_conversations", user.id),
-    countOwnedRows(supabase, "image_gallery_records", user.id),
-    countOwnedRows(supabase, "video_gallery_records", user.id),
+    countSuccessfulMediaRows(supabase, "image_gallery_records", "image_url", "imageUrl", user.id),
+    countSuccessfulMediaRows(supabase, "video_gallery_records", "video_url", "videoUrl", user.id),
     countOwnedRows(supabase, "canvas_boards", user.id),
   ]);
   const authProviders = authProvidersForUser(user);

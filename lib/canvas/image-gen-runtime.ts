@@ -7,6 +7,10 @@ import { generateImage } from "@/lib/image-generate";
 import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import { resolveMentions } from "@/lib/prompt-mention";
+import { captureCreditReservation, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
+import { quoteImageCredits } from "@/lib/credits/pricing";
+import { assertCreditGenerationAllowed } from "@/lib/credits/risk";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 
 
@@ -22,13 +26,13 @@ function mustBeImageNode(node: CanvasNode | undefined): CanvasNode {
   return node;
 }
 
-function resolveImageModel(snapshot: WorkspaceSnapshot, node: CanvasNode): ImageModelSettings {
+function resolveImageModel(snapshot: WorkspaceSnapshot, node: CanvasNode): { modelId: ImageModelSettings["id"]; model: ImageModelSettings } {
   const modelId = node.metadata?.imageModelId ?? "gpt-image-2";
   const model = snapshot.imageWorkspace.models[modelId];
   if (!model?.endpointUrl?.trim() || !model.apiKey?.trim() || !model.modelName?.trim()) {
-    throw new Error(`生图模型「${model?.label ?? modelId}」未配置完整，请先到设置页填写 Endpoint / API Key / 模型名。`);
+    throw new Error(`网站内部图片 API 暂未配置完整（${model?.label ?? modelId}），请联系管理员。`);
   }
-  return model;
+  return { modelId, model };
 }
 
 function buildPrompt(board: CanvasBoard, node: CanvasNode): ReturnType<typeof resolveMentions> & { prompt: string } {
@@ -172,7 +176,7 @@ export async function executeCanvasImageGeneration(params: {
   projectId?: string | null;
 }): Promise<CanvasImageGenerationResult> {
   const sourceNode = mustBeImageNode(params.board.nodes.find((node) => node.id === params.nodeId));
-  const model = resolveImageModel(params.workspaceSnapshot, sourceNode);
+  const { modelId, model } = resolveImageModel(params.workspaceSnapshot, sourceNode);
   
   // 核心：构建并清洗提示词，解析内联文本节点引用
   const promptInfo = buildPrompt(params.board, sourceNode);
@@ -180,57 +184,96 @@ export async function executeCanvasImageGeneration(params: {
   const mentionedRefImages = collectMentionedReferenceImages(promptInfo);
   const refImages = mentionedRefImages.length > 0 ? mentionedRefImages : collectReferenceImages(params.board, sourceNode);
 
-  const result = await generateImage({
-    model,
-    prompt,
-    aspectRatio: sourceNode.metadata?.aspectRatio ?? "4:3",
+  await assertCreditGenerationAllowed(params.userId);
+  const quote = await quoteImageCredits(createSupabaseAdminClient(), {
+    feature: "canvas_image",
+    modelId,
     imageSize: sourceNode.metadata?.imageSize ?? "1K",
     gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
-    refImages,
   });
-
-  const storedImage = await persistGeneratedImageWithThumbnailToStorage(
-    params.supabase,
-    params.userId,
-    result.imageUrl,
-    randomUUID(),
-  );
-  const imageUrl = storedImage.imageUrl;
-
-  const size = estimateOutputSize(sourceNode.metadata?.aspectRatio);
-
-  // Update the source node directly — no separate output node
-  const nextSourceNode: CanvasNode = {
-    ...sourceNode,
-    width: size.width,
-    height: size.height,
+  const reservation = await reserveCreditsForQuote({
+    userId: params.userId,
+    projectId: params.projectId,
+    requestId: `canvas-image:${params.board.id}:${sourceNode.id}:${randomUUID()}`,
+    quote,
     metadata: {
-      ...sourceNode.metadata,
-      imageUrl,
-      previewImageUrl: imageUrl,
-      status: "success",
-      lastRunAt: new Date().toISOString(),
-      lastError: undefined,
-      naturalWidth: size.naturalWidth,
-      naturalHeight: size.naturalHeight,
+      boardId: params.board.id,
+      nodeId: sourceNode.id,
+      promptLength: prompt.length,
+      refImageCount: refImages.length,
     },
-  };
-  const galleryRecord = buildGalleryRecord({
-    imageUrl,
-    thumbnailUrl: storedImage.thumbnailUrl,
-    model,
-    sourceNode: nextSourceNode,
-    prompt,
-    refImageCount: refImages.length,
   });
-  await prependGalleryRecord(
-    params.supabase,
-    galleryRecord,
-    params.projectId === undefined ? {} : { projectId: params.projectId },
-  );
 
-  return {
-    sourceNode: nextSourceNode,
-    galleryRecord,
-  };
+  try {
+    const result = await generateImage({
+      model,
+      prompt,
+      aspectRatio: sourceNode.metadata?.aspectRatio ?? "4:3",
+      imageSize: sourceNode.metadata?.imageSize ?? "1K",
+      gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
+      refImages,
+    });
+
+    const storedImage = await persistGeneratedImageWithThumbnailToStorage(
+      params.supabase,
+      params.userId,
+      result.imageUrl,
+      randomUUID(),
+    );
+    const imageUrl = storedImage.imageUrl;
+
+    const size = estimateOutputSize(sourceNode.metadata?.aspectRatio);
+
+    // Update the source node directly — no separate output node
+    const nextSourceNode: CanvasNode = {
+      ...sourceNode,
+      width: size.width,
+      height: size.height,
+      metadata: {
+        ...sourceNode.metadata,
+        imageUrl,
+        previewImageUrl: imageUrl,
+        status: "success",
+        lastRunAt: new Date().toISOString(),
+        lastError: undefined,
+        naturalWidth: size.naturalWidth,
+        naturalHeight: size.naturalHeight,
+      },
+    };
+    const galleryRecord = buildGalleryRecord({
+      imageUrl,
+      thumbnailUrl: storedImage.thumbnailUrl,
+      model,
+      sourceNode: nextSourceNode,
+      prompt,
+      refImageCount: refImages.length,
+    });
+    await prependGalleryRecord(
+      params.supabase,
+      galleryRecord,
+      params.projectId === undefined ? {} : { projectId: params.projectId },
+    );
+    await captureCreditReservation({
+      reservationId: reservation.id,
+      resultRef: imageUrl,
+      metadata: { galleryRecordId: galleryRecord.id, boardId: params.board.id, nodeId: sourceNode.id },
+    });
+
+    return {
+      sourceNode: nextSourceNode,
+      galleryRecord,
+    };
+  } catch (error) {
+    await releaseCreditReservation({
+      reservationId: reservation.id,
+      reason: error instanceof Error ? error.message : "canvas_image_generation_failed",
+      metadata: { boardId: params.board.id, nodeId: sourceNode.id },
+    }).catch((releaseError) => {
+      console.error("[canvas/image-gen-runtime] release reservation failed", {
+        reservationId: reservation.id,
+        releaseError,
+      });
+    });
+    throw error;
+  }
 }

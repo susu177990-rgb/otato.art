@@ -166,7 +166,7 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
 
   const gptQ = args.image_quality;
   const gptImageQuality: GptImageQuality | undefined =
-    gptQ === "auto" || gptQ === "low" || gptQ === "medium" || gptQ === "high" ? gptQ : undefined;
+    gptQ === "low" || gptQ === "medium" || gptQ === "high" ? gptQ : undefined;
   const imageSize = resolveImageSizeFromUserRequest({
     explicit: args.image_size,
     texts: [ctx.latestUserText, prompt],

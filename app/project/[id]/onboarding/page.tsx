@@ -13,7 +13,6 @@ import type {
   SourceMaterial,
 } from "@/lib/types";
 import { useApiSettings } from "@/components/ApiSettingsProvider";
-import { ApiUsageModeToggle } from "@/components/ApiUsageModeSwitch";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import PlanningChatPanel from "@/components/PlanningChatPanel";
 import { buildAdaptationDiscussBootstrap, buildPlanningBootstrap } from "@/lib/planning-bootstrap";
@@ -106,7 +105,7 @@ export default function OnboardingPage({
   const [materials, setMaterials] = useState<SourceMaterial[]>([]);
   const [planningMessages, setPlanningMessages] = useState<Message[]>([]);
   const [adaptationMessages, setAdaptationMessages] = useState<Message[]>([]);
-  const { settings, openSettings } = useApiSettings();
+  const { settings } = useApiSettings();
 
   const [pasteLabel, setPasteLabel] = useState("");
   const [pasteBody, setPasteBody] = useState("");
@@ -194,7 +193,7 @@ export default function OnboardingPage({
   const runGenerateSeriesBible = useCallback(
     async (opts?: { replaceExisting?: boolean; creativeBriefOverride?: string }): Promise<Project> => {
       if (!settings.apiKey) {
-        throw new Error("请先在设置 → LLM API 中配置 API Key");
+        throw new Error("网站内部 LLM API 暂未配置，请联系管理员。");
       }
       const res = await fetch("/api/onboarding/generate-series-bible", {
         method: "POST",
@@ -444,7 +443,7 @@ export default function OnboardingPage({
       return;
     }
     if (!settings.apiKey) {
-      openSettings();
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     setGeneratingLocaleBrief(true);
@@ -475,7 +474,7 @@ export default function OnboardingPage({
       return;
     }
     if (!settings.apiKey) {
-      openSettings();
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     const hasBible = !!(seriesBibleDraft.trim() || (project?.seriesBible ?? "").trim());
@@ -538,7 +537,7 @@ export default function OnboardingPage({
       return;
     }
     if (!settings.apiKey) {
-      openSettings();
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     setSaving(true);
@@ -603,7 +602,7 @@ export default function OnboardingPage({
 
   async function handleGenerateAdaptPlan() {
     if (!settings.apiKey) {
-      openSettings();
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     const latestDiscuss =
@@ -671,7 +670,7 @@ export default function OnboardingPage({
       return;
     }
     if (!settings.apiKey) {
-      openSettings();
+      alert("网站内部 LLM API 暂未配置，请联系管理员。");
       return;
     }
     const bibleSave = seriesBibleDraft.trim();
@@ -1126,7 +1125,6 @@ export default function OnboardingPage({
                   </button>
                   {isAdaptationUi && (phase === "idle" || phase === "upload") ? (
                     <>
-                      <ApiUsageModeToggle module="llm" />
                       <button
                         type="button"
                         onClick={() => void handleSaveMaterialsAndAnalyze()}
@@ -1168,7 +1166,6 @@ export default function OnboardingPage({
                     messages={planningMessages}
                     planningBootstrap={planningBootstrap}
                     extraBody={{ creativeDirectionId }}
-                    onOpenSettings={() => openSettings()}
                     onMessagesChange={setPlanningMessages}
                     onAssistantDone={handlePlanningAssistantDone}
                   />
@@ -1226,7 +1223,6 @@ export default function OnboardingPage({
                     planningBootstrap={adaptationDiscussBootstrap}
                     chatEndpoint="/api/adaptation-discuss"
                     extraBody={{ creativeDirectionId }}
-                    onOpenSettings={() => openSettings()}
                     onMessagesChange={setAdaptationMessages}
                     onAssistantDone={handleAdaptationAssistantDone}
                     headerTitle="改编策略讨论（不产出 STAGE 模板正文）"
@@ -1234,7 +1230,6 @@ export default function OnboardingPage({
                     inputPlaceholder="输入你的想法或追问…"
                   />
                   <div className={styles.cardActions}>
-                    <ApiUsageModeToggle module="llm" />
                     <button
                       type="button"
                       onClick={() => void handleGenerateAdaptPlan()}
@@ -1331,7 +1326,6 @@ export default function OnboardingPage({
                       </p>
                     </div>
                     <div className={styles.cardActions}>
-                      <ApiUsageModeToggle module="llm" />
                       <button
                         type="button"
                         disabled={!seriesBibleDraft.trim()}
@@ -1387,7 +1381,6 @@ export default function OnboardingPage({
                       </p>
                     </div>
                     <div className={styles.cardActions}>
-                      <ApiUsageModeToggle module="llm" />
                       <button
                         type="button"
                         disabled={

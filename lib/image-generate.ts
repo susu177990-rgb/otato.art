@@ -1,6 +1,13 @@
 import type { NextRequest } from "next/server";
 import { extractImageFromUpstreamResponse } from "@/lib/image-generation-response";
 import {
+  GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER,
+  GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
+  GPT_IMAGE_2_PROMPT_MAX_LENGTH,
+  Z_IMAGE_PROMPT_MAX_LENGTH,
+} from "@/lib/image-workspace";
+import {
+  type GptImageBackground,
   type GptImageQuality,
   type ImageAspectRatio,
   type ImageModelSettings,
@@ -8,15 +15,23 @@ import {
 } from "@/lib/image-workspace";
 
 type GenerateBody = {
+  requestId?: string;
   prompt?: string;
+  modelId?: string;
   model?: ImageModelSettings;
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
   projectId?: string;
-  /** gpt-image-* 专用：auto | low | medium | high；缺省时按清晰度档位映射 */
+  /** gpt-image-* 专用：low | medium | high；缺省时使用 low */
   gptImageQuality?: GptImageQuality;
+  /** gpt-image-* 专用：auto | transparent | opaque */
+  gptImageBackground?: GptImageBackground;
   refImages?: string[];
 };
+
+function concreteGptImageQuality(value: GptImageQuality | undefined): "low" | "medium" | "high" {
+  return value === "low" || value === "medium" || value === "high" ? value : "low";
+}
 
 export type ImageGenerationFailureStage =
   | "request_parse"
@@ -121,14 +136,18 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
       }
     }
     const gq = meta.gptImageQuality;
+    const gb = meta.gptImageBackground;
     const body: GenerateBody = {
       prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
+      requestId: typeof meta.requestId === "string" ? meta.requestId.trim() : undefined,
+      modelId: typeof meta.modelId === "string" ? meta.modelId.trim() : undefined,
       model: meta.model as ImageModelSettings | undefined,
       aspectRatio: meta.aspectRatio as ImageAspectRatio | undefined,
       imageSize: meta.imageSize as ImageSizeTier | undefined,
       projectId: typeof meta.projectId === "string" ? meta.projectId.trim() : undefined,
-      gptImageQuality:
-        gq === "auto" || gq === "low" || gq === "medium" || gq === "high" ? (gq as GptImageQuality) : undefined,
+      gptImageQuality: gq === "low" || gq === "medium" || gq === "high" ? (gq as GptImageQuality) : undefined,
+      gptImageBackground:
+        gb === "auto" || gb === "transparent" || gb === "opaque" ? (gb as GptImageBackground) : undefined,
       refImages,
     };
     return { ok: true, body };
@@ -167,12 +186,18 @@ const STANDARD_IMAGE_SIZE_BY_RATIO: Record<Exclude<ImageAspectRatio, "auto">, Re
   "9:16": { "1K": "720x1280", "2K": "1080x1920", "4K": "2160x3840" },
   "16:9": { "1K": "1280x720", "2K": "1920x1080", "4K": "3840x2160" },
   "21:9": { "1K": "1280x549", "2K": "1920x823", "4K": "3840x1646" },
+  "9:21": { "1K": "549x1280", "2K": "823x1920", "4K": "1646x3840" },
+  "5:4": { "1K": "1280x1024", "2K": "1920x1536", "4K": "3840x3072" },
+  "4:5": { "1K": "1024x1280", "2K": "1536x1920", "4K": "3072x3840" },
   "3:2": { "1K": "1280x853", "2K": "1920x1280", "4K": "3840x2560" },
   "2:3": { "1K": "853x1280", "2K": "1280x1920", "4K": "2560x3840" },
 };
 
 const isGptImageModel = (m: string) => /^gpt-image-/i.test(m.trim());
 const usesGptImage2StyleResolution = (m: string) => /^gpt-image-2(-vip)?$/i.test(m.trim());
+const isCrunGptImage2Model = (m: string) => /^openai\/gpt-image-2/i.test(m.trim());
+const isCrunGptImage2StableModel = (m: string) => /^openai\/gpt-image-2-stable$/i.test(m.trim());
+const isCrunGptImage2PremiumModel = (m: string) => /^openai\/gpt-image-2-premium$/i.test(m.trim());
 
 function floorTo16(n: number): number {
   return Math.max(16, Math.floor(n / 16) * 16);
@@ -208,12 +233,6 @@ function resolveGrsaiGptImageAspectRatio(ratio: ImageAspectRatio, imageSize: Ima
   if (usesGptImage2StyleResolution(modelName)) return clampWxHForGptImage2(STANDARD_IMAGE_SIZE_BY_RATIO[ratio][imageSize]);
   if (isGptImageModel(modelName)) return STANDARD_IMAGE_SIZE_BY_RATIO[ratio][imageSize];
   return ratio;
-}
-
-function gptImageQualityFromTier(t: ImageSizeTier): "low" | "medium" | "high" {
-  if (t === "4K") return "high";
-  if (t === "2K") return "medium";
-  return "low";
 }
 
 function buildNanoBananaImageConfig(aspectRatio: ImageAspectRatio, imageSize: ImageSizeTier): Record<string, unknown> {
@@ -273,6 +292,7 @@ function imageExt(mime: string): string {
 type Route =
   | { kind: "grsai-nano-banana"; submitUrl: string; resultUrl: string }
   | { kind: "grsai-gpt-image"; submitUrl: string; resultUrl: string }
+  | { kind: "crun-task"; submitUrl: string; resultUrl: string }
   | { kind: "openai-images"; baseUrl: string }
   | { kind: "chat-completions"; url: string };
 
@@ -298,6 +318,18 @@ function grsaiDrawResultUrl(submitUrl: string): string {
   return raw.replace(/\/draw\/[^/?#]+(\?.*)?$/i, "/draw/result$1");
 }
 
+function crunTaskInfoUrl(submitUrl: string): string {
+  const raw = submitUrl.trim();
+  try {
+    const parsed = new URL(raw);
+    parsed.pathname = "/api/v1/client/job/TaskInfo";
+    parsed.search = "";
+    return parsed.toString();
+  } catch {
+    return raw.replace(/\/api\/v1\/client\/job\/CreateTask(?:[?#].*)?$/i, "/api/v1/client/job/TaskInfo");
+  }
+}
+
 function inferRoute(endpointUrl: string, provider: ImageModelSettings["provider"]): Route {
   const url = endpointUrl.trim();
   const lower = url.toLowerCase();
@@ -320,12 +352,346 @@ function inferRoute(endpointUrl: string, provider: ImageModelSettings["provider"
   if (/\/images\//i.test(url)) {
     return { kind: "openai-images", baseUrl: url };
   }
+  if (/crun\.ai/i.test(lower) || /\/api\/v1\/client\/job\/createtask(?:[?#]|$)/i.test(url)) {
+    return { kind: "crun-task", submitUrl: url, resultUrl: crunTaskInfoUrl(url) };
+  }
   if (/(grsai|dakka)/i.test(lower)) {
     return provider === "gpt-image"
       ? { kind: "grsai-gpt-image", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) }
       : { kind: "grsai-nano-banana", submitUrl: url, resultUrl: grsaiDrawResultUrl(url) };
   }
   return { kind: "chat-completions", url };
+}
+
+// ---------- CRUN 统一任务接口 ----------
+
+function parseCrunTaskId(data: Record<string, unknown> | null): string {
+  if (!data) return "";
+  const nested = data.data && typeof data.data === "object" ? data.data as Record<string, unknown> : {};
+  return String(
+    data.task_id ??
+      data.taskId ??
+      data.id ??
+      nested.task_id ??
+      nested.taskId ??
+      nested.id ??
+      "",
+  ).trim();
+}
+
+function parseCrunMediaUrl(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const row = data as Record<string, unknown>;
+  const direct =
+    pickNonEmptyUrl(row.url) ??
+    pickNonEmptyUrl(row.image_url) ??
+    pickNonEmptyUrl(row.imageUrl) ??
+    pickNonEmptyUrl(row.result_url) ??
+    pickNonEmptyUrl(row.output);
+  if (direct) return direct;
+  for (const key of ["media_urls", "mediaUrls", "images", "results", "output"] as const) {
+    const value = row[key];
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0];
+      if (typeof first === "string") return pickNonEmptyUrl(first);
+      if (first && typeof first === "object") {
+        const nested = parseCrunMediaUrl(first);
+        if (nested) return nested;
+      }
+    }
+  }
+  if (row.data && typeof row.data === "object") return parseCrunMediaUrl(row.data);
+  if (row.result && typeof row.result === "object") return parseCrunMediaUrl(row.result);
+  return undefined;
+}
+
+function crunTaskSucceeded(status: unknown): boolean {
+  const value = String(status ?? "").trim().toLowerCase();
+  return value === "success" || value === "succeeded" || value === "completed" || value === "done" || value === "finished";
+}
+
+function crunTaskFailed(status: unknown): boolean {
+  return /^(fail|failed|failure|error|cancelled|canceled)$/i.test(String(status ?? "").trim());
+}
+
+function crunFailureReason(statusContainer: Record<string, unknown>, data: Record<string, unknown> | null): string {
+  for (const value of [
+    statusContainer.error,
+    statusContainer.reason,
+    statusContainer.error_message,
+    statusContainer.errorMessage,
+    statusContainer.fail_reason,
+    statusContainer.failReason,
+    statusContainer.message,
+  ]) {
+    const text = String(value ?? "").trim();
+    if (text && !/^success$/i.test(text)) return text;
+  }
+  const topLevelMessage = String(data?.message ?? "").trim();
+  if (topLevelMessage && !/^success$/i.test(topLevelMessage)) return topLevelMessage;
+  return "CRUN 任务失败，未返回具体原因。";
+}
+
+async function readCrunBody(response: Response): Promise<Record<string, unknown> | null> {
+  const text = await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+const GROK_IMAGINE_ASPECT_RATIOS = new Set<ImageAspectRatio>(["1:1", "2:3", "3:2", "16:9", "9:16"]);
+const Z_IMAGE_ASPECT_RATIOS = new Set<ImageAspectRatio>(["16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "1:1"]);
+const GPT_IMAGE_2_PREMIUM_ASPECT_RATIOS = new Set<ImageAspectRatio>(GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER);
+
+function isCrunGrokImagine(modelName: string): boolean {
+  return /^grok-imagine(?:\/(?:i2i|t2i))?$/i.test(modelName.trim());
+}
+
+function isCrunZImage(modelName: string): boolean {
+  return /^z-image$/i.test(modelName.trim());
+}
+
+function resolveCrunSubmitModelName(modelName: string, refImages: string[]): string {
+  const trimmed = modelName.trim();
+  if (isCrunGrokImagine(trimmed)) return refImages.length > 0 ? "grok-imagine/i2i" : "grok-imagine/t2i";
+  return trimmed;
+}
+
+function buildCrunImageInput(
+  modelName: string,
+  prompt: string,
+  aspectRatio: ImageAspectRatio,
+  imageSize: ImageSizeTier,
+  gptImageQuality: GptImageQuality | undefined,
+  gptImageBackground: GptImageBackground | undefined,
+  refImages: string[],
+): Record<string, unknown> {
+  const imageUrls = refImages.map((ref) => ref.trim()).filter(Boolean);
+  if (isCrunGptImage2PremiumModel(modelName)) {
+    return {
+      prompt,
+      ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
+      aspect_ratio: aspectRatio,
+      resolution: imageSize,
+      quality: concreteGptImageQuality(gptImageQuality),
+    };
+  }
+  if (isCrunGptImage2StableModel(modelName)) {
+    return {
+      prompt,
+      ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
+      aspect_ratio: aspectRatio,
+      quality: concreteGptImageQuality(gptImageQuality),
+      background: gptImageBackground ?? "auto",
+      output_format: "png",
+      moderation: "low",
+    };
+  }
+  if (isCrunGptImage2Model(modelName)) {
+    return {
+      prompt,
+      ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
+      aspect_ratio: aspectRatio,
+    };
+  }
+  if (isCrunGrokImagine(modelName) && imageUrls.length > 0) {
+    return {
+      ...(prompt ? { prompt } : {}),
+      img_urls: imageUrls,
+    };
+  }
+  if (isCrunGrokImagine(modelName)) {
+    return {
+      prompt,
+      aspect_ratio: aspectRatio,
+    };
+  }
+  if (isCrunZImage(modelName)) {
+    return {
+      prompt,
+      aspect_ratio: aspectRatio,
+    };
+  }
+  return {
+    prompt,
+    ...(aspectRatio !== "auto" ? { aspect_ratio: aspectRatio } : { aspect_ratio: "auto" }),
+    resolution: imageSize,
+    ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
+  };
+}
+
+async function generateViaCrunTask(
+  apiKey: string,
+  route: Route & { kind: "crun-task" },
+  modelName: string,
+  prompt: string,
+  aspectRatio: ImageAspectRatio,
+  imageSize: ImageSizeTier,
+  gptImageQuality: GptImageQuality | undefined,
+  gptImageBackground: GptImageBackground | undefined,
+  refImages: string[],
+): Promise<string> {
+  const diagnosticBase = {
+    routeKind: route.kind,
+    endpoint: endpointForDiagnostics(route.submitUrl),
+  };
+  const invalidRefs = refImages.filter((ref) => !/^https?:\/\//i.test(ref.trim()));
+  if (invalidRefs.length > 0) {
+    throw new ImageGenerationError(
+      "CRUN 参考图必须是可直连的 http(s) URL；本地图片需要先上传到云存储后再提交。",
+      { ...diagnosticBase, stage: "request_parse" },
+    );
+  }
+  const imageUrls = refImages.map((ref) => ref.trim()).filter(Boolean);
+  if (isCrunGptImage2PremiumModel(modelName)) {
+    if (prompt.length > GPT_IMAGE_2_PROMPT_MAX_LENGTH) {
+      throw new ImageGenerationError(`GPT Image 2 Premium 提示词最多支持 ${GPT_IMAGE_2_PROMPT_MAX_LENGTH} 个字符。`, {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (imageUrls.length > GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES) {
+      throw new ImageGenerationError(`GPT Image 2 Premium 最多支持 ${GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES} 张参考图。`, {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (!GPT_IMAGE_2_PREMIUM_ASPECT_RATIOS.has(aspectRatio)) {
+      throw new ImageGenerationError("GPT Image 2 Premium 不支持该图片比例。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+  }
+  if (isCrunGrokImagine(modelName)) {
+    if (imageUrls.length > 5) {
+      throw new ImageGenerationError("Grok Imagine 图生图最多支持 5 张参考图。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (imageUrls.length === 0 && !GROK_IMAGINE_ASPECT_RATIOS.has(aspectRatio)) {
+      throw new ImageGenerationError("Grok Imagine 文生图只支持 1:1、2:3、3:2、16:9、9:16 比例。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+  }
+  if (isCrunZImage(modelName)) {
+    if (imageUrls.length > 0) {
+      throw new ImageGenerationError("Z Image Turbo 只支持文生图，不能提交参考图。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (prompt.length > Z_IMAGE_PROMPT_MAX_LENGTH) {
+      throw new ImageGenerationError(`Z Image Turbo 提示词最多支持 ${Z_IMAGE_PROMPT_MAX_LENGTH} 个字符。`, {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (!Z_IMAGE_ASPECT_RATIOS.has(aspectRatio)) {
+      throw new ImageGenerationError("Z Image Turbo 只支持 16:9、9:16、4:3、3:4、3:2、2:3、1:1 比例。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+  }
+  const submitModelName = resolveCrunSubmitModelName(modelName, imageUrls);
+  const payload = {
+    model: submitModelName,
+    input: buildCrunImageInput(submitModelName, prompt, aspectRatio, imageSize, gptImageQuality, gptImageBackground, imageUrls),
+  };
+
+  let submit: Response;
+  try {
+    submit = await fetch(route.submitUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    throw new ImageGenerationError(
+      `未能连接到 CRUN API：${networkErrorMessage(error)}`,
+      { ...diagnosticBase, stage: "upstream_submit" },
+      error,
+    );
+  }
+
+  const submitData = await readCrunBody(submit);
+  if (!submit.ok) {
+    const upstreamBody = submitData ? textSnippet(JSON.stringify(submitData)) : await responseTextSnippet(submit);
+    throw new ImageGenerationError(
+      `CRUN 提交失败 (${submit.status})${upstreamBody ? `: ${upstreamBody}` : ""}`,
+      { ...diagnosticBase, stage: "upstream_submit", status: submit.status, upstreamBody },
+    );
+  }
+  const immediate = parseCrunMediaUrl(submitData);
+  if (immediate) return immediate;
+
+  const taskId = parseCrunTaskId(submitData);
+  if (!taskId) {
+    throw new ImageGenerationError(
+      "CRUN 已响应，但没有返回任务 ID。",
+      { ...diagnosticBase, stage: "upstream_parse", upstreamBody: submitData ? textSnippet(JSON.stringify(submitData)) : "" },
+    );
+  }
+
+  const statusEndpoint = endpointForDiagnostics(route.resultUrl);
+  for (let i = 0; i < POLL_MAX_TRIES; i += 1) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    let res: Response;
+    try {
+      res = await fetch(`${route.resultUrl}?task_id=${encodeURIComponent(taskId)}`, {
+        method: "GET",
+        headers: { "X-API-KEY": apiKey },
+        cache: "no-store",
+      });
+    } catch (error) {
+      throw new ImageGenerationError(
+        `查询 CRUN 任务失败：${networkErrorMessage(error)}`,
+        { stage: "upstream_poll", routeKind: route.kind, endpoint: statusEndpoint, taskId },
+        error,
+      );
+    }
+
+    const data = await readCrunBody(res);
+    if (!res.ok) {
+      const upstreamBody = data ? textSnippet(JSON.stringify(data)) : await responseTextSnippet(res);
+      throw new ImageGenerationError(
+        `查询 CRUN 任务失败 (${res.status})${upstreamBody ? `: ${upstreamBody}` : ""}`,
+        { stage: "upstream_poll", routeKind: route.kind, endpoint: statusEndpoint, status: res.status, taskId, upstreamBody },
+      );
+    }
+
+    const statusContainer = data?.data && typeof data.data === "object" ? data.data as Record<string, unknown> : data ?? {};
+    const status = statusContainer.status ?? statusContainer.state ?? data?.status;
+    const mediaUrl = parseCrunMediaUrl(statusContainer) ?? parseCrunMediaUrl(data);
+    if (mediaUrl && (!status || crunTaskSucceeded(status))) return mediaUrl;
+    if (crunTaskFailed(status)) {
+      const reason = crunFailureReason(statusContainer, data);
+      throw new ImageGenerationError(reason, {
+        stage: "upstream_poll",
+        routeKind: route.kind,
+        endpoint: statusEndpoint,
+        taskId,
+        upstreamBody: data ? textSnippet(JSON.stringify(data)) : "",
+      });
+    }
+  }
+
+  throw new ImageGenerationError("生成超时，请稍后重试", {
+    stage: "upstream_timeout",
+    routeKind: route.kind,
+    endpoint: statusEndpoint,
+    taskId,
+  });
 }
 
 // ---------- Grsai 异步出图 ----------
@@ -424,14 +790,12 @@ async function generateViaGrsai(
   aspectRatio: ImageAspectRatio,
   imageSize: ImageSizeTier,
   gptImageQuality: GptImageQuality | undefined,
+  gptImageBackground: GptImageBackground | undefined,
   refImages: string[],
 ): Promise<string> {
   const urls = refImages.filter((r) => r && (r.startsWith("http") || r.startsWith("data:")));
 
-  const grsaiGptQuality: "low" | "medium" | "high" =
-    gptImageQuality === "auto"
-      ? gptImageQualityFromTier(imageSize)
-      : gptImageQuality ?? gptImageQualityFromTier(imageSize);
+  const grsaiGptQuality = concreteGptImageQuality(gptImageQuality);
 
   const body: Record<string, unknown> =
     route.kind === "grsai-gpt-image"
@@ -622,20 +986,18 @@ async function generateViaOpenAIImages(
   aspectRatio: ImageAspectRatio,
   imageSize: ImageSizeTier,
   gptImageQuality: GptImageQuality | undefined,
+  gptImageBackground: GptImageBackground | undefined,
   refImages: string[],
 ): Promise<string> {
   const isGpt = isGptImageModel(modelName);
   const size = resolveOpenAiSize(aspectRatio, imageSize, modelName);
-  /** 中转常见 bug：无法处理 quality「auto」字符串；对外只发 low/medium/high */
-  const quality: "low" | "medium" | "high" =
-    gptImageQuality === undefined || gptImageQuality === "auto"
-      ? gptImageQualityFromTier(imageSize)
-      : gptImageQuality;
+  const quality = concreteGptImageQuality(gptImageQuality);
 
   if (refImages.length === 0) {
     const payload: Record<string, unknown> = { model: modelName, prompt, n: 1, size };
     if (isGpt) {
       payload.quality = quality;
+      payload.background = gptImageBackground ?? "auto";
       payload.output_format = "png";
       /** 不传 moderation / response_format：减少与 OpenAI 子集不兼容的中转冲突 */
     } else {
@@ -712,6 +1074,7 @@ async function generateViaOpenAIImages(
   fd.append("size", size === "auto" ? "1024x1024" : size);
   if (isGpt) {
     fd.append("quality", quality);
+    fd.append("background", gptImageBackground ?? "auto");
     fd.append("output_format", "png");
   } else {
     fd.append("image_size", imageSize);
@@ -844,6 +1207,7 @@ export type GenerateImageParams = {
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
   gptImageQuality?: GptImageQuality;
+  gptImageBackground?: GptImageBackground;
   refImages?: string[];
 };
 
@@ -855,6 +1219,7 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
   const aspectRatio = params.aspectRatio || "4:3";
   const imageSize = params.imageSize || "1K";
   const gptImageQuality = params.gptImageQuality;
+  const gptImageBackground = params.gptImageBackground;
   const refImages = Array.isArray(params.refImages) ? params.refImages.filter(Boolean) : [];
 
   const endpointUrl = model.endpointUrl.trim();
@@ -871,6 +1236,19 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       aspectRatio,
       imageSize,
       gptImageQuality,
+      gptImageBackground,
+      refImages,
+    );
+  } else if (route.kind === "crun-task") {
+    imageUrl = await generateViaCrunTask(
+      model.apiKey,
+      route,
+      modelName,
+      prompt,
+      aspectRatio,
+      imageSize,
+      gptImageQuality,
+      gptImageBackground,
       refImages,
     );
   } else if (route.kind === "openai-images") {
@@ -882,6 +1260,7 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       aspectRatio,
       imageSize,
       gptImageQuality,
+      gptImageBackground,
       refImages,
     );
   } else {

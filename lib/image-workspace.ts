@@ -8,20 +8,41 @@ export type ImageModeId =
 export const IMAGE_MODES: ReadonlyArray<{ id: ImageModeId; label: string }> = [
   { id: "free", label: "自由模式" },
 ];
-export type ImageModelId = "gpt-image-2" | "nano-banana-2" | "nano-banana-pro";
-export type ImageAspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "9:16" | "16:9" | "21:9";
+export type ImageModelId = "gpt-image-2" | "nano-banana-2" | "nano-banana-pro" | "grok-imagine-i2i" | "z-image";
+export type ImageAspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "5:4" | "4:5" | "3:4" | "4:3" | "9:16" | "16:9" | "21:9" | "9:21";
 export type ImageSizeTier = "1K" | "2K" | "4K";
-/** OpenAI gpt-image-* `quality`：含官方默认 auto；仅 GPT Image 路由使用 */
-export type GptImageQuality = "auto" | "low" | "medium" | "high";
+export type ImageModelProvider = "gpt-image" | "nano-banana" | "grok-imagine" | "z-image";
+/** OpenAI gpt-image-* `quality`：仅 GPT Image 路由使用 */
+export type GptImageQuality = "low" | "medium" | "high";
+export type GptImageBackground = "auto" | "transparent" | "opaque";
 export type ImageGenerationStatus = "success" | "error";
 
-export const GPT_IMAGE_QUALITY_ORDER: GptImageQuality[] = ["auto", "low", "medium", "high"];
+export const GPT_IMAGE_QUALITY_ORDER: GptImageQuality[] = ["low", "medium", "high"];
+export const GPT_IMAGE_BACKGROUND_ORDER: GptImageBackground[] = ["auto", "transparent", "opaque"];
+export const GPT_IMAGE_2_PREMIUM_MODEL_NAME = "openai/gpt-image-2-premium";
+export const GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES = 14;
+export const GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER: ImageAspectRatio[] = ["auto", "1:1", "2:3", "3:2", "5:4", "4:5", "9:16", "16:9", "4:3", "3:4", "21:9", "9:21"];
+export const IMAGE_ASPECT_RATIO_ORDER: ImageAspectRatio[] = GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER;
+export const GROK_IMAGINE_ASPECT_RATIO_ORDER: ImageAspectRatio[] = ["1:1", "2:3", "3:2", "16:9", "9:16"];
+export const GROK_IMAGINE_T2I_ASPECT_RATIO_ORDER = GROK_IMAGINE_ASPECT_RATIO_ORDER;
+export const GROK_IMAGINE_I2I_ASPECT_RATIO_ORDER: ImageAspectRatio[] = [];
+export const GROK_IMAGINE_T2I_DEFAULT_ASPECT_RATIO: ImageAspectRatio = "1:1";
+export const GROK_IMAGINE_T2I_PROMPT_MAX_LENGTH = 5000;
+export const GROK_IMAGINE_I2I_PROMPT_MAX_LENGTH = 30000;
+export const Z_IMAGE_PROMPT_MAX_LENGTH = 800;
+export const GPT_IMAGE_2_PROMPT_MAX_LENGTH = 10000;
+export const NANO_BANANA_PROMPT_MAX_LENGTH = 20000;
 
 export const GPT_IMAGE_QUALITY_LABELS: Record<GptImageQuality, string> = {
-  auto: "自动",
   low: "低",
   medium: "中",
   high: "高",
+};
+
+export const GPT_IMAGE_BACKGROUND_LABELS: Record<GptImageBackground, string> = {
+  auto: "自动",
+  transparent: "透明",
+  opaque: "不透明",
 };
 
 export const IMAGE_SETTINGS_STORAGE_KEY = "script-agent-image-settings";
@@ -47,7 +68,7 @@ export interface ImageModelSettings {
   modelName: string;
   endpointUrl: string;
   apiKey: string;
-  provider: "gpt-image" | "nano-banana";
+  provider: ImageModelProvider;
 }
 
 /** 用户自定义作图模式（id 建议 `custom_` + UUID，避免与内置 {@link ImageModeId} 冲突） */
@@ -56,8 +77,8 @@ export interface CustomImageMode {
   label: string;
 }
 
-/** 作图页上传参考图槽位数量（图1…） */
-export const IMAGE_REF_SLOT_COUNT = 10;
+/** 作图页上传参考图槽位数量（图1…）；GPT Image 2 Premium 最多支持 14 张参考图。 */
+export const IMAGE_REF_SLOT_COUNT = GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES;
 
 export interface ImageWorkspaceSettings {
   /** 内置 + 自定义模式的模版；自定义键为 {@link CustomImageMode.id} */
@@ -65,6 +86,8 @@ export interface ImageWorkspaceSettings {
   models: Record<ImageModelId, ImageModelSettings>;
   /** gpt-image 模型请求质量；nano-banana 忽略 */
   gptImageQuality: GptImageQuality;
+  /** gpt-image 模型背景策略；nano-banana 忽略 */
+  gptImageBackground: GptImageBackground;
   /** 接在内置 {@link IMAGE_MODES} 之后展示 */
   customModes: CustomImageMode[];
   /**
@@ -99,6 +122,8 @@ export interface ImageGalleryRecord {
   imageSize: ImageSizeTier;
   /** 仅 GPT Image 记录可能有值 */
   gptImageQuality?: GptImageQuality;
+  /** 仅 GPT Image 记录可能有值 */
+  gptImageBackground?: GptImageBackground;
   imageUrl?: string;
   /** Lightweight gallery/list preview. Original stays in imageUrl. */
   thumbnailUrl?: string;
@@ -120,22 +145,90 @@ export interface ImageGalleryReferenceImage {
   type?: string;
 }
 
-export const IMAGE_MODEL_ORDER: ImageModelId[] = ["gpt-image-2", "nano-banana-2", "nano-banana-pro"];
+export const IMAGE_MODEL_ORDER: ImageModelId[] = [
+  "gpt-image-2",
+  "nano-banana-2",
+  "nano-banana-pro",
+  "grok-imagine-i2i",
+  "z-image",
+];
+
+export function isGrokImagineImageModel(modelId: ImageModelId): boolean {
+  return modelId === "grok-imagine-i2i";
+}
+
+export function imageAspectRatiosForContext(modelId: ImageModelId, refImageCount: number): ImageAspectRatio[] {
+  if (modelId === "gpt-image-2") return GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER;
+  if (isGrokImagineImageModel(modelId)) {
+    return refImageCount > 0 ? GROK_IMAGINE_I2I_ASPECT_RATIO_ORDER : GROK_IMAGINE_T2I_ASPECT_RATIO_ORDER;
+  }
+  return IMAGE_ASPECT_RATIO_ORDER;
+}
+
+export function imageSupportsAspectRatioForContext(modelId: ImageModelId, refImageCount: number): boolean {
+  return imageAspectRatiosForContext(modelId, refImageCount).length > 0;
+}
+
+export function normalizeImageAspectRatioForContext(
+  ratio: ImageAspectRatio,
+  modelId: ImageModelId,
+  refImageCount: number,
+): ImageAspectRatio {
+  const supported = imageAspectRatiosForContext(modelId, refImageCount);
+  return supported.length === 0 || supported.includes(ratio) ? ratio : supported[0] ?? GROK_IMAGINE_T2I_DEFAULT_ASPECT_RATIO;
+}
+
+export function imagePromptMaxLengthForContext(modelId: ImageModelId, refImageCount: number): number | undefined {
+  if (modelId === "gpt-image-2") return GPT_IMAGE_2_PROMPT_MAX_LENGTH;
+  if (modelId === "nano-banana-2" || modelId === "nano-banana-pro") return NANO_BANANA_PROMPT_MAX_LENGTH;
+  if (modelId === "z-image") return Z_IMAGE_PROMPT_MAX_LENGTH;
+  if (!isGrokImagineImageModel(modelId)) return undefined;
+  return refImageCount > 0 ? GROK_IMAGINE_I2I_PROMPT_MAX_LENGTH : GROK_IMAGINE_T2I_PROMPT_MAX_LENGTH;
+}
+
+export function imageReferenceLimitForContext(modelId: ImageModelId): number {
+  if (modelId === "gpt-image-2") return GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES;
+  if (isGrokImagineImageModel(modelId)) return 5;
+  if (modelId === "z-image") return 0;
+  return 10;
+}
+
+function imageModelProvider(id: ImageModelId): ImageModelProvider {
+  if (id === "gpt-image-2") return "gpt-image";
+  if (id === "grok-imagine-i2i") return "grok-imagine";
+  if (id === "z-image") return "z-image";
+  return "nano-banana";
+}
 
 function imageModelFromBaked(id: ImageModelId): ImageModelSettings {
   const row = BAKED_IMAGE_MODEL_DEFAULTS[id];
   return {
     id,
-    label: id,
+    label: id === "grok-imagine-i2i" ? "Grok Imagine" : id,
     modelName: row.modelName,
     endpointUrl: row.endpointUrl,
     apiKey: pickNonEmptyTrimmed(row.apiKey, BAKED_LLM_SETTINGS.apiKey),
-    provider: id === "gpt-image-2" ? "gpt-image" : "nano-banana",
+    provider: imageModelProvider(id),
   };
 }
 
+function normalizeImageModelLabel(id: ImageModelId, raw: unknown, fallback: string): string {
+  const label = pickNonEmptyTrimmed(raw, fallback);
+  if (id === "grok-imagine-i2i" && /^grok imagine i2i$/i.test(label.trim())) return "Grok Imagine";
+  return label;
+}
+
+function normalizeImageModelName(id: ImageModelId, raw: unknown, fallback: string): string {
+  const modelName = pickNonEmptyTrimmed(raw, fallback);
+  if (id === "gpt-image-2" && /^openai\/gpt-image-2(?:-stable)?$/i.test(modelName.trim())) {
+    return GPT_IMAGE_2_PREMIUM_MODEL_NAME;
+  }
+  return modelName;
+}
+
 export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
-  gptImageQuality: "auto",
+  gptImageQuality: "low",
+  gptImageBackground: "auto",
   customModes: [],
   refSlotHintsByMode: {},
   coverImageUrlByMode: {},
@@ -150,6 +243,8 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
     "gpt-image-2": imageModelFromBaked("gpt-image-2"),
     "nano-banana-2": imageModelFromBaked("nano-banana-2"),
     "nano-banana-pro": imageModelFromBaked("nano-banana-pro"),
+    "grok-imagine-i2i": imageModelFromBaked("grok-imagine-i2i"),
+    "z-image": imageModelFromBaked("z-image"),
   },
 };
 
@@ -221,7 +316,10 @@ function coercePromptModelProvidersByMode(raw: unknown): Record<string, ImageMod
   const out: Record<string, ImageModelSettings["provider"][]> = {};
   for (const [modeId, val] of Object.entries(raw as Record<string, unknown>)) {
     const list = Array.isArray(val) ? val : [val];
-    const providers = list.filter((item): item is ImageModelSettings["provider"] => item === "gpt-image" || item === "nano-banana");
+    const providers = list.filter(
+      (item): item is ImageModelSettings["provider"] =>
+        item === "gpt-image" || item === "nano-banana" || item === "grok-imagine" || item === "z-image",
+    );
     if (providers.length > 0) out[modeId] = Array.from(new Set(providers));
   }
   return out;
@@ -279,7 +377,11 @@ export function refSlotHintsStoredToDraftRows(stored: string[] | undefined): str
 }
 
 function coerceGptImageQuality(v: unknown): GptImageQuality | undefined {
-  return v === "auto" || v === "low" || v === "medium" || v === "high" ? v : undefined;
+  return v === "low" || v === "medium" || v === "high" ? v : undefined;
+}
+
+function coerceGptImageBackground(v: unknown): GptImageBackground | undefined {
+  return v === "auto" || v === "transparent" || v === "opaque" ? v : undefined;
 }
 
 /** 合并设置或发往接口前做一次字符串化，避免 localStorage/异常类型导致 `.trim` 失效或误判为空 */
@@ -301,6 +403,7 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
 
   return {
     gptImageQuality: coerceGptImageQuality(source.gptImageQuality) ?? DEFAULT_IMAGE_SETTINGS.gptImageQuality,
+    gptImageBackground: coerceGptImageBackground(source.gptImageBackground) ?? DEFAULT_IMAGE_SETTINGS.gptImageBackground,
     customModes,
     refSlotHintsByMode: coerceRefSlotHintsByMode(source.refSlotHintsByMode),
     coverImageUrlByMode: coerceCoverImageUrlByMode(source.coverImageUrlByMode),
@@ -321,10 +424,10 @@ export function mergeImageSettings(raw: unknown): ImageWorkspaceSettings {
         ...inc,
         id,
         provider: base.provider,
-        label: pickNonEmptyTrimmed(inc?.label, base.label),
+        label: normalizeImageModelLabel(id, inc?.label, base.label),
         endpointUrl: pickNonEmptyTrimmed(inc?.endpointUrl, base.endpointUrl),
         apiKey: pickNonEmptyTrimmed(inc?.apiKey, base.apiKey),
-        modelName: pickNonEmptyTrimmed(inc?.modelName, base.modelName),
+        modelName: normalizeImageModelName(id, inc?.modelName, base.modelName),
       });
       return acc;
     }, {} as Record<ImageModelId, ImageModelSettings>),
@@ -344,25 +447,28 @@ export function normalizeIncomingImageModel(
   }
   const o = raw as Record<string, unknown>;
   const id = o.id;
-  if (id !== "gpt-image-2" && id !== "nano-banana-2" && id !== "nano-banana-pro") {
+  if (typeof id !== "string" || !IMAGE_MODEL_ORDER.includes(id as ImageModelId)) {
     return { ok: false, message: "model.id 无效，请刷新作图页后重试。" };
   }
-  const base = DEFAULT_IMAGE_SETTINGS.models[id];
+  const modelId = id as ImageModelId;
+  const base = DEFAULT_IMAGE_SETTINGS.models[modelId];
   const endpointUrl = String(o.endpointUrl ?? "").trim();
   const apiKey = String(o.apiKey ?? "").trim();
-  const modelName = String(o.modelName ?? "").trim();
+  const modelName = normalizeImageModelName(modelId, o.modelName, "");
   const label = typeof o.label === "string" && o.label.trim() ? o.label.trim() : base.label;
   const provider: ImageModelSettings["provider"] =
-    o.provider === "gpt-image" || o.provider === "nano-banana" ? o.provider : base.provider;
+    o.provider === "gpt-image" || o.provider === "nano-banana" || o.provider === "grok-imagine" || o.provider === "z-image"
+      ? o.provider
+      : base.provider;
 
   if (!endpointUrl || !apiKey || !modelName) {
     return {
       ok: false,
-      message: `「${label}」（槽位 ${id}）缺少 Endpoint / API Key / 模型名。请在 **设置 → 生图 API** 里找到对应卡片填写完整并点 **保存**。作图页选哪个模型，就用哪一套配置（与其它模型的预览无关）。`,
+      message: `「${label}」（槽位 ${modelId}）缺少 Endpoint / API Key / 模型名。请在 **设置 → 生图 API** 里找到对应卡片填写完整并点 **保存**。作图页选哪个模型，就用哪一套配置（与其它模型的预览无关）。`,
     };
   }
 
-  return { ok: true, model: { id, label, endpointUrl, apiKey, modelName, provider } };
+  return { ok: true, model: { id: modelId, label, endpointUrl, apiKey, modelName, provider } };
 }
 
 /** 双槽模版：绘画风格（与「分镜剧本」成对出现） */

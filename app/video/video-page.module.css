@@ -478,6 +478,41 @@
   background: #000;
 }
 
+.historyItemPending {
+  display: flex;
+  cursor: default;
+}
+
+.historyItemPending video {
+  opacity: 0.45;
+  filter: grayscale(0.2);
+}
+
+.historyPendingBlank {
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(5, 5, 5, 0.06),
+    rgba(5, 5, 5, 0.06) 8px,
+    rgba(255, 216, 107, 0.24) 8px,
+    rgba(255, 216, 107, 0.24) 16px
+  );
+}
+
+.historyPendingSpinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid rgba(5, 5, 5, 0.18);
+  border-top-color: #050505;
+  border-radius: 50%;
+  animation: videoSpin 0.75s linear infinite;
+}
+
 .historyMeta {
   position: absolute;
   inset: auto 0 0;
@@ -1094,7 +1129,7 @@
 .generate {
   box-sizing: border-box;
   height: 34px;
-  min-width: 72px;
+  min-width: 58px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 15px;
   background: #fafafa;
@@ -1782,6 +1817,10 @@
 }
 
 .generate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border-color: #050505;
   background: #ffffff;
   color: #050505;
@@ -1790,6 +1829,32 @@
   font-size: 13px;
   font-weight: 900;
   transition: var(--otato-control-transition, transform 160ms ease, box-shadow 160ms ease, border-color 140ms ease, background-color 140ms ease, color 140ms ease);
+}
+
+.generateCost {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--otato-red, #ff4d3d);
+  font-size: 12px;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+}
+
+.generateCost[data-state="error"],
+.generateCost[data-state="insufficient"] {
+  color: #ff6f61;
+}
+
+.generateCostIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
 }
 
 .refSlot {

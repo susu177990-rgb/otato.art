@@ -182,11 +182,14 @@ function normalizeImageAspectRatio(value: unknown): ImageAspectRatio {
     case "1:1":
     case "2:3":
     case "3:2":
+    case "5:4":
+    case "4:5":
     case "3:4":
     case "4:3":
     case "9:16":
     case "16:9":
     case "21:9":
+    case "9:21":
       return value;
     default:
       return "4:3";
