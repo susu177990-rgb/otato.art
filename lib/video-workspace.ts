@@ -495,16 +495,34 @@ function coerceVideoModelSettings(modelId: VideoModelId, value: unknown): VideoM
   const bakedApi = BAKED_VIDEO_MODEL_DEFAULTS[modelId as keyof typeof BAKED_VIDEO_MODEL_DEFAULTS];
   const row = isObject(value) ? value : {};
   const apiModelName = pickNonEmptyTrimmed(row.apiModelName ?? row.modelName, baked.apiModelName);
+  const baseUrl = normalizeLegacyVideoBaseUrl(
+    modelId,
+    pickNonEmptyTrimmed(row.baseUrl, pickNonEmptyTrimmed(bakedApi?.baseUrl, baked.baseUrl)),
+    bakedApi?.baseUrl,
+  );
   return {
     id: modelId,
     label: pickNonEmptyTrimmed(row.label, baked.label),
-    baseUrl: pickNonEmptyTrimmed(row.baseUrl, pickNonEmptyTrimmed(bakedApi?.baseUrl, baked.baseUrl)),
+    baseUrl,
     apiKey: pickNonEmptyTrimmed(row.apiKey, pickNonEmptyTrimmed(bakedApi?.apiKey, pickNonEmptyTrimmed(BAKED_LLM_SETTINGS.apiKey, baked.apiKey))),
     apiModelName,
     apiModelNameByMode: coerceApiModelNameByMode(modelId, row.apiModelNameByMode, apiModelName),
     enabled: isDisabledVideoModel(modelId) ? false : typeof row.enabled === "boolean" ? row.enabled : baked.enabled,
     providerOptions: sanitizeProviderOptions(row.providerOptions),
   };
+}
+
+function normalizeLegacyVideoBaseUrl(modelId: VideoModelId, baseUrl: string, bakedBaseUrl: string | undefined): string {
+  const trimmed = baseUrl.trim();
+  const baked = bakedBaseUrl?.trim();
+  if (!baked) return trimmed;
+  if (!isCrunTaskVideoModel(modelId)) return trimmed;
+  if (/api\.evolink\.ai|seedanceapi\.org|grsai\.dakka\.com\.cn/i.test(trimmed)) return baked;
+  return trimmed;
+}
+
+function isCrunTaskVideoModel(modelId: VideoModelId): boolean {
+  return Boolean(BAKED_VIDEO_MODEL_DEFAULTS[modelId as keyof typeof BAKED_VIDEO_MODEL_DEFAULTS]?.baseUrl);
 }
 
 function coercePromptsRecord(value: unknown): Record<string, string> {

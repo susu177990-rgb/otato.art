@@ -27,8 +27,8 @@ const migrated = mergeVideoSettings({
   },
 });
 
-assert.equal(migrated.models["seedance-2.0"].baseUrl, "https://seedanceapi.org/v2");
-assert.equal(migrated.models["seedance-2.0"].apiModelName, "seedance-2.0");
+assert.equal(migrated.models["seedance-2.0"].baseUrl, "https://api.crun.ai/api/v1/client/job/CreateTask");
+assert.equal(migrated.models["seedance-2.0"].apiModelNameByMode.text_to_video, "bytedance/seedance2-0-t2v");
 assert.equal(migrated.prompts["custom_video_cinematic-text-to-video"], "Prompt A {{镜头}}");
 assert.equal(migrated.customModes.length, 2);
 const legacyMode = migrated.customModes.find(m => m.id === "custom_video_custom_story");
@@ -157,6 +157,10 @@ const legacyCrunNames = mergeVideoSettings({
 assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.text_to_video, "grok-imagine/t2v");
 assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.start_frame, "grok-imagine-video-1.5-preview");
 assert.equal(legacyCrunNames.models["happyhorse-1.1"].apiModelNameByMode.start_frame, "happyhorse-1-1-i2v");
+assert.equal(
+  mergeVideoSettings({ models: { "happyhorse-1.1": { baseUrl: "https://api.evolink.ai" } } }).models["happyhorse-1.1"].baseUrl,
+  "https://api.crun.ai/api/v1/client/job/CreateTask",
+);
 assert.deepEqual(videoModelsForUiMode("video_edit"), ["happyhorse-1.0"]);
 const referenceUiModels = videoModelsForUiMode("multi_image_reference");
 assert.equal(referenceUiModels.includes("seedance-2.0"), true);
