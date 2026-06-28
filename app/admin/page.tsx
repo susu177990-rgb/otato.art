@@ -970,7 +970,6 @@ function LlmApiPanel({
               <label className={shellStyles.field}>
                 <span className={shellStyles.fieldLabel}>API Key</span>
                 <input
-                  type="password"
                   className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
                   value={apiKeyInputValue(model.apiKey)}
                   onChange={(e) =>
@@ -1724,7 +1723,6 @@ function ImageApiPanel({
                 <label className={shellStyles.field}>
                   <span className={shellStyles.fieldLabel}>API Key</span>
                   <input
-                    type="password"
                     className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
                     value={apiKeyInputValue(model.apiKey)}
                     placeholder={apiKeyPlaceholder(model.apiKey)}
@@ -1847,7 +1845,6 @@ function VideoApiPanel({
                 <label className={shellStyles.field}>
                   <span className={shellStyles.fieldLabel}>API Key</span>
                   <input
-                    type="password"
                     className={[shellStyles.input, shellStyles.inputCompact, shellStyles.mono].join(" ")}
                     value={apiKeyInputValue(model.apiKey)}
                     placeholder={apiKeyPlaceholder(model.apiKey, "留空，后续填写")}
