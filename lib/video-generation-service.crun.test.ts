@@ -843,6 +843,74 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
     })).rejects.toMatchObject({
       code: "provider_submit_failed",
       message: "prompt: String should have at most 5000 characters",
+      upstreamStatus: 422,
+      upstreamBody: {
+        code: 422,
+        message: "Missing Params or Type Error",
+        errors: ["prompt: String should have at most 5000 characters"],
+      },
+    } satisfies Partial<VideoGenerationError>);
+  });
+
+  it("preserves CRUN poll moderation body for user-facing classification", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "moderated-task" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ code: 200, message: "success", data: { status: "failed", reason: "input_moderation" } }),
+          { status: 200 },
+        ),
+      );
+
+    await expect(generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "seedance-2.0": crunSeedanceModel }),
+      request: {
+        modelId: "seedance-2.0",
+        modeId: "text_to_video",
+        prompt: "moderated",
+        durationSeconds: 5,
+        aspectRatio: "16:9",
+        resolution: "720p",
+        references: [],
+      },
+    })).rejects.toMatchObject({
+      code: "provider_poll_failed",
+      message: "input_moderation",
+      upstreamStatus: 200,
+      upstreamBody: { code: 200, message: "success", data: { status: "failed", reason: "input_moderation" } },
+    } satisfies Partial<VideoGenerationError>);
+  });
+
+  it("preserves CRUN failed tasks without reasons as unknown provider failures", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "failed-task" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ code: 200, message: "success", data: { status: "failed" } }),
+          { status: 200 },
+        ),
+      );
+
+    await expect(generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "seedance-2.0": crunSeedanceModel }),
+      request: {
+        modelId: "seedance-2.0",
+        modeId: "text_to_video",
+        prompt: "failed",
+        durationSeconds: 5,
+        aspectRatio: "16:9",
+        resolution: "720p",
+        references: [],
+      },
+    })).rejects.toMatchObject({
+      code: "provider_poll_failed",
+      message: "CRUN 任务失败，未返回具体原因。",
+      upstreamStatus: 200,
+      upstreamBody: { code: 200, message: "success", data: { status: "failed" } },
     } satisfies Partial<VideoGenerationError>);
   });
 });

@@ -48,12 +48,18 @@ export class VideoGenerationError extends Error {
     | "storage_persist_failed"
     | "contract_pending";
 
+  upstreamStatus?: number;
+  upstreamBody?: unknown;
+
   constructor(
     code: VideoGenerationError["code"],
     message: string,
+    options?: { upstreamStatus?: number; upstreamBody?: unknown },
   ) {
     super(message);
     this.code = code;
+    this.upstreamStatus = options?.upstreamStatus;
+    this.upstreamBody = options?.upstreamBody;
   }
 }
 
@@ -801,7 +807,7 @@ function parseProviderFailureMessage(data: Record<string, unknown>, fallback = "
     data.failReason,
     data.message,
   ]) {
-    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "string" && value.trim() && value.trim().toLowerCase() !== "success") return value.trim();
     if (Array.isArray(value) && value.length > 0) return value.map((item) => String(item)).join("；");
   }
   return fallback;
@@ -847,6 +853,7 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
     throw new VideoGenerationError(
       "provider_submit_failed",
       parseProviderFailureMessage(submitData),
+      { upstreamStatus: submitRes.status, upstreamBody: submitData },
     );
   }
   const providerTaskId = parseCrunTaskId(submitData);
@@ -877,6 +884,7 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
       throw new VideoGenerationError(
         "provider_poll_failed",
         parseProviderFailureMessage(statusData),
+        { upstreamStatus: statusRes.status, upstreamBody: statusData },
       );
     }
     const statusContainer = statusData.data && typeof statusData.data === "object" ? statusData.data as Record<string, unknown> : statusData;
@@ -886,7 +894,11 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
       return { providerTaskId, remoteVideoUrl };
     }
     if (crunTaskFailed(status)) {
-      throw new VideoGenerationError("provider_poll_failed", parseProviderFailureMessage(statusData, "CRUN 任务失败，未返回具体原因。"));
+      throw new VideoGenerationError(
+        "provider_poll_failed",
+        parseProviderFailureMessage(statusData, "CRUN 任务失败，未返回具体原因。"),
+        { upstreamStatus: 200, upstreamBody: statusData },
+      );
     }
     await wait(intervalMs);
   }

@@ -368,15 +368,14 @@ export async function POST(req: NextRequest) {
         : error.message;
       const classified = classifyGenerationError({
         message,
-        status,
+        status: error.upstreamStatus ?? status,
+        upstreamBody: error.upstreamBody,
         stage: error.code,
         fallbackReasonCode:
           error.code === "provider_timeout"
             ? "TIMEOUT"
             : error.code === "storage_persist_failed"
               ? "STORAGE_FAILED"
-              : error.code === "provider_poll_failed" && /CRUN 任务失败，未返回具体原因/.test(message)
-                ? "UNKNOWN_PROVIDER_FAILURE"
               : error.code === "invalid_mode" || error.code === "unsupported_capability"
                 ? "INVALID_PROMPT"
                 : undefined,
