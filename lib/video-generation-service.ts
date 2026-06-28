@@ -651,7 +651,7 @@ function buildKlingCreatePayload(request: UnifiedVideoGenerateRequest, apiModelN
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const endFrame = request.references.find((item) => item.role === "end_frame");
 
-  if ((request.modelId === "kling-3.0-motion" || request.modelId === "kling-2.6-motion") && request.modeId === "motion_control") {
+  if ((request.modelId === "kling-3.0" || request.modelId === "kling-3.0-motion" || request.modelId === "kling-2.6-motion") && request.modeId === "motion_control") {
     const motionSource = request.references.find((item) => item.role === "motion_source_video");
     if (!startFrame?.url || !motionSource?.url) {
       throw new VideoGenerationError("invalid_mode", "动作迁移模式需要 1 张主体参考图和 1 个动作参考视频。");

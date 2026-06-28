@@ -146,7 +146,7 @@ export function getVideoParameterCapabilities(
     };
   }
 
-  if ((modelId === "kling-3.0-motion" || modelId === "kling-2.6-motion") && modeId === "motion_control") {
+  if ((modelId === "kling-3.0" || modelId === "kling-3.0-motion" || modelId === "kling-2.6-motion") && modeId === "motion_control") {
     return {
       ...base,
       aspectRatios: [],
@@ -337,6 +337,7 @@ export function defaultVideoApiModelNameForMode(modelId: VideoModelId, modeId: V
     if (modeId === "start_frame") return "bytedance/seedance1-0-pro-i2v";
   }
   if (modelId === "kling-3.0") {
+    if (modeId === "motion_control") return "kling/v3-motion-control";
     if (modeId === "text_to_video" || modeId === "start_frame" || modeId === "start_end_frame" || modeId === "multi_image_reference") return "kling/v3";
   }
   if (modelId === "kling-3.0-motion" && modeId === "motion_control") return "kling/v3-motion-control";
@@ -410,7 +411,6 @@ export const DEFAULT_VIDEO_SETTINGS: VideoWorkspaceSettings = {
       "doubao-seedance-1.0-pro-fast": "text_to_video",
       "seedance-1.0-pro": "text_to_video",
       "kling-3.0": "text_to_video",
-      "kling-3.0-motion": "motion_control",
       "kling-2.6-motion": "motion_control",
       "happyhorse-1.1": "text_to_video",
       "happyhorse-1.0": "text_to_video",

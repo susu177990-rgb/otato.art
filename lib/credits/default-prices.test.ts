@@ -48,18 +48,20 @@ describe("default credit prices", () => {
     }
   });
 
-  it("uses one video price per model and resolution across modes", () => {
+  it("uses default video prices with mode-specific overrides where needed", () => {
     const prices = defaultVideoCreditPrices();
     expect(prices.find((item) => item.modelId === "kling-3.0" && item.modeId === "text_to_video" && item.resolution === "1080p")?.creditsPerSecond).toBe(184);
     expect(prices.find((item) => item.modelId === "kling-3.0" && item.modeId === "video_edit" && item.resolution === "1080p")).toBeUndefined();
     expect(prices.find((item) => item.modelId === "kling-3.0" && item.modeId === "text_to_video" && item.resolution === "4k")?.creditsPerSecond).toBe(300);
     expect(prices.find((item) => item.modelId === "veo-3.1-fast" && item.modeId === "multi_image_reference" && item.resolution === "4k")?.creditsPerSecond).toBe(78);
-    expect(prices.find((item) => item.modelId === "kling-3.0-motion" && item.modeId === "motion_control" && item.resolution === "1080p")?.creditsPerSecond).toBe(124);
+    expect(prices.find((item) => item.modelId === "kling-3.0" && item.modeId === "motion_control" && item.resolution === "1080p")?.creditsPerSecond).toBe(124);
+    expect(prices.find((item) => item.modelId === "kling-3.0-motion" && item.modeId === "motion_control" && item.resolution === "1080p")).toBeUndefined();
     expect(prices.find((item) => item.modelId === "kling-2.6-motion" && item.modeId === "motion_control" && item.resolution === "1080p")?.creditsPerSecond).toBe(124);
     expect(roundCreditsToFive(287.5)).toBe(290);
 
     const groups = new Map<string, Set<number>>();
     for (const item of prices) {
+      if (item.modelId === "kling-3.0" && item.modeId === "motion_control") continue;
       const key = `${item.modelId}:${item.resolution}`;
       groups.set(key, (groups.get(key) ?? new Set()).add(item.creditsPerSecond));
     }

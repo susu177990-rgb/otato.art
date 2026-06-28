@@ -95,7 +95,6 @@ export const VIDEO_MODEL_ORDER: VideoModelId[] = [
   "doubao-seedance-1.0-pro-fast",
   "seedance-1.0-pro",
   "kling-3.0",
-  "kling-3.0-motion",
   "kling-2.6-motion",
   "happyhorse-1.1",
   "happyhorse-1.0",
@@ -239,7 +238,7 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     label: "Kling 3.0",
     defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference"],
+      supportedModes: ["text_to_video", "start_frame", "start_end_frame", "multi_image_reference", "motion_control"],
       aspectRatios: ["16:9", "9:16", "1:1"],
       durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
       durationCapability: { type: "range", min: 3, max: 15, step: 1, defaultValue: 5, presets: [3, 5, 10, 15] },
@@ -248,7 +247,7 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
       maxVideoReferences: 0,
       maxAudioReferences: 0,
       supportsFirstLastFrames: true,
-      supportsMotionControl: false,
+      supportsMotionControl: true,
       supportsNativeAudio: true,
       supportsVideoExtension: false,
       supportsMultipleImageReferences: true,
@@ -480,10 +479,9 @@ export const DEFAULT_VIDEO_PRESETS: Record<
     start_frame: preset("Kling 3.0 · 首帧", "Kling 3.0 首帧图生视频", START_FRAME_PROMPT),
     start_end_frame: preset("Kling 3.0 · 首尾帧", "Kling 3.0 首尾帧视频", START_END_FRAME_PROMPT),
     multi_image_reference: preset("Kling 3.0 · 全能参考", "Kling 3.0 图片元素参考视频", MULTI_IMAGE_PROMPT),
+    motion_control: preset("Kling 3.0 · 动作迁移", "Kling 3.0 参考图 + 动作视频迁移", MOTION_CONTROL_PROMPT),
   },
-  "kling-3.0-motion": {
-    motion_control: preset("Kling 3.0 Motion · 动作迁移", "Kling 3.0 参考图 + 动作视频迁移", MOTION_CONTROL_PROMPT),
-  },
+  "kling-3.0-motion": {},
   "kling-2.6-motion": {
     motion_control: preset("Kling 2.6 Motion · 动作迁移", "Kling 2.6 参考图 + 动作视频迁移", MOTION_CONTROL_PROMPT),
   },

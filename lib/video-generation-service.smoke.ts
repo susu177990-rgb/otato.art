@@ -442,7 +442,7 @@ assert.throws(
 );
 
 const klingMotion = validateUnifiedVideoRequest({
-  modelId: "kling-3.0-motion",
+  modelId: "kling-3.0",
   modeId: "motion_control",
   prompt: "motion",
   durationSeconds: 0,
@@ -453,7 +453,7 @@ const klingMotion = validateUnifiedVideoRequest({
     { role: "motion_source_video", url: "https://example.com/motion.mp4" },
   ],
 });
-const klingMotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0-motion", klingMotion));
+const klingMotionPayload = buildVideoCreatePayloadForTest(ctxFor("kling-3.0", klingMotion));
 assert.deepEqual(klingMotionPayload, {
   model: "kling/v3-motion-control",
   input: {

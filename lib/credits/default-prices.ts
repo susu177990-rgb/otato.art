@@ -83,6 +83,12 @@ const DEFAULT_VIDEO_BASE_CREDITS_PER_SECOND: Record<VideoModelId, Partial<Record
   "gemini-omni": { "720p": 26, "1080p": 32, "4k": 78 },
 };
 
+const DEFAULT_VIDEO_MODE_CREDITS_PER_SECOND: Partial<Record<VideoModelId, Partial<Record<VideoGenerationModeId, Partial<Record<VideoResolution, number>>>>>> = {
+  "kling-3.0": {
+    motion_control: { "720p": 76, "1080p": 124 },
+  },
+};
+
 for (const item of CRUN_VIDEO_COST_SEEDS) {
   DEFAULT_VIDEO_BASE_CREDITS_PER_SECOND[item.modelId][item.resolution] = item.saleCreditsPerSecond;
 }
@@ -114,7 +120,7 @@ export function defaultVideoCreditPrices(): DefaultVideoCreditPrice[] {
       if (!isVideoModelModeSupported(modelId, mode.id)) continue;
       const caps = getVideoParameterCapabilities(modelId, mode.id, []);
       for (const resolution of caps.resolutions) {
-        const base = baseByResolution[resolution];
+        const base = DEFAULT_VIDEO_MODE_CREDITS_PER_SECOND[modelId]?.[mode.id]?.[resolution] ?? baseByResolution[resolution];
         if (!base) continue;
         out.push({
           modelId,

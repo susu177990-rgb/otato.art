@@ -227,9 +227,9 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
     await generateUnifiedVideo({
       supabase: {} as never,
       userId: "user-1",
-      workspaceSnapshot: workspaceSnapshot({ "kling-3.0-motion": crunModel("kling-3.0-motion") }),
+      workspaceSnapshot: workspaceSnapshot({ "kling-3.0": crunModel("kling-3.0") }),
       request: {
-        modelId: "kling-3.0-motion",
+        modelId: "kling-3.0",
         modeId: "motion_control",
         prompt: "keep costume",
         durationSeconds: 0,
