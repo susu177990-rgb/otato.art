@@ -137,6 +137,26 @@ assert.equal(modelSupportsUiMode("gemini-omni", "multi_image_reference"), true);
 assert.equal(isDisabledVideoModel("gemini-omni"), false);
 assert.equal(DEFAULT_VIDEO_SETTINGS.models["gemini-omni"].enabled, true);
 assert.equal(mergeVideoSettings({ models: { "gemini-omni": { enabled: true } } }).models["gemini-omni"].enabled, true);
+const legacyCrunNames = mergeVideoSettings({
+  models: {
+    "grok-imagine": {
+      apiModelNameByMode: {
+        text_to_video: "grok-imagine-text-to-video-beta",
+        start_frame: "grok-imagine-image-to-video-beta",
+      },
+    },
+    "happyhorse-1.1": {
+      apiModelNameByMode: {
+        text_to_video: "happyhorse-1.1-text-to-video",
+        start_frame: "happyhorse-1.1-image-to-video",
+        multi_image_reference: "happyhorse-1.1-reference-to-video",
+      },
+    },
+  },
+});
+assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.text_to_video, "grok-imagine/t2v");
+assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.start_frame, "grok-imagine-video-1.5-preview");
+assert.equal(legacyCrunNames.models["happyhorse-1.1"].apiModelNameByMode.start_frame, "happyhorse-1-1-i2v");
 assert.deepEqual(videoModelsForUiMode("video_edit"), ["happyhorse-1.0"]);
 const referenceUiModels = videoModelsForUiMode("multi_image_reference");
 assert.equal(referenceUiModels.includes("seedance-2.0"), true);

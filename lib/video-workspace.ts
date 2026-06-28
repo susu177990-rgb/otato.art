@@ -460,9 +460,34 @@ function coerceApiModelNameByMode(
     const rawConfigured = row[mode.id];
     const configured = typeof rawConfigured === "string" ? rawConfigured.trim() : "";
     const legacy = typeof legacyModelName === "string" ? legacyModelName.trim() : "";
-    out[mode.id] = configured || defaults[mode.id] || legacy;
+    out[mode.id] = normalizeLegacyVideoApiModelName(modelId, mode.id, configured || defaults[mode.id] || legacy);
   }
   return out;
+}
+
+function normalizeLegacyVideoApiModelName(
+  modelId: VideoModelId,
+  modeId: VideoGenerationModeId,
+  value: string | undefined,
+): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return trimmed;
+  if (modelId === "grok-imagine") {
+    if (modeId === "text_to_video" && /^grok-imagine-text-to-video-beta$/i.test(trimmed)) return "grok-imagine/t2v";
+    if (modeId === "start_frame" && /^grok-imagine-image-to-video-beta$/i.test(trimmed)) return "grok-imagine-video-1.5-preview";
+  }
+  if (modelId === "happyhorse-1.1") {
+    if (modeId === "text_to_video" && /^happyhorse-1\.1-text-to-video$/i.test(trimmed)) return "happyhorse-1-1-t2v";
+    if (modeId === "start_frame" && /^happyhorse-1\.1-image-to-video$/i.test(trimmed)) return "happyhorse-1-1-i2v";
+    if (modeId === "multi_image_reference" && /^happyhorse-1\.1-reference-to-video$/i.test(trimmed)) return "happyhorse-1-1-r2v";
+  }
+  if (modelId === "happyhorse-1.0") {
+    if (modeId === "text_to_video" && /^happyhorse-1\.0-text-to-video$/i.test(trimmed)) return "happyhorse-1-0-t2v";
+    if (modeId === "start_frame" && /^happyhorse-1\.0-image-to-video$/i.test(trimmed)) return "happyhorse-1-0-i2v";
+    if (modeId === "multi_image_reference" && /^happyhorse-1\.0-reference-to-video$/i.test(trimmed)) return "happyhorse-1-0-r2v";
+    if (modeId === "video_edit" && /^happyhorse-1\.0-video-edit$/i.test(trimmed)) return "happyhorse-1-0-video-edit";
+  }
+  return trimmed;
 }
 
 function coerceVideoModelSettings(modelId: VideoModelId, value: unknown): VideoModelSettings {
