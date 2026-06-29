@@ -188,13 +188,16 @@ type CreditQuoteState = {
 };
 
 function formatImageGenerateFailure(data: ImageGenerateFailurePayload, fallback = "生图失败"): string {
-  return formatGenerationErrorForDisplay({
+  const display = formatGenerationErrorForDisplay({
     code: data.code,
     reasonCode: data.reasonCode,
     userMessage: data.userMessage,
     fallbackCode: data.details?.stage ? `IMAGE_${data.details.stage.toUpperCase()}` : undefined,
     fallbackMessage: fallback === "服务器未返回图片地址" ? "IMAGE_RESPONSE_MISSING_URL" : "IMAGE_UNKNOWN",
   });
+  const raw = data.error?.trim();
+  if (!raw || display.includes(raw)) return display;
+  return `${display}\n${raw}`;
 }
 
 function createEmptyRefSlots(): RefSlot[] {
@@ -269,6 +272,14 @@ function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   return new File([bytes], name || "reference.png", { type: mime });
 }
 
+async function fetchReferenceImageBlob(url: string): Promise<Blob | null> {
+  const viaProxy = await fetch(`/api/media/object?url=${encodeURIComponent(url)}`).catch(() => null);
+  if (viaProxy?.ok) return viaProxy.blob();
+  const direct = await fetch(url).catch(() => null);
+  if (!direct?.ok) return null;
+  return direct.blob();
+}
+
 async function referenceImageToFile(image: ImageGalleryReferenceImage): Promise<{ file: File; previewUrl: string } | null> {
   if (!image.dataUrl) return null;
   const type = image.type || image.dataUrl.match(/^data:([^;]+);base64,/)?.[1] || "image/png";
@@ -280,9 +291,8 @@ async function referenceImageToFile(image: ImageGalleryReferenceImage): Promise<
     };
   }
   if (/^https?:\/\//i.test(image.dataUrl)) {
-    const res = await fetch(image.dataUrl);
-    if (!res.ok) return null;
-    const blob = await res.blob();
+    const blob = await fetchReferenceImageBlob(image.dataUrl);
+    if (!blob) return null;
     return {
       file: new File([blob], name, { type: blob.type || type }),
       previewUrl: image.dataUrl,
