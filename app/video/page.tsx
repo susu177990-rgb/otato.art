@@ -889,7 +889,7 @@ export default function VideoPage() {
       await Promise.all(
         uniqueLocalSlots.map(async (slot) => {
           if (!slot.file) return;
-          const path = `${user.id}/video-inputs/${safeModelId}/${slot.kind}/${crypto.randomUUID()}.${mediaFileExtension(slot.file, slot.kind)}`;
+          const path = `ephemeral/${user.id}/video-inputs/${safeModelId}/${slot.kind}/${crypto.randomUUID()}.${mediaFileExtension(slot.file, slot.kind)}`;
           const form = new FormData();
           form.append("file", slot.file, slot.file.name || "reference");
           form.append("key", path);

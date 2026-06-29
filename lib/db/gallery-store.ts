@@ -46,7 +46,7 @@ function toGalleryRow(userId: string, record: ImageGalleryRecord, scope: Project
 function storedGeneratedImagePath(url: string, userId: string): string | null {
   if (!isStoredGeneratedImageUrl(url)) return null;
   const path = mediaObjectKeyFromPublicUrl(url);
-  if (!path?.startsWith(`${userId}/`)) return null;
+  if (!path?.startsWith(`${userId}/`) && !path?.startsWith(`ephemeral/${userId}/`)) return null;
   return path;
 }
 

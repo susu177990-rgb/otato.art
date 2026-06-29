@@ -180,7 +180,7 @@ export async function deleteVideoGalleryRecord(
   if (!deleted) return false;
 
   const key = existing?.videoUrl ? mediaObjectKeyFromPublicUrl(existing.videoUrl) : null;
-  if (key?.startsWith(`${user.id}/`)) {
+  if (key?.startsWith(`${user.id}/`) || key?.startsWith(`ephemeral/${user.id}/`)) {
     await deleteMediaObjects([key]).catch((cleanupError) => {
       console.warn("[video/gallery storage cleanup]", cleanupError);
     });

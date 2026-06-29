@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
+import { ephemeralMediaKey, putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
 
 const FETCH_TIMEOUT_MS = 5 * 60_000;
 
@@ -53,6 +53,6 @@ export async function persistGeneratedVideoToStorage(
   const { bytes, contentType } = await resolveVideoBytes(trimmed);
   const ext = extFromMime(contentType);
   const safeId = safeMediaPathPart(objectId);
-  const path = `${userId}/${safeId}.${ext}`;
+  const path = ephemeralMediaKey(userId, `generated-videos/${safeId}.${ext}`);
   return putMediaObject({ key: path, bytes, contentType });
 }

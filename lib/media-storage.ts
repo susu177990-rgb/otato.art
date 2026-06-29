@@ -43,6 +43,10 @@ export function safeMediaPathPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
 }
 
+export function ephemeralMediaKey(userId: string, key: string): string {
+  return ["ephemeral", safeMediaPathPart(userId), key.replace(/^\/+/, "")].join("/");
+}
+
 export function mediaFileExtensionFromMime(mime: string, fallback = "bin"): string {
   const normalized = mime.toLowerCase().split(";")[0]?.trim() || "";
   if (normalized.includes("jpeg") || normalized === "image/jpg") return "jpg";

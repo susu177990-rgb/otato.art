@@ -1262,7 +1262,7 @@ export default function CanvasBoardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("请先登录");
       const contentType = mediaContentType(file, kind);
-      const path = `${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
+      const path = `ephemeral/${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
       const form = new FormData();
       form.append("file", file, file.name || `${kind}.${mediaFileExtension(file, kind)}`);
       form.append("key", path);

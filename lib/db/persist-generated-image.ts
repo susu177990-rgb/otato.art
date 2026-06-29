@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
-import { putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
+import { ephemeralMediaKey, putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
 
 const FETCH_TIMEOUT_MS = 90_000;
 
@@ -83,7 +83,7 @@ export async function persistGeneratedImageToStorage(
   const { bytes, contentType } = await resolveImageBytes(trimmed);
   const ext = extFromMime(contentType);
   const safeId = safeMediaPathPart(objectId);
-  const path = `${userId}/${safeId}/original.${ext}`;
+  const path = ephemeralMediaKey(userId, `generated-images/${safeId}/original.${ext}`);
   return putMediaObject({ key: path, bytes, contentType });
 }
 
@@ -97,7 +97,7 @@ export async function persistGeneratedImageWithThumbnailToStorage(
   const { bytes } = await resolveImageBytes(imageUrl);
   const thumb = await buildGeneratedImageThumbnail(bytes);
   const safeId = safeMediaPathPart(objectId);
-  const path = `${userId}/${safeId}/thumb.${thumb.ext}`;
+  const path = ephemeralMediaKey(userId, `generated-images/${safeId}/thumb.${thumb.ext}`);
   const thumbnailUrl = await putMediaObject({ key: path, bytes: thumb.bytes, contentType: thumb.contentType });
   return { imageUrl, thumbnailUrl };
 }
