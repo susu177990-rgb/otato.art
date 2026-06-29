@@ -624,8 +624,8 @@ export async function deleteAdminUserData(params: {
   let storageObjects = 0;
   try {
     const [permanentCount, ephemeralCount] = await Promise.all([
-      deleteMediaPrefix(params.userId),
-      deleteMediaPrefix(`ephemeral/${params.userId}`),
+      deleteMediaPrefix(`${params.userId}/`),
+      deleteMediaPrefix(`ephemeral/${params.userId}/`),
     ]);
     storageObjects = permanentCount + ephemeralCount;
     steps.push({ phase: "storage", target: "r2-media", ok: true, count: storageObjects });
