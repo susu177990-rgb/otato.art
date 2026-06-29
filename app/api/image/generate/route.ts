@@ -40,6 +40,7 @@ type ImageGenerateFailureResponse = {
   traceId: string;
   details: ImageGenerationErrorDetails & {
     modelId?: string;
+    stack?: string;
   };
 };
 
@@ -100,6 +101,7 @@ function toFailureResponse(
     details: {
       ...baseDetails,
       modelId: context.modelId,
+      stack: process.env.NODE_ENV !== "production" && error instanceof Error ? error.stack : undefined,
     },
   };
 }

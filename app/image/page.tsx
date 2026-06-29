@@ -167,6 +167,7 @@ type ImageGenerateFailureDetails = {
   taskId?: string;
   modelId?: string;
   upstreamBody?: string;
+  stack?: string;
 };
 
 type ImageGenerateFailurePayload = {
@@ -196,8 +197,11 @@ function formatImageGenerateFailure(data: ImageGenerateFailurePayload, fallback 
     fallbackMessage: fallback === "服务器未返回图片地址" ? "IMAGE_RESPONSE_MISSING_URL" : "IMAGE_UNKNOWN",
   });
   const raw = data.error?.trim();
-  if (!raw || display.includes(raw)) return display;
-  return `${display}\n${raw}`;
+  const stack = data.details?.stack?.trim().split("\n").slice(0, 3).join("\n");
+  const details = [raw && !display.includes(raw) ? raw : "", stack && stack !== raw ? stack : ""]
+    .filter(Boolean)
+    .join("\n");
+  return details ? `${display}\n${details}` : display;
 }
 
 function createEmptyRefSlots(): RefSlot[] {
