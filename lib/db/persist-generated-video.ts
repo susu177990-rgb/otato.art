@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
+import { putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
 
 const FETCH_TIMEOUT_MS = 5 * 60_000;
 
 export function isStoredGeneratedVideoUrl(url: string): boolean {
-  return /\/storage\/v1\/object\/public\/generated-images\//i.test(url.trim());
+  const trimmed = url.trim();
+  return /\/storage\/v1\/object\/public\/generated-images\//i.test(trimmed) || /^https:\/\/media\.otato\.art\//i.test(trimmed);
 }
 
 function extFromMime(mime: string): string {
@@ -33,8 +34,8 @@ export async function resolveVideoBytes(sourceUrl: string): Promise<{ bytes: Uin
 }
 
 /**
- * 将远程视频 URL 落到 Supabase Storage（generated-images 桶），返回稳定公开 URL。
- * 已是本桶且路径属于当前用户的地址则原样返回。
+ * 将远程视频 URL 落到 R2，返回稳定公开 URL。
+ * 已是持久化媒体且路径属于当前用户的地址则原样返回。
  */
 export async function persistGeneratedVideoToStorage(
   supabase: SupabaseClient,
@@ -51,18 +52,7 @@ export async function persistGeneratedVideoToStorage(
 
   const { bytes, contentType } = await resolveVideoBytes(trimmed);
   const ext = extFromMime(contentType);
-  const safeId = objectId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
+  const safeId = safeMediaPathPart(objectId);
   const path = `${userId}/${safeId}.${ext}`;
-
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, bytes, {
-    contentType,
-    upsert: true,
-  });
-  if (error) {
-    throw new Error(`上传视频到云存储失败: ${error.message}`);
-  }
-
-  const { data } = supabase.storage.from(GENERATED_IMAGES_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) throw new Error("无法生成视频公开地址");
-  return data.publicUrl;
+  return putMediaObject({ key: path, bytes, contentType });
 }

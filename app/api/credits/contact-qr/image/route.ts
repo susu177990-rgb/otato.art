@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getMediaObject } from "@/lib/media-storage";
 
 const CONTACT_QR_STORAGE_PATH = "site/contact/recharge-wechat-qr.jpg";
 const FALLBACK_QR_PATH = path.join(process.cwd(), "public", "contact", "recharge-wechat-qr.jpg");
@@ -17,10 +16,11 @@ function imageResponse(bytes: ArrayBuffer, contentType = "image/jpeg") {
 }
 
 export async function GET() {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).download(CONTACT_QR_STORAGE_PATH);
-  if (data) {
-    return imageResponse(await data.arrayBuffer(), data.type || "image/jpeg");
+  const stored = await getMediaObject(CONTACT_QR_STORAGE_PATH);
+  if (stored) {
+    const buffer = Buffer.from(stored.bytes);
+    const bytes = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+    return imageResponse(bytes, stored.contentType);
   }
 
   try {

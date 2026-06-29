@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
 import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
-import { GENERATED_IMAGES_BUCKET, isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
+import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
+import { deleteMediaObjects, mediaObjectKeyFromPublicUrl } from "@/lib/media-storage";
 import {
   applyProjectScope,
   normalizePageLimit,
@@ -44,14 +45,9 @@ function toGalleryRow(userId: string, record: ImageGalleryRecord, scope: Project
 
 function storedGeneratedImagePath(url: string, userId: string): string | null {
   if (!isStoredGeneratedImageUrl(url)) return null;
-  try {
-    const marker = `/storage/v1/object/public/${GENERATED_IMAGES_BUCKET}/`;
-    const path = decodeURIComponent(new URL(url).pathname.split(marker)[1] || "");
-    if (!path.startsWith(`${userId}/`)) return null;
-    return path;
-  } catch {
-    return null;
-  }
+  const path = mediaObjectKeyFromPublicUrl(url);
+  if (!path?.startsWith(`${userId}/`)) return null;
+  return path;
 }
 
 function galleryRecordStoragePaths(
@@ -72,8 +68,7 @@ async function removeGalleryStorageObjects(
 ): Promise<void> {
   if (paths.length === 0) return;
   const uniquePaths = Array.from(new Set(paths));
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).remove(uniquePaths);
-  if (error) console.warn("[image/gallery storage cleanup]", error);
+  await deleteMediaObjects(uniquePaths).catch((error) => console.warn("[image/gallery storage cleanup]", error));
 }
 
 function postgrestTextInList(values: string[]): string {

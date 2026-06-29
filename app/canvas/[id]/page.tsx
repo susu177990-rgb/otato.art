@@ -142,7 +142,6 @@ type CanvasPending = { startX: number; startY: number; world: CanvasPosition };
 /** Quick-add bar shown after a single click on empty canvas */
 type QuickAddBar = { left: number; top: number; world: CanvasPosition } | null;
 
-const MEDIA_BUCKET = "generated-images";
 const MAX_HISTORY = 40;
 const GROUP_PAD = 28;
 const DRAG_THRESHOLD = 5;
@@ -1264,10 +1263,13 @@ export default function CanvasBoardPage() {
       if (!user) throw new Error("请先登录");
       const contentType = mediaContentType(file, kind);
       const path = `${user.id}/canvas/${boardId}/${kind}/${crypto.randomUUID()}.${mediaFileExtension(file, kind)}`;
-      const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, { contentType, upsert: false });
-      if (error) throw error;
-      const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-      if (!data.publicUrl) throw new Error("无法生成媒体地址");
+      const form = new FormData();
+      form.append("file", file, file.name || `${kind}.${mediaFileExtension(file, kind)}`);
+      form.append("key", path);
+      form.append("contentType", contentType);
+      const response = await fetch("/api/media/upload", { method: "POST", body: form });
+      const data = (await response.json().catch(() => ({}))) as { publicUrl?: string; error?: string };
+      if (!response.ok || !data.publicUrl) throw new Error(data.error || "媒体上传失败");
       const objectUrl = URL.createObjectURL(file);
       const size = kind === "video" ? await readVideoSize(objectUrl) : kind === "audio" ? { width: 320, height: 96 } : await readImageSize(objectUrl);
       const videoDurationSeconds = kind === "video" ? await readVideoDuration(objectUrl) : undefined;

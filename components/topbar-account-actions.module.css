@@ -11,7 +11,7 @@
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  color: var(--otato-yellow, #ffd86b);
+  color: var(--otato-red, #ff4d3d);
   white-space: nowrap;
 }
 

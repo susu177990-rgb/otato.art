@@ -1,5 +1,9 @@
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
-import { isStoredGeneratedVideoUrl } from "@/lib/db/persist-generated-video";
+
+function isStoredGeneratedVideoUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /\/storage\/v1\/object\/public\/generated-images\//i.test(trimmed) || /^https:\/\/media\.otato\.art\//i.test(trimmed);
+}
 
 /** 写入 Supabase JSONB 前：去掉未上传的超长 URL（像素应在 Storage） */
 export function sanitizeVideoGalleryRecordForStorage(record: VideoGalleryRecord): VideoGalleryRecord {
@@ -15,4 +19,3 @@ export function sanitizeVideoGalleryRecordForStorage(record: VideoGalleryRecord)
   }
   return next;
 }
-

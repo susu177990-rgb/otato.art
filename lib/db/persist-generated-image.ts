@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { GENERATED_IMAGES_BUCKET, isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
+import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
+import { putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
 
 const FETCH_TIMEOUT_MS = 90_000;
 
@@ -63,8 +64,8 @@ async function buildGeneratedImageThumbnail(
 }
 
 /**
- * 将 data: / 临时 http(s) 上传到 Supabase Storage，返回可长期使用的公开 URL。
- * 已是本桶且路径属于当前用户的地址则原样返回。
+ * 将 data: / 临时 http(s) 上传到 R2，返回可长期使用的公开 URL。
+ * 已是持久化媒体且路径属于当前用户的地址则原样返回。
  */
 export async function persistGeneratedImageToStorage(
   supabase: SupabaseClient,
@@ -81,20 +82,9 @@ export async function persistGeneratedImageToStorage(
 
   const { bytes, contentType } = await resolveImageBytes(trimmed);
   const ext = extFromMime(contentType);
-  const safeId = objectId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
+  const safeId = safeMediaPathPart(objectId);
   const path = `${userId}/${safeId}/original.${ext}`;
-
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, bytes, {
-    contentType,
-    upsert: true,
-  });
-  if (error) {
-    throw new Error(`上传图片到云存储失败: ${error.message}`);
-  }
-
-  const { data } = supabase.storage.from(GENERATED_IMAGES_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) throw new Error("无法生成图片公开地址");
-  return data.publicUrl;
+  return putMediaObject({ key: path, bytes, contentType });
 }
 
 export async function persistGeneratedImageWithThumbnailToStorage(
@@ -106,18 +96,8 @@ export async function persistGeneratedImageWithThumbnailToStorage(
   const imageUrl = await persistGeneratedImageToStorage(supabase, userId, sourceUrl, objectId);
   const { bytes } = await resolveImageBytes(imageUrl);
   const thumb = await buildGeneratedImageThumbnail(bytes);
-  const safeId = objectId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
+  const safeId = safeMediaPathPart(objectId);
   const path = `${userId}/${safeId}/thumb.${thumb.ext}`;
-
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, thumb.bytes, {
-    contentType: thumb.contentType,
-    upsert: true,
-  });
-  if (error) {
-    throw new Error(`上传缩略图到云存储失败: ${error.message}`);
-  }
-
-  const { data } = supabase.storage.from(GENERATED_IMAGES_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) throw new Error("无法生成缩略图公开地址");
-  return { imageUrl, thumbnailUrl: data.publicUrl };
+  const thumbnailUrl = await putMediaObject({ key: path, bytes: thumb.bytes, contentType: thumb.contentType });
+  return { imageUrl, thumbnailUrl };
 }

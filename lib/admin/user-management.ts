@@ -1,6 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { maybeCreateSupabaseAdminClient } from "@/lib/supabase/admin";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
+import { deleteMediaPrefix } from "@/lib/media-storage";
 import {
   canAdmin,
   normalizeAdminRole,
@@ -21,7 +21,6 @@ import {
 
 const AUTH_SCAN_PAGE_SIZE = 1000;
 const AUTH_SCAN_MAX_PAGES = 200;
-const STORAGE_LIST_PAGE_SIZE = 1000;
 
 const USER_DATA_TABLES: Array<{ table: string; column: string }> = [
   { table: "project_assets", column: "user_id" },
@@ -246,51 +245,6 @@ async function deleteRowsByColumn(
     throw error;
   }
   return count;
-}
-
-async function listStoragePrefixFiles(
-  supabase: SupabaseClient,
-  bucket: string,
-  prefix: string,
-): Promise<string[]> {
-  const filePaths: string[] = [];
-  const folders: string[] = [];
-  for (let offset = 0; offset < AUTH_SCAN_MAX_PAGES * STORAGE_LIST_PAGE_SIZE; offset += STORAGE_LIST_PAGE_SIZE) {
-    const { data, error } = await supabase.storage.from(bucket).list(prefix, {
-      limit: STORAGE_LIST_PAGE_SIZE,
-      offset,
-      sortBy: { column: "name", order: "asc" },
-    });
-    if (error) throw error;
-    const items = data ?? [];
-    for (const item of items) {
-      const path = `${prefix}/${item.name}`;
-      const isFolder = (item as { id?: string | null }).id === null;
-      if (isFolder) folders.push(path);
-      else filePaths.push(path);
-    }
-    if (items.length < STORAGE_LIST_PAGE_SIZE) break;
-  }
-  for (const folder of folders) {
-    filePaths.push(...await listStoragePrefixFiles(supabase, bucket, folder));
-  }
-  return filePaths;
-}
-
-async function deleteStoragePrefix(
-  supabase: SupabaseClient,
-  bucket: string,
-  prefix: string,
-): Promise<number> {
-  const filePaths = await listStoragePrefixFiles(supabase, bucket, prefix);
-  let removed = 0;
-  for (let index = 0; index < filePaths.length; index += 100) {
-    const chunk = filePaths.slice(index, index + 100);
-    const { error: removeError } = await supabase.storage.from(bucket).remove(chunk);
-    if (removeError) throw removeError;
-    removed += chunk.length;
-  }
-  return removed;
 }
 
 async function promptSubmissionStats(supabase: SupabaseClient, userId: string): Promise<Pick<
@@ -669,12 +623,12 @@ export async function deleteAdminUserData(params: {
 
   let storageObjects = 0;
   try {
-    storageObjects = await deleteStoragePrefix(admin, GENERATED_IMAGES_BUCKET, params.userId);
-    steps.push({ phase: "storage", target: GENERATED_IMAGES_BUCKET, ok: true, count: storageObjects });
+    storageObjects = await deleteMediaPrefix(params.userId);
+    steps.push({ phase: "storage", target: "r2-media", ok: true, count: storageObjects });
   } catch (error) {
     const step = {
       phase: "storage" as const,
-      target: GENERATED_IMAGES_BUCKET,
+      target: "r2-media",
       ok: false,
       message: error instanceof Error ? error.message : "云存储文件清理失败",
     };

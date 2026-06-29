@@ -55,7 +55,6 @@ import {
   VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
 
-const MEDIA_BUCKET = "generated-images";
 const OPEN_VIDEO_PROMPT_PRESETS_EVENT = "otato:open-video-prompt-presets";
 
 function ratioPreviewAspect(value: string): string | undefined {
@@ -891,13 +890,16 @@ export default function VideoPage() {
         uniqueLocalSlots.map(async (slot) => {
           if (!slot.file) return;
           const path = `${user.id}/video-inputs/${safeModelId}/${slot.kind}/${crypto.randomUUID()}.${mediaFileExtension(slot.file, slot.kind)}`;
-          const { error: uploadError } = await supabase.storage.from(MEDIA_BUCKET).upload(path, slot.file, {
-            contentType: slot.mimeType,
-            upsert: false,
+          const form = new FormData();
+          form.append("file", slot.file, slot.file.name || "reference");
+          form.append("key", path);
+          form.append("contentType", slot.mimeType);
+          const response = await fetch("/api/media/upload", {
+            method: "POST",
+            body: form,
           });
-          if (uploadError) throw uploadError;
-          const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-          if (!data.publicUrl) throw new Error("无法生成素材地址");
+          const data = (await response.json().catch(() => ({}))) as { publicUrl?: string; error?: string };
+          if (!response.ok || !data.publicUrl) throw new Error(data.error || "素材上传失败");
           uploadedUrlByPreviewUrl.set(slot.previewUrl, data.publicUrl);
         }),
       );

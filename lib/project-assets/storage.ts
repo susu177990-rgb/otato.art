@@ -1,22 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 import { resolveImageBytes } from "@/lib/db/persist-generated-image";
+import { deleteMediaPrefix, mediaFileExtensionFromMime, putMediaObject, safeMediaPathPart } from "@/lib/media-storage";
 
 function safePathPart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120) || crypto.randomUUID();
-}
-
-function extensionForMime(mime: string): string {
-  const normalized = mime.toLowerCase().split(";")[0]?.trim() || "image/png";
-  if (normalized.includes("jpeg") || normalized === "image/jpg") return "jpg";
-  if (normalized.includes("webp")) return "webp";
-  if (normalized.includes("gif")) return "gif";
-  if (normalized.includes("bmp")) return "bmp";
-  if (normalized.includes("quicktime")) return "mov";
-  if (normalized.includes("webm")) return "webm";
-  if (normalized.includes("mp4") || normalized.includes("m4v")) return "mp4";
-  if (normalized.includes("ogg")) return "ogv";
-  return "png";
+  return safeMediaPathPart(value);
 }
 
 export function projectAssetStoragePath(input: {
@@ -53,16 +40,9 @@ export async function copyProjectAssetImage(
   }
   const path = projectAssetStoragePath({
     ...input,
-    extension: extensionForMime(contentType),
+    extension: mediaFileExtensionFromMime(contentType, "png"),
   });
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, bytes, {
-    contentType,
-    upsert: true,
-  });
-  if (error) throw new Error(`复制素材媒体失败: ${error.message}`);
-  const { data } = supabase.storage.from(GENERATED_IMAGES_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) throw new Error("无法生成素材媒体地址");
-  return data.publicUrl;
+  return putMediaObject({ key: path, bytes, contentType });
 }
 
 export async function copyProjectAssetMedia(
@@ -97,10 +77,5 @@ export async function removeProjectAssetMedia(
   input: { userId: string; projectId: string; assetId: string },
 ): Promise<void> {
   const prefix = `${safePathPart(input.userId)}/projects/${safePathPart(input.projectId)}/assets/${safePathPart(input.assetId)}`;
-  const { data, error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).list(prefix);
-  if (error) throw new Error(`读取素材媒体失败: ${error.message}`);
-  const paths = (data ?? []).map((item) => `${prefix}/${item.name}`);
-  if (paths.length === 0) return;
-  const { error: removeError } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).remove(paths);
-  if (removeError) throw new Error(`删除素材媒体失败: ${removeError.message}`);
+  await deleteMediaPrefix(prefix);
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
 import { MODE_COVER_OUTPUT_MIME } from "@/lib/image/process-mode-cover";
+import { deleteMediaObjects, mediaObjectKeyFromPublicUrl, putMediaObject } from "@/lib/media-storage";
 
 export const MODE_COVER_STORAGE_PREFIX = "site/mode-covers";
 
@@ -25,6 +26,8 @@ export function modeCoverStoragePath(modeId: string, extension = "webp"): string
 export function storagePathFromPublicUrl(url: string, bucket = GENERATED_IMAGES_BUCKET): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
+  const r2Key = mediaObjectKeyFromPublicUrl(trimmed);
+  if (r2Key) return r2Key;
   const marker = `/storage/v1/object/public/${bucket}/`;
   const idx = trimmed.indexOf(marker);
   if (idx === -1) return null;
@@ -51,8 +54,9 @@ export async function deleteModeCoverObject(
 ): Promise<void> {
   const path = coverUrl ? storagePathFromPublicUrl(coverUrl) : null;
   if (!path?.startsWith(`${MODE_COVER_STORAGE_PREFIX}/`)) return;
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).remove([path]);
-  if (error) throw new Error(`删除封面图失败: ${error.message}`);
+  if (coverUrl && mediaObjectKeyFromPublicUrl(coverUrl)) {
+    await deleteMediaObjects([path]);
+  }
 }
 
 export async function uploadModeCoverObject(
@@ -69,13 +73,9 @@ export async function uploadModeCoverObject(
   }
 
   const path = modeCoverStoragePath(modeId, options.extension);
-  const { error } = await supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(path, imageBytes, {
+  return putMediaObject({
+    key: path,
+    bytes: imageBytes,
     contentType: options.contentType ?? MODE_COVER_OUTPUT_MIME,
-    upsert: true,
   });
-  if (error) throw new Error(`上传封面图失败: ${error.message}`);
-
-  const { data } = supabase.storage.from(GENERATED_IMAGES_BUCKET).getPublicUrl(path);
-  if (!data.publicUrl) throw new Error("无法生成封面图公开地址");
-  return data.publicUrl;
 }

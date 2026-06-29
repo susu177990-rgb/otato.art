@@ -39,6 +39,7 @@
     "db:push": "npx tsx scripts/push-supabase-migrations.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@lexical/history": "^0.45.0",
     "@lexical/plain-text": "^0.45.0",
     "@lexical/react": "^0.45.0",

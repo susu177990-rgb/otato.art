@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { requireAdmin } from "@/lib/api/admin-auth";
-import { GENERATED_IMAGES_BUCKET } from "@/lib/generated-image-storage";
+import { putMediaObject } from "@/lib/media-storage";
 
 const CONTACT_QR_STORAGE_PATH = "site/contact/recharge-wechat-qr.jpg";
 const MAX_CONTACT_QR_BYTES = 8 * 1024 * 1024;
@@ -49,11 +49,11 @@ export async function POST(req: Request) {
       .jpeg({ quality: 92 })
       .toBuffer();
 
-    const { error } = await auth.supabase.storage.from(GENERATED_IMAGES_BUCKET).upload(CONTACT_QR_STORAGE_PATH, output, {
+    await putMediaObject({
+      key: CONTACT_QR_STORAGE_PATH,
+      bytes: output,
       contentType: "image/jpeg",
-      upsert: true,
     });
-    if (error) throw new Error(`上传二维码失败: ${error.message}`);
 
     return NextResponse.json({
       imageUrl: imageUrl(),
