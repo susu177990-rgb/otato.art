@@ -1216,8 +1216,11 @@ export default function ImagePage() {
       }
       if (mountedRef.current) setResultUrl(imageUrl);
       if (Array.isArray(data.galleryRecords)) {
+        const stableReferenceImages = data.galleryRecord?.referenceImages?.length
+          ? data.galleryRecord.referenceImages
+          : referenceImages;
         if (data.galleryRecord?.id) {
-          saveReferenceImagesForRecord(data.galleryRecord.id, referenceImages);
+          saveReferenceImagesForRecord(data.galleryRecord.id, stableReferenceImages);
           saveImageResultForRecord(data.galleryRecord.id, imageUrl);
         }
         if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(data.galleryRecords)));

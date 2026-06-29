@@ -70,7 +70,7 @@ describe("image gallery storage", () => {
     expect(deleteCalled).toBe(false);
   });
 
-  it("strips all reference images from stored gallery records", () => {
+  it("keeps stored reference image URLs and strips inline reference images", () => {
     const sanitized = sanitizeGalleryRecordForStorage({
       ...galleryRecord("with-refs"),
       referenceImages: [
@@ -89,7 +89,14 @@ describe("image gallery storage", () => {
       ],
     });
 
-    expect(sanitized.referenceImages).toBeUndefined();
+    expect(sanitized.referenceImages).toEqual([
+      {
+        slotIndex: 1,
+        dataUrl: `${storedUrl}?ref=1`,
+        name: "stored.png",
+        type: "image/png",
+      },
+    ]);
   });
 
   it("does not insert failed records into the gallery", async () => {

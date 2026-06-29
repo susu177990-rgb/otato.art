@@ -15,6 +15,7 @@ import {
   type GptImageBackground,
   type GptImageQuality,
   type ImageGalleryRecord,
+  type ImageGalleryReferenceImage,
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
@@ -160,6 +161,40 @@ async function resolveCrunReferenceImages(params: {
         endpoint: endpointForDiagnostics(params.model.endpointUrl),
       },
     );
+  }
+  return out;
+}
+
+async function buildStoredReferenceImages(params: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  userId: string;
+  traceId: string;
+  upstreamRefImages: string[];
+  originalRefImages: string[];
+}): Promise<ImageGalleryReferenceImage[]> {
+  const out: ImageGalleryReferenceImage[] = [];
+  for (const [index, raw] of params.originalRefImages.entries()) {
+    const upstream = params.upstreamRefImages[index]?.trim();
+    if (upstream && /^https?:\/\//i.test(upstream)) {
+      out.push({ slotIndex: index, dataUrl: upstream });
+      continue;
+    }
+
+    const original = raw.trim();
+    if (/^https?:\/\//i.test(original)) {
+      out.push({ slotIndex: index, dataUrl: original });
+      continue;
+    }
+
+    if (original.startsWith("data:")) {
+      const stored = await persistGeneratedImageToStorage(
+        params.supabase,
+        params.userId,
+        original,
+        `${params.traceId}-gallery-reference-${index + 1}`,
+      );
+      out.push({ slotIndex: index, dataUrl: stored });
+    }
   }
   return out;
 }
@@ -389,6 +424,13 @@ export async function POST(req: NextRequest) {
       refImages: body.refImages ?? [],
       model,
     });
+    const referenceImages = await buildStoredReferenceImages({
+      supabase,
+      userId: user.id,
+      traceId,
+      upstreamRefImages: refImages,
+      originalRefImages: body.refImages ?? [],
+    });
     const result = await generateImage({
       model,
       prompt,
@@ -432,7 +474,8 @@ export async function POST(req: NextRequest) {
       gptImageBackground: model.provider === "gpt-image" ? gptImageBackground : undefined,
       imageUrl: storedImage.imageUrl,
       thumbnailUrl: storedImage.thumbnailUrl,
-      refImageCount: body.refImages?.length ?? 0,
+      refImageCount: referenceImages.length,
+      referenceImages,
       status: "success",
     };
     const galleryRecords = await prependGalleryRecord(supabase, galleryRecord, { projectId });

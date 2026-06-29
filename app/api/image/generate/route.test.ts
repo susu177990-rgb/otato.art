@@ -267,6 +267,9 @@ describe("POST /api/image/generate CRUN references", () => {
 
     expect(response.status).toBe(200);
     expect(data.imageUrl).toBe("https://storage.example.com/generated.png");
+    expect(data.galleryRecord.referenceImages).toEqual([
+      { slotIndex: 0, dataUrl: "https://storage.example.com/ref.png" },
+    ]);
     expect(persistGeneratedImageToStorage).toHaveBeenCalledWith(
       expect.anything(),
       "user-1",

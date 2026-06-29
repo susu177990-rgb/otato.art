@@ -1,12 +1,22 @@
 import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
 
-/** 写入 Supabase JSONB 前：参考图不进云端；去掉未上传的 data: / 超长 URL。 */
+function sanitizeReferenceImages(record: ImageGalleryRecord): ImageGalleryRecord["referenceImages"] {
+  return record.referenceImages
+    ?.map((image) => ({
+      ...image,
+      dataUrl: image.dataUrl.trim(),
+    }))
+    .filter((image) => /^https?:\/\//i.test(image.dataUrl) && image.dataUrl.length <= 8192);
+}
+
+/** 写入 Supabase JSONB 前：只保留稳定 URL，去掉未上传的 data: / 超长 URL。 */
 export function sanitizeGalleryRecordForStorage(record: ImageGalleryRecord): ImageGalleryRecord {
   const next: ImageGalleryRecord = {
     ...record,
-    referenceImages: undefined,
+    referenceImages: sanitizeReferenceImages(record),
   };
+  if (!next.referenceImages?.length) delete next.referenceImages;
   const url = next.imageUrl?.trim();
   if (!url) {
     delete next.imageUrl;
