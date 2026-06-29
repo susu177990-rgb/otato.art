@@ -5,6 +5,7 @@ import {
   isStoredGeneratedVideoUrl,
   persistGeneratedVideoToStorage,
 } from "@/lib/db/persist-generated-video";
+import { deleteMediaObjects, mediaObjectKeyFromPublicUrl } from "@/lib/media-storage";
 import {
   applyProjectScope,
   normalizePageLimit,
@@ -168,11 +169,21 @@ export async function deleteVideoGalleryRecord(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
+  const existing = await getVideoGalleryRecord(supabase, id, scope);
   const query = applyProjectScope(
     supabase.from("video_gallery_records").delete().eq("user_id", user.id).eq("id", id).select("id"),
     scope,
   );
   const { data, error } = await query;
   if (error) throw error;
-  return (data?.length ?? 0) > 0;
+  const deleted = (data?.length ?? 0) > 0;
+  if (!deleted) return false;
+
+  const key = existing?.videoUrl ? mediaObjectKeyFromPublicUrl(existing.videoUrl) : null;
+  if (key?.startsWith(`${user.id}/`)) {
+    await deleteMediaObjects([key]).catch((cleanupError) => {
+      console.warn("[video/gallery storage cleanup]", cleanupError);
+    });
+  }
+  return true;
 }
