@@ -70,7 +70,7 @@ function fileNameFromMediaUrl(url: string, fallback: string): string {
   }
 }
 
-async function readFileDataUrl(file: File): Promise<string> {
+function validateMediaFile(file: File) {
   if (!ACCEPTED_MEDIA_MIME_RE.test(file.type)) {
     throw new Error("素材只支持图片或 MP4、WebM、MOV 视频");
   }
@@ -78,12 +78,6 @@ async function readFileDataUrl(file: File): Promise<string> {
   if (file.size > limit) {
     throw new Error(`单个素材不能超过 ${Math.floor(limit / 1024 / 1024)}MB`);
   }
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("读取素材失败"));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -173,6 +167,25 @@ export function ProjectAssetLibrary({
     [projectId],
   );
 
+  const uploadAssetFile = useCallback(
+    async (file: File): Promise<ProjectAsset> => {
+      validateMediaFile(file);
+      const form = new FormData();
+      form.append("file", file, file.name || "asset");
+      form.append("type", activeType === "all" ? "character" : activeType);
+      form.append("name", fileNameWithoutExtension(file));
+      form.append("description", "");
+      form.append("tags", "[]");
+      const response = await fetch(`/api/projects/${projectId}/assets`, {
+        method: "POST",
+        body: form,
+      });
+      const { asset } = await responseJson<{ asset: ProjectAsset }>(response);
+      return asset;
+    },
+    [activeType, projectId],
+  );
+
   const uploadFiles = useCallback(
     async (files: FileList | File[]) => {
       const fileList = Array.from(files);
@@ -182,15 +195,7 @@ export function ProjectAssetLibrary({
       try {
         let lastCreated: ProjectAsset | null = null;
         for (const file of fileList) {
-          const primaryImageUrl = await readFileDataUrl(file);
-          lastCreated = await createAsset({
-            type: activeType === "all" ? "character" : activeType,
-            name: fileNameWithoutExtension(file),
-            description: "",
-            tags: [],
-            primaryImageUrl,
-            referenceImageUrls: [],
-          });
+          lastCreated = await uploadAssetFile(file);
         }
         setView("assets");
         await load();
@@ -202,7 +207,7 @@ export function ProjectAssetLibrary({
         if (uploadInputRef.current) uploadInputRef.current.value = "";
       }
     },
-    [activeType, createAsset, editAsset, load],
+    [editAsset, load, uploadAssetFile],
   );
 
   const convertGalleryItem = useCallback(
