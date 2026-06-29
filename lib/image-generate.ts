@@ -5,6 +5,7 @@ import {
   GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
   GPT_IMAGE_2_PROMPT_MAX_LENGTH,
   Z_IMAGE_PROMPT_MAX_LENGTH,
+  type ImageGalleryReferenceImage,
 } from "@/lib/image-workspace";
 import {
   type GptImageBackground,
@@ -20,6 +21,7 @@ type GenerateBody = {
   modeId?: string;
   modeName?: string;
   slotInputs?: string[];
+  recordRefImages?: ImageGalleryReferenceImage[];
   modelId?: string;
   model?: ImageModelSettings;
   aspectRatio?: ImageAspectRatio;
@@ -140,11 +142,26 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
     }
     const gq = meta.gptImageQuality;
     const gb = meta.gptImageBackground;
+    const recordRefSlotIndexes = Array.isArray(meta.recordRefSlotIndexes)
+      ? meta.recordRefSlotIndexes.map((x) => Number(x))
+      : [];
+    const recordRefImages: ImageGalleryReferenceImage[] = [];
+    for (const [index, part] of form.getAll("recordRef").entries()) {
+      if (part instanceof Blob && part.size > 0) {
+        recordRefImages.push({
+          slotIndex: Number.isFinite(recordRefSlotIndexes[index]) ? recordRefSlotIndexes[index] : index,
+          dataUrl: await blobToDataUrl(part),
+          name: "name" in part && typeof part.name === "string" ? part.name : `reference-${index + 1}.png`,
+          type: part.type || "image/png",
+        });
+      }
+    }
     const body: GenerateBody = {
       prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
       modeId: typeof meta.modeId === "string" ? meta.modeId.trim() : undefined,
       modeName: typeof meta.modeName === "string" ? meta.modeName.trim() : undefined,
       slotInputs: Array.isArray(meta.slotInputs) ? meta.slotInputs.map((x) => String(x ?? "")) : undefined,
+      recordRefImages,
       requestId: typeof meta.requestId === "string" ? meta.requestId.trim() : undefined,
       modelId: typeof meta.modelId === "string" ? meta.modelId.trim() : undefined,
       model: meta.model as ImageModelSettings | undefined,
@@ -183,6 +200,7 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
       modeId: typeof raw.modeId === "string" ? raw.modeId.trim() : undefined,
       modeName: typeof raw.modeName === "string" ? raw.modeName.trim() : undefined,
       slotInputs: Array.isArray(raw.slotInputs) ? raw.slotInputs.map((x) => String(x ?? "")) : undefined,
+      recordRefImages: Array.isArray(raw.recordRefImages) ? raw.recordRefImages : undefined,
       refImages,
     },
   };

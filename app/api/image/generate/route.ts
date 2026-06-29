@@ -172,19 +172,19 @@ async function buildStoredReferenceImages(params: {
   userId: string;
   traceId: string;
   upstreamRefImages: string[];
-  originalRefImages: string[];
+  originalRefImages: ImageGalleryReferenceImage[];
 }): Promise<ImageGalleryReferenceImage[]> {
   const out: ImageGalleryReferenceImage[] = [];
-  for (const [index, raw] of params.originalRefImages.entries()) {
+  for (const [index, image] of params.originalRefImages.entries()) {
     const upstream = params.upstreamRefImages[index]?.trim();
     if (upstream && /^https?:\/\//i.test(upstream)) {
-      out.push({ slotIndex: index, dataUrl: upstream });
+      out.push({ ...image, dataUrl: upstream });
       continue;
     }
 
-    const original = raw.trim();
+    const original = image.dataUrl.trim();
     if (/^https?:\/\//i.test(original)) {
-      out.push({ slotIndex: index, dataUrl: original });
+      out.push({ ...image, dataUrl: original });
       continue;
     }
 
@@ -195,7 +195,7 @@ async function buildStoredReferenceImages(params: {
         original,
         `${params.traceId}-gallery-reference-${index + 1}`,
       );
-      out.push({ slotIndex: index, dataUrl: stored });
+      out.push({ ...image, dataUrl: stored });
     }
   }
   return out;
@@ -426,12 +426,15 @@ export async function POST(req: NextRequest) {
       refImages: body.refImages ?? [],
       model,
     });
+    const originalReferenceImages = body.recordRefImages?.length
+      ? body.recordRefImages
+      : (body.refImages ?? []).map((dataUrl, index) => ({ slotIndex: index, dataUrl }));
     const referenceImages = await buildStoredReferenceImages({
       supabase,
       userId: user.id,
       traceId,
-      upstreamRefImages: refImages,
-      originalRefImages: body.refImages ?? [],
+      upstreamRefImages: originalReferenceImages.map((image) => image.dataUrl),
+      originalRefImages: originalReferenceImages,
     });
     const result = await generateImage({
       model,

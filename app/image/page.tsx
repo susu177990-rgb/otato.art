@@ -1141,6 +1141,7 @@ export default function ImagePage() {
     let pendingId = "";
     try {
       const refSlotsSnapshot = normalizeRefSlots(refSlots).slice(0, referenceLimit);
+      const recordRefSlotsSnapshot = refSlotsSnapshot;
       const mentionedSlots = new Set(
         mentionResolution.mentions
           .filter((mention) => mention.candidate?.type === "slot")
@@ -1198,11 +1199,17 @@ export default function ImagePage() {
           imageSize,
           gptImageQuality: liveModel.provider === "gpt-image" ? liveSettings.gptImageQuality : undefined,
           refImages: [],
+          recordRefSlotIndexes: recordRefSlotsSnapshot
+            .map((slot, index) => (slot?.file ? index : null))
+            .filter((index): index is number => index !== null),
           projectId,
         }),
       );
       for (const slot of requestSlots) {
         if (slot?.file) fd.append("ref", slot.file, slot.file.name || "reference.png");
+      }
+      for (const slot of recordRefSlotsSnapshot) {
+        if (slot?.file) fd.append("recordRef", slot.file, slot.file.name || "reference.png");
       }
 
       const res = await fetch("/api/image/generate", {
