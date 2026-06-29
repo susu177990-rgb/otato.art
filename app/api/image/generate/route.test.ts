@@ -8,6 +8,7 @@ import {
 import { captureCreditReservation, ensureCreditAccount, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
 import { quoteImageCredits } from "@/lib/credits/pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { prependGalleryRecord } from "@/lib/db/gallery-store";
 import type { ImageModelSettings } from "@/lib/image-workspace";
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -25,6 +26,10 @@ vi.mock("@/lib/db/workspace-settings-store", () => ({
 vi.mock("@/lib/db/persist-generated-image", () => ({
   persistGeneratedImageToStorage: vi.fn(),
   persistGeneratedImageWithThumbnailToStorage: vi.fn(),
+}));
+
+vi.mock("@/lib/db/gallery-store", () => ({
+  prependGalleryRecord: vi.fn(),
 }));
 
 vi.mock("@/lib/credits/pricing", async (importOriginal) => {
@@ -239,6 +244,7 @@ describe("POST /api/image/generate CRUN references", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    vi.mocked(prependGalleryRecord).mockImplementation(async (_supabase, record) => [record] as never);
   });
 
   afterEach(() => {

@@ -17,6 +17,9 @@ import {
 type GenerateBody = {
   requestId?: string;
   prompt?: string;
+  modeId?: string;
+  modeName?: string;
+  slotInputs?: string[];
   modelId?: string;
   model?: ImageModelSettings;
   aspectRatio?: ImageAspectRatio;
@@ -139,6 +142,9 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
     const gb = meta.gptImageBackground;
     const body: GenerateBody = {
       prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
+      modeId: typeof meta.modeId === "string" ? meta.modeId.trim() : undefined,
+      modeName: typeof meta.modeName === "string" ? meta.modeName.trim() : undefined,
+      slotInputs: Array.isArray(meta.slotInputs) ? meta.slotInputs.map((x) => String(x ?? "")) : undefined,
       requestId: typeof meta.requestId === "string" ? meta.requestId.trim() : undefined,
       modelId: typeof meta.modelId === "string" ? meta.modelId.trim() : undefined,
       model: meta.model as ImageModelSettings | undefined,
@@ -170,7 +176,16 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
   const refImages = Array.isArray(raw.refImages)
     ? raw.refImages.filter((x): x is string => typeof x === "string" && x.length > 0)
     : [];
-  return { ok: true, body: { ...raw, refImages } };
+  return {
+    ok: true,
+    body: {
+      ...raw,
+      modeId: typeof raw.modeId === "string" ? raw.modeId.trim() : undefined,
+      modeName: typeof raw.modeName === "string" ? raw.modeName.trim() : undefined,
+      slotInputs: Array.isArray(raw.slotInputs) ? raw.slotInputs.map((x) => String(x ?? "")) : undefined,
+      refImages,
+    },
+  };
 }
 
 /** OpenAI GPT Image：moderation 省略（默认 auto），避免劣质中转把枚举误解析成数字。 */

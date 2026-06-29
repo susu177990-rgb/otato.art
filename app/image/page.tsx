@@ -1176,6 +1176,9 @@ export default function ImagePage() {
         JSON.stringify({
           requestId: runtimeState.taskId,
           prompt: cleanedPrompt,
+          modeId: selectedModeId,
+          modeName: allModes.find((m) => m.id === selectedModeId)?.label ?? displayedPromptPresetById.get(selectedModeId)?.title ?? selectedModeId,
+          slotInputs: [...slotInputs],
           modelId: selectedModelId,
           aspectRatio,
           imageSize,
@@ -1195,6 +1198,8 @@ export default function ImagePage() {
       const data = (await res.json().catch(() => ({}))) as ImageGenerateFailurePayload & {
         imageUrl?: string;
         thumbnailUrl?: string;
+        galleryRecord?: ImageGalleryRecord;
+        galleryRecords?: ImageGalleryRecord[];
       };
       if (!res.ok) throw new Error(formatImageGenerateFailure(data));
       const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl.trim() : "";
@@ -1210,10 +1215,18 @@ export default function ImagePage() {
         });
       }
       if (mountedRef.current) setResultUrl(imageUrl);
-      try {
-        void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages, thumbnailUrl || undefined);
-      } catch (persistErr) {
-        console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
+      if (Array.isArray(data.galleryRecords)) {
+        if (data.galleryRecord?.id) {
+          saveReferenceImagesForRecord(data.galleryRecord.id, referenceImages);
+          saveImageResultForRecord(data.galleryRecord.id, imageUrl);
+        }
+        if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(data.galleryRecords)));
+      } else {
+        try {
+          void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages, thumbnailUrl || undefined);
+        } catch (persistErr) {
+          console.warn("本地画廊写入失败（多与浏览器存储配额有关）:", persistErr);
+        }
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "生图失败";

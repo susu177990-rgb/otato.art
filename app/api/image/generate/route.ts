@@ -14,6 +14,7 @@ import {
   imagePromptMaxLengthForContext,
   type GptImageBackground,
   type GptImageQuality,
+  type ImageGalleryRecord,
   type ImageModelId,
   type ImageSizeTier,
 } from "@/lib/image-workspace";
@@ -28,6 +29,7 @@ import { captureCreditReservation, ensureCreditAccount, releaseCreditReservation
 import { CreditPricingError, quoteImageCredits } from "@/lib/credits/pricing";
 import { CreditRiskError, assertCreditGenerationAllowed } from "@/lib/credits/risk";
 import type { CreditReservation } from "@/lib/credits/types";
+import { prependGalleryRecord } from "@/lib/db/gallery-store";
 
 type ImageGenerateFailureResponse = {
   error: string;
@@ -413,6 +415,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const galleryRecord: ImageGalleryRecord = {
+      id: requestId,
+      createdAt: new Date().toISOString(),
+      modeId: body.modeId || "free",
+      modeName: body.modeName || body.modeId || "自由模式",
+      modelId: imageModelId,
+      modelName: model.modelName,
+      finalPrompt: prompt,
+      userInput: body.slotInputs?.[0] ?? prompt,
+      userInputSecondary: body.slotInputs && body.slotInputs.length >= 2 ? body.slotInputs[1] : undefined,
+      userSlotInputs: body.slotInputs ? [...body.slotInputs] : undefined,
+      aspectRatio: body.aspectRatio ?? "auto",
+      imageSize,
+      gptImageQuality: model.provider === "gpt-image" ? gptImageQuality : undefined,
+      gptImageBackground: model.provider === "gpt-image" ? gptImageBackground : undefined,
+      imageUrl: storedImage.imageUrl,
+      thumbnailUrl: storedImage.thumbnailUrl,
+      refImageCount: body.refImages?.length ?? 0,
+      status: "success",
+    };
+    const galleryRecords = await prependGalleryRecord(supabase, galleryRecord, { projectId });
     const captured = await captureCreditReservation({
       reservationId: reservation.id,
       resultRef: storedImage.imageUrl,
@@ -421,6 +444,8 @@ export async function POST(req: NextRequest) {
     const account = await ensureCreditAccount(user.id);
     return Response.json({
       ...storedImage,
+      galleryRecord,
+      galleryRecords,
       payloadKind: result.payloadKind,
       traceId,
       reservationId: captured.id,
