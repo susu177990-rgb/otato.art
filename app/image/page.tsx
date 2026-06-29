@@ -327,7 +327,7 @@ function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ImageGenerationRuntimeState>;
     if (!parsed.taskId || !parsed.status || !parsed.startedAt) return null;
-    if (parsed.status !== "running" && parsed.status !== "success" && parsed.status !== "error") return null;
+    if (parsed.status !== "running") return null;
     if (!isImageModelId(parsed.modelId)) {
       return null;
     }
@@ -365,6 +365,15 @@ function writeGenerationRuntimeState(next: ImageGenerationRuntimeState) {
     return;
   }
   window.dispatchEvent(new CustomEvent<ImageGenerationRuntimeState>(IMAGE_GENERATION_RUNTIME_EVENT, { detail: next }));
+}
+
+function clearGenerationRuntimeState() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY);
+  } catch {
+    return;
+  }
 }
 
 function readReferenceImageCache(): Record<string, ImageGalleryReferenceImage[]> {
@@ -782,13 +791,7 @@ export default function ImagePage() {
       saveImageResultForRecord(latest.id, latest.imageUrl);
       const runtime = readGenerationRuntimeState();
       if (runtime && completedIds.has(runtime.taskId)) {
-        writeGenerationRuntimeState({
-          ...runtime,
-          status: "success",
-          updatedAt: new Date().toISOString(),
-          imageUrl: latest.imageUrl,
-          error: undefined,
-        });
+        clearGenerationRuntimeState();
       }
     }
     setPendingGenerations((prev) => prev.filter((item) => !completedIds.has(item.id)));
@@ -1269,13 +1272,7 @@ export default function ImagePage() {
       const thumbnailUrl = typeof data.thumbnailUrl === "string" ? data.thumbnailUrl.trim() : "";
       if (!imageUrl) throw new Error(formatImageGenerateFailure(data, "服务器未返回图片地址"));
       if (runtimeState) {
-        writeGenerationRuntimeState({
-          ...runtimeState,
-          status: "success",
-          updatedAt: new Date().toISOString(),
-          imageUrl,
-          error: undefined,
-        });
+        clearGenerationRuntimeState();
       }
       if (mountedRef.current) setResultUrl(imageUrl);
       if (Array.isArray(data.galleryRecords)) {
@@ -1297,12 +1294,7 @@ export default function ImagePage() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "生图失败";
       if (runtimeState) {
-        writeGenerationRuntimeState({
-          ...runtimeState,
-          status: "error",
-          updatedAt: new Date().toISOString(),
-          error: message,
-        });
+        clearGenerationRuntimeState();
       }
       if (mountedRef.current) setError(message);
       try {
