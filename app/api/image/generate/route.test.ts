@@ -367,6 +367,38 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(submitBody.input.aspect_ratio).toBeUndefined();
   });
 
+  it("allows long Grok prompts when uploaded references make the request I2I", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "task-1" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/generated.png"] } }),
+          { status: 200 },
+        ),
+      );
+
+    const response = await POST(imageGenerateRequestWithRefs(
+      [new Blob(["abc"], { type: "image/png" })],
+      {
+        prompt: "x".repeat(6000),
+        modelId: "grok-imagine-i2i",
+        model: grokCrunModel,
+        refSlotIndexes: [0],
+        modelRefSlotIndexes: [0],
+      },
+    ) as never);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.imageUrl).toBe("https://storage.example.com/generated.png");
+    const submitInit = fetchMock.mock.calls[0][1] as RequestInit;
+    const submitBody = JSON.parse(String(submitInit.body)) as { model: string; input: Record<string, unknown> };
+    expect(submitBody.model).toBe("grok-imagine/i2i");
+    expect(String(submitBody.input.prompt)).toHaveLength(6000);
+    expect(submitBody.input.img_urls).toEqual(["https://storage.example.com/ref.png"]);
+  });
+
   it("sends the selected aspect ratio for Grok T2I JSON generations", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

@@ -4,6 +4,7 @@ import {
   ImageGenerationError,
   generateImage,
   parseGenerateRequest,
+  type GenerateBody,
   type ImageGenerationErrorDetails,
 } from "@/lib/image-generate";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
@@ -194,6 +195,21 @@ async function buildStoredReferenceImages(params: {
   return out;
 }
 
+function originalReferenceImagesForRequest(body: GenerateBody): ImageGalleryReferenceImage[] {
+  if (body.uploadRefImages?.length) return body.uploadRefImages;
+  if (body.recordRefImages?.length) return body.recordRefImages;
+  return (body.refImages ?? []).map((dataUrl, index) => ({ slotIndex: index, dataUrl }));
+}
+
+function selectedModelReferenceCount(
+  originalReferenceImages: ImageGalleryReferenceImage[],
+  modelRefSlotIndexes: number[] | undefined,
+): number {
+  if (!Array.isArray(modelRefSlotIndexes)) return originalReferenceImages.length;
+  const selected = new Set(modelRefSlotIndexes);
+  return originalReferenceImages.filter((image) => selected.has(image.slotIndex)).length;
+}
+
 export async function POST(req: NextRequest) {
   const traceId = randomUUID();
   const supabase = await createSupabaseServerClient();
@@ -283,7 +299,9 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const promptMaxLength = imagePromptMaxLengthForContext(imageModelId, body.refImages?.length ?? 0);
+  const originalReferenceImages = originalReferenceImagesForRequest(body);
+  const modelRefImageCount = selectedModelReferenceCount(originalReferenceImages, body.modelRefSlotIndexes);
+  const promptMaxLength = imagePromptMaxLengthForContext(imageModelId, modelRefImageCount);
   if (typeof promptMaxLength === "number" && prompt.length > promptMaxLength) {
     return Response.json(
       generationErrorJson({
@@ -296,6 +314,7 @@ export async function POST(req: NextRequest) {
           modelId: imageModelId,
           promptLength: prompt.length,
           promptMaxLength,
+          refImageCount: modelRefImageCount,
         },
         fallbackReasonCode: "INVALID_PROMPT",
         userMessage: `提示词超过 ${promptMaxLength} 字符上限，请缩短后再生成。`,
@@ -346,7 +365,7 @@ export async function POST(req: NextRequest) {
     );
   }
   if (imageModelId === "gpt-image-2") {
-    const refImageCount = body.refImages?.length ?? 0;
+    const refImageCount = modelRefImageCount;
     const aspectRatio = body.aspectRatio ?? "4:3";
     if (refImageCount > GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES) {
       return Response.json(
@@ -409,17 +428,9 @@ export async function POST(req: NextRequest) {
       metadata: {
         traceId,
         promptLength: prompt.length,
-        refImageCount: body.refImages?.length ?? 0,
+        refImageCount: modelRefImageCount,
       },
     });
-    let originalReferenceImages: ImageGalleryReferenceImage[];
-    if (body.uploadRefImages?.length) {
-      originalReferenceImages = body.uploadRefImages;
-    } else if (body.recordRefImages?.length) {
-      originalReferenceImages = body.recordRefImages;
-    } else {
-      originalReferenceImages = (body.refImages ?? []).map((dataUrl, index) => ({ slotIndex: index, dataUrl }));
-    }
     const referenceImages = await buildStoredReferenceImages({
       supabase,
       userId: user.id,

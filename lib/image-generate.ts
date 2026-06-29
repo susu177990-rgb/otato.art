@@ -228,7 +228,7 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
 /** Grsai `/draw/completions`（gpt-image）仍传 moderation，与常见中转示例一致 */
 const GRSAI_GPT_IMAGE_MODERATION = "low";
 const POLL_INTERVAL_MS = 1500;
-const POLL_MAX_TRIES = 120; // ~3 分钟
+const POLL_MAX_TRIES = 320; // ~8 分钟，覆盖 CRUN / 中转站偶发慢任务
 
 const STANDARD_IMAGE_SIZE_BY_RATIO: Record<Exclude<ImageAspectRatio, "auto">, Record<ImageSizeTier, string>> = {
   "1:1": { "1K": "1280x1280", "2K": "1920x1920", "4K": "3840x3840" },

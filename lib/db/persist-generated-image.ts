@@ -24,10 +24,12 @@ export async function resolveImageBytes(sourceUrl: string): Promise<{ bytes: Uin
   if (!trimmed) throw new Error("图片地址为空");
 
   if (trimmed.startsWith("data:")) {
-    const match = trimmed.match(/^data:([^;,]+)?;base64,(.+)$/i);
-    if (!match) throw new Error("无法解析 data URL");
-    const contentType = (match[1] || "image/png").trim();
-    const b64 = match[2].replace(/\s/g, "");
+    const commaIndex = trimmed.indexOf(",");
+    if (commaIndex < 0) throw new Error("无法解析 data URL");
+    const header = trimmed.slice(5, commaIndex);
+    if (!/(?:^|;)base64(?:;|$)/i.test(header)) throw new Error("无法解析 data URL");
+    const contentType = (header.split(";").find((part) => part.includes("/")) || "image/png").trim();
+    const b64 = trimmed.slice(commaIndex + 1).replace(/\s/g, "");
     const bytes = Buffer.from(b64, "base64");
     if (!bytes.byteLength) throw new Error("data URL 内容为空");
     return { bytes: new Uint8Array(bytes), contentType };
