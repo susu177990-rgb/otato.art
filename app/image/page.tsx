@@ -241,9 +241,8 @@ function mediaFileNameFromUrl(url: string, fallback: string): string {
 }
 
 async function refSlotFromProjectAsset(asset: ProjectAsset): Promise<NonNullable<RefSlot>> {
-  const response = await fetch(asset.primaryImageUrl);
-  if (!response.ok) throw new Error("项目素材读取失败");
-  const blob = await response.blob();
+  const blob = await fetchReferenceImageBlob(asset.primaryImageUrl);
+  if (!blob) throw new Error("项目素材读取失败");
   if (!blob.type.startsWith("image/")) throw new Error("请选择图片素材");
   const file = new File(
     [blob],

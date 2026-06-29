@@ -97,24 +97,18 @@ export function ProjectAssetLibrary({
   const [activeType, setActiveType] = useState<ProjectAssetType | "all">("all");
   const [view, setView] = useState<"assets" | "gallery">("assets");
   const [loading, setLoading] = useState(true);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
+  const loadAssets = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [assetsResponse, galleryResponse] = await Promise.all([
-        fetch(`/api/projects/${projectId}/assets`, { cache: "no-store" }),
-        fetch(`/api/projects/${projectId}/gallery`, { cache: "no-store" }),
-      ]);
-      const [{ assets: nextAssets }, { items }] = await Promise.all([
-        responseJson<{ assets: ProjectAsset[] }>(assetsResponse),
-        responseJson<{ items: ProjectGalleryItem[] }>(galleryResponse),
-      ]);
+      const assetsResponse = await fetch(`/api/projects/${projectId}/assets`, { cache: "no-store" });
+      const { assets: nextAssets } = await responseJson<{ assets: ProjectAsset[] }>(assetsResponse);
       setAssets(nextAssets);
-      setGalleryItems(items);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "加载素材失败");
     } finally {
@@ -122,9 +116,27 @@ export function ProjectAssetLibrary({
     }
   }, [projectId]);
 
+  const loadGallery = useCallback(async () => {
+    setGalleryLoading(true);
+    setError("");
+    try {
+      const galleryResponse = await fetch(`/api/projects/${projectId}/gallery`, { cache: "no-store" });
+      const { items } = await responseJson<{ items: ProjectGalleryItem[] }>(galleryResponse);
+      setGalleryItems(items);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "加载生成记录失败");
+    } finally {
+      setGalleryLoading(false);
+    }
+  }, [projectId]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadAssets();
+  }, [loadAssets]);
+
+  useEffect(() => {
+    if (view === "gallery") void loadGallery();
+  }, [loadGallery, view]);
 
   useEffect(() => {
     setDraft(null);
@@ -192,13 +204,14 @@ export function ProjectAssetLibrary({
       if (fileList.length === 0) return;
       setSaving(true);
       setError("");
-      try {
-        let lastCreated: ProjectAsset | null = null;
-        for (const file of fileList) {
-          lastCreated = await uploadAssetFile(file);
-        }
+        try {
+          let lastCreated: ProjectAsset | null = null;
+          for (const file of fileList) {
+            const created = await uploadAssetFile(file);
+            lastCreated = created;
+            setAssets((current) => [created, ...current.filter((asset) => asset.id !== created.id)]);
+          }
         setView("assets");
-        await load();
         if (lastCreated) editAsset(lastCreated);
       } catch (uploadError) {
         setError(uploadError instanceof Error ? uploadError.message : "上传素材失败");
@@ -207,7 +220,7 @@ export function ProjectAssetLibrary({
         if (uploadInputRef.current) uploadInputRef.current.value = "";
       }
     },
-    [editAsset, load, uploadAssetFile],
+    [editAsset, uploadAssetFile],
   );
 
   const convertGalleryItem = useCallback(
@@ -224,7 +237,7 @@ export function ProjectAssetLibrary({
           referenceImageUrls: [],
         });
         setView("assets");
-        await load();
+        setAssets((current) => [asset, ...current.filter((entry) => entry.id !== asset.id)]);
         editAsset(asset);
       } catch (convertError) {
         setError(convertError instanceof Error ? convertError.message : "转为素材失败");
@@ -232,7 +245,7 @@ export function ProjectAssetLibrary({
         setSaving(false);
       }
     },
-    [activeType, createAsset, editAsset, load],
+    [activeType, createAsset, editAsset],
   );
 
   const deleteGalleryItem = useCallback(
@@ -277,15 +290,15 @@ export function ProjectAssetLibrary({
           tags: [],
         }),
       });
-      await responseJson<{ asset: ProjectAsset }>(response);
+      const { asset } = await responseJson<{ asset: ProjectAsset }>(response);
       resetDraft();
-      await load();
+      setAssets((current) => current.map((entry) => (entry.id === asset.id ? asset : entry)));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "保存素材失败");
     } finally {
       setSaving(false);
     }
-  }, [draft, load, projectId, resetDraft]);
+  }, [draft, projectId, resetDraft]);
 
   const remove = useCallback(
     async (assetId: string) => {
@@ -299,12 +312,12 @@ export function ProjectAssetLibrary({
           throw new Error(body.error || "删除素材失败");
         }
         if (draft?.id === assetId) resetDraft();
-        await load();
+        setAssets((current) => current.filter((asset) => asset.id !== assetId));
       } catch (removeError) {
         setError(removeError instanceof Error ? removeError.message : "删除素材失败");
       }
     },
-    [draft?.id, load, projectId, resetDraft],
+    [draft?.id, projectId, resetDraft],
   );
 
   return (
@@ -363,7 +376,7 @@ export function ProjectAssetLibrary({
       {view === "gallery" ? (
         <ProjectGallery
           items={galleryItems}
-          loading={loading}
+          loading={galleryLoading}
           onConvertItem={convertGalleryItem}
           onDeleteItem={deleteGalleryItem}
         />
