@@ -624,15 +624,16 @@ export default function ImagePage() {
     if (workspaceReady) setSettings(imageWorkspace);
   }, [imageWorkspace, workspaceReady]);
 
-  useEffect(() => {
-    async function refreshGallery() {
-      try {
-        const records = await fetchGalleryRecords(projectId);
-        setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(records)));
-      } catch (e) {
-        console.warn("[image] gallery load failed", e);
-      }
+  const refreshGallery = useCallback(async () => {
+    try {
+      const nextRecords = await fetchGalleryRecords(projectId);
+      if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(nextRecords)));
+    } catch (e) {
+      console.warn("[image] gallery load failed", e);
     }
+  }, [projectId]);
+
+  useEffect(() => {
     if (workspaceReady) void refreshGallery();
 
     function onVisibility() {
@@ -642,7 +643,15 @@ export default function ImagePage() {
     }
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [workspaceReady, projectId]);
+  }, [refreshGallery, workspaceReady]);
+
+  useEffect(() => {
+    if (!workspaceReady || pendingGenerations.length === 0) return;
+    const timer = window.setInterval(() => {
+      void refreshGallery();
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [pendingGenerations.length, refreshGallery, workspaceReady]);
 
   const loadImagePromptPresets = useCallback(() => {
     void fetchSitePromptPresets("image")
@@ -753,6 +762,36 @@ export default function ImagePage() {
       ...success.slice().reverse().map((record) => ({ kind: "record" as const, record })),
       ...pendingGenerations.map((pending) => ({ kind: "pending" as const, pending })),
     ];
+  }, [pendingGenerations, records]);
+
+  useEffect(() => {
+    if (pendingGenerations.length === 0 || records.length === 0) return;
+    const pendingIds = new Set(pendingGenerations.map((item) => item.id));
+    const completed = records.filter((record) =>
+      pendingIds.has(record.id) &&
+      record.status === "success" &&
+      Boolean(record.imageUrl?.trim()),
+    );
+    if (completed.length === 0) return;
+
+    const completedIds = new Set(completed.map((record) => record.id));
+    const latest = completed.at(0);
+    if (latest?.imageUrl?.trim()) {
+      setResultUrl(latest.imageUrl);
+      setError("");
+      saveImageResultForRecord(latest.id, latest.imageUrl);
+      const runtime = readGenerationRuntimeState();
+      if (runtime && completedIds.has(runtime.taskId)) {
+        writeGenerationRuntimeState({
+          ...runtime,
+          status: "success",
+          updatedAt: new Date().toISOString(),
+          imageUrl: latest.imageUrl,
+          error: undefined,
+        });
+      }
+    }
+    setPendingGenerations((prev) => prev.filter((item) => !completedIds.has(item.id)));
   }, [pendingGenerations, records]);
 
   useEffect(() => {
