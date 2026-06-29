@@ -442,7 +442,9 @@ function composerPlaceholder(modeId: string, occ: string[], slotIndex: number): 
 
 async function downloadGeneratedImage(url: string): Promise<void> {
   try {
-    const res = await fetch(url);
+    const proxyUrl = `/api/media/object?url=${encodeURIComponent(url)}`;
+    const viaProxy = await fetch(proxyUrl).catch(() => null);
+    const res = viaProxy?.ok ? viaProxy : await fetch(url);
     if (!res.ok) throw new Error("fetch failed");
     const blob = await res.blob();
     const type = blob.type || "";
@@ -461,8 +463,8 @@ async function downloadGeneratedImage(url: string): Promise<void> {
     a.click();
     a.remove();
     URL.revokeObjectURL(objectUrl);
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    console.error("[image download]", error);
   }
 }
 
