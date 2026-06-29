@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 import { putMediaObject } from "@/lib/media-storage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { validUserMediaKey } from "./validation";
 
 const MAX_MEDIA_UPLOAD_BYTES = 100 * 1024 * 1024;
-
-function validUserMediaKey(key: string, userId: string): boolean {
-  if (!key || key.length > 700) return false;
-  if (!key.startsWith(`ephemeral/${userId}/`)) return false;
-  if (key.includes("..") || key.includes("//") || key.startsWith("/") || key.endsWith("/")) return false;
-  return /^[a-zA-Z0-9/_-]+\.[a-zA-Z0-9]+$/.test(key);
-}
 
 export async function POST(req: Request) {
   try {
