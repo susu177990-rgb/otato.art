@@ -21,6 +21,8 @@ type GenerateBody = {
   modeId?: string;
   modeName?: string;
   slotInputs?: string[];
+  uploadRefImages?: ImageGalleryReferenceImage[];
+  modelRefSlotIndexes?: number[];
   recordRefImages?: ImageGalleryReferenceImage[];
   modelId?: string;
   model?: ImageModelSettings;
@@ -135,9 +137,18 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
     const refImages: string[] = Array.isArray(meta.refImages)
       ? meta.refImages.filter((x): x is string => typeof x === "string" && x.length > 0)
       : [];
-    for (const part of form.getAll("ref")) {
+    const refSlotIndexes = Array.isArray(meta.refSlotIndexes)
+      ? meta.refSlotIndexes.map((x) => Number(x))
+      : [];
+    const uploadRefImages: ImageGalleryReferenceImage[] = [];
+    for (const [index, part] of form.getAll("ref").entries()) {
       if (part instanceof Blob && part.size > 0) {
-        refImages.push(await blobToDataUrl(part));
+        uploadRefImages.push({
+          slotIndex: Number.isFinite(refSlotIndexes[index]) ? refSlotIndexes[index] : index,
+          dataUrl: await blobToDataUrl(part),
+          name: "name" in part && typeof part.name === "string" ? part.name : `reference-${index + 1}.png`,
+          type: part.type || "image/png",
+        });
       }
     }
     const gq = meta.gptImageQuality;
@@ -156,11 +167,16 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
         });
       }
     }
+    const modelRefSlotIndexes = Array.isArray(meta.modelRefSlotIndexes)
+      ? meta.modelRefSlotIndexes.map((x) => Number(x)).filter((x) => Number.isFinite(x))
+      : undefined;
     const body: GenerateBody = {
       prompt: typeof meta.prompt === "string" ? meta.prompt : undefined,
       modeId: typeof meta.modeId === "string" ? meta.modeId.trim() : undefined,
       modeName: typeof meta.modeName === "string" ? meta.modeName.trim() : undefined,
       slotInputs: Array.isArray(meta.slotInputs) ? meta.slotInputs.map((x) => String(x ?? "")) : undefined,
+      uploadRefImages: uploadRefImages.length ? uploadRefImages : recordRefImages,
+      modelRefSlotIndexes,
       recordRefImages,
       requestId: typeof meta.requestId === "string" ? meta.requestId.trim() : undefined,
       modelId: typeof meta.modelId === "string" ? meta.modelId.trim() : undefined,
@@ -200,6 +216,8 @@ async function parseGenerateRequest(req: NextRequest): Promise<{ ok: false; resp
       modeId: typeof raw.modeId === "string" ? raw.modeId.trim() : undefined,
       modeName: typeof raw.modeName === "string" ? raw.modeName.trim() : undefined,
       slotInputs: Array.isArray(raw.slotInputs) ? raw.slotInputs.map((x) => String(x ?? "")) : undefined,
+      uploadRefImages: Array.isArray(raw.uploadRefImages) ? raw.uploadRefImages : undefined,
+      modelRefSlotIndexes: Array.isArray(raw.modelRefSlotIndexes) ? raw.modelRefSlotIndexes.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : undefined,
       recordRefImages: Array.isArray(raw.recordRefImages) ? raw.recordRefImages : undefined,
       refImages,
     },

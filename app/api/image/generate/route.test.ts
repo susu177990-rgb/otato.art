@@ -103,6 +103,24 @@ function imageGenerateRequest(refFile?: Blob): Request {
   });
 }
 
+function imageGenerateRequestWithRefs(files: Blob[], meta: Record<string, unknown> = {}): Request {
+  const fd = new FormData();
+  fd.set("meta", JSON.stringify({
+    prompt: "use the reference subject",
+    model: crunModel,
+    aspectRatio: "16:9",
+    imageSize: "2K",
+    refImages: [],
+    projectId: "project-1",
+    ...meta,
+  }));
+  files.forEach((file, index) => fd.append("ref", file, `reference-${index + 1}.png`));
+  return new Request("http://localhost/api/image/generate", {
+    method: "POST",
+    body: fd,
+  });
+}
+
 function grokImageGenerateRequest(refFile?: Blob): Request {
   const fd = new FormData();
   fd.set("meta", JSON.stringify({
@@ -268,8 +286,14 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(response.status).toBe(200);
     expect(data.imageUrl).toBe("https://storage.example.com/generated.png");
     expect(data.galleryRecord.referenceImages).toEqual([
-      { slotIndex: 0, dataUrl: "https://storage.example.com/ref.png" },
+      {
+        slotIndex: 0,
+        dataUrl: "https://storage.example.com/ref.png",
+        name: "reference.png",
+        type: "image/png",
+      },
     ]);
+    expect(persistGeneratedImageToStorage).toHaveBeenCalledTimes(1);
     expect(persistGeneratedImageToStorage).toHaveBeenCalledWith(
       expect.anything(),
       "user-1",
@@ -280,6 +304,46 @@ describe("POST /api/image/generate CRUN references", () => {
     const submitBody = JSON.parse(String(submitInit.body)) as { input: Record<string, unknown> };
     expect(submitBody.input.img_urls).toEqual(["https://storage.example.com/ref.png"]);
     expect(JSON.stringify(submitBody)).not.toContain("data:image");
+  });
+
+  it("uploads each slot reference once and sends only selected slots to the model", async () => {
+    vi.mocked(persistGeneratedImageToStorage)
+      .mockResolvedValueOnce("https://storage.example.com/ref-1.png")
+      .mockResolvedValueOnce("https://storage.example.com/ref-2.png");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "task-1" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/generated.png"] } }),
+          { status: 200 },
+        ),
+      );
+
+    const response = await POST(imageGenerateRequestWithRefs(
+      [
+        new Blob(["one"], { type: "image/png" }),
+        new Blob(["two"], { type: "image/png" }),
+      ],
+      {
+        refSlotIndexes: [0, 1],
+        modelRefSlotIndexes: [1],
+      },
+    ) as never);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(persistGeneratedImageToStorage).toHaveBeenCalledTimes(2);
+    expect(data.galleryRecord.referenceImages.map((image: { slotIndex: number; dataUrl: string }) => ({
+      slotIndex: image.slotIndex,
+      dataUrl: image.dataUrl,
+    }))).toEqual([
+      { slotIndex: 0, dataUrl: "https://storage.example.com/ref-1.png" },
+      { slotIndex: 1, dataUrl: "https://storage.example.com/ref-2.png" },
+    ]);
+    const submitInit = fetchMock.mock.calls[0][1] as RequestInit;
+    const submitBody = JSON.parse(String(submitInit.body)) as { input: Record<string, unknown> };
+    expect(submitBody.input.img_urls).toEqual(["https://storage.example.com/ref-2.png"]);
   });
 
   it("omits unsupported Grok I2I aspect ratio for multipart reference generations", async () => {

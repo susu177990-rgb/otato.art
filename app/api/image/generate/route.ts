@@ -171,17 +171,10 @@ async function buildStoredReferenceImages(params: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   userId: string;
   traceId: string;
-  upstreamRefImages: string[];
   originalRefImages: ImageGalleryReferenceImage[];
 }): Promise<ImageGalleryReferenceImage[]> {
   const out: ImageGalleryReferenceImage[] = [];
   for (const [index, image] of params.originalRefImages.entries()) {
-    const upstream = params.upstreamRefImages[index]?.trim();
-    if (upstream && /^https?:\/\//i.test(upstream)) {
-      out.push({ ...image, dataUrl: upstream });
-      continue;
-    }
-
     const original = image.dataUrl.trim();
     if (/^https?:\/\//i.test(original)) {
       out.push({ ...image, dataUrl: original });
@@ -419,22 +412,31 @@ export async function POST(req: NextRequest) {
         refImageCount: body.refImages?.length ?? 0,
       },
     });
-    const refImages = await resolveCrunReferenceImages({
-      supabase,
-      userId: user.id,
-      traceId,
-      refImages: body.refImages ?? [],
-      model,
-    });
-    const originalReferenceImages = body.recordRefImages?.length
-      ? body.recordRefImages
-      : (body.refImages ?? []).map((dataUrl, index) => ({ slotIndex: index, dataUrl }));
+    let originalReferenceImages: ImageGalleryReferenceImage[];
+    if (body.uploadRefImages?.length) {
+      originalReferenceImages = body.uploadRefImages;
+    } else if (body.recordRefImages?.length) {
+      originalReferenceImages = body.recordRefImages;
+    } else {
+      originalReferenceImages = (body.refImages ?? []).map((dataUrl, index) => ({ slotIndex: index, dataUrl }));
+    }
     const referenceImages = await buildStoredReferenceImages({
       supabase,
       userId: user.id,
       traceId,
-      upstreamRefImages: originalReferenceImages.map((image) => image.dataUrl),
       originalRefImages: originalReferenceImages,
+    });
+    const hasExplicitModelRefs = Array.isArray(body.modelRefSlotIndexes);
+    const modelRefSlotIndexes = new Set(body.modelRefSlotIndexes ?? []);
+    const selectedReferenceUrls = referenceImages
+      .filter((image) => !hasExplicitModelRefs || modelRefSlotIndexes.has(image.slotIndex))
+      .map((image) => image.dataUrl);
+    const refImages = await resolveCrunReferenceImages({
+      supabase,
+      userId: user.id,
+      traceId,
+      refImages: selectedReferenceUrls,
+      model,
     });
     const result = await generateImage({
       model,
