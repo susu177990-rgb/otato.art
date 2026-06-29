@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./credits-page.module.css";
 
@@ -47,6 +48,12 @@ type CreditPackage = {
 type CreditPackagePayload = {
   packages?: CreditPackage[];
   paymentsEnabled?: boolean;
+  error?: string;
+};
+
+type ContactQrPayload = {
+  imageUrl?: string;
+  canUpload?: boolean;
   error?: string;
 };
 
@@ -106,11 +113,15 @@ function CreditsPageContent() {
   const returnStatus = searchParams.get("status");
   const rawReturnTo = searchParams.get("returnTo");
   const returnTo = rawReturnTo && rawReturnTo.startsWith("/") && !rawReturnTo.startsWith("//") ? rawReturnTo : null;
+  const contactQrInputRef = useRef<HTMLInputElement>(null);
   const [snapshot, setSnapshot] = useState<CreditsSnapshot | null>(null);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [contactQrUrl, setContactQrUrl] = useState("/api/credits/contact-qr/image");
+  const [canUploadContactQr, setCanUploadContactQr] = useState(false);
+  const [contactQrUploading, setContactQrUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -118,17 +129,23 @@ function CreditsPageContent() {
     setLoading(true);
     setError("");
     try {
-      const [meRes, packagesRes] = await Promise.all([
+      const [meRes, packagesRes, qrRes] = await Promise.all([
         fetch("/api/credits/me", { cache: "no-store" }),
         fetch("/api/credits/packages", { cache: "no-store" }),
+        fetch("/api/credits/contact-qr", { cache: "no-store" }),
       ]);
       const me = (await meRes.json().catch(() => ({}))) as CreditsSnapshot & { error?: string };
       const packagePayload = (await packagesRes.json().catch(() => ({}))) as CreditPackagePayload;
+      const qrPayload = (await qrRes.json().catch(() => ({}))) as ContactQrPayload;
       if (!meRes.ok) throw new Error(me.error || "读取积分账户失败");
       if (!packagesRes.ok) throw new Error(packagePayload.error || "读取充值套餐失败");
       setSnapshot(me);
       setPackages(packagePayload.packages ?? []);
       setPaymentsEnabled(Boolean(packagePayload.paymentsEnabled));
+      if (qrRes.ok) {
+        setContactQrUrl(qrPayload.imageUrl || "/api/credits/contact-qr/image");
+        setCanUploadContactQr(Boolean(qrPayload.canUpload));
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "读取积分账户失败");
     } finally {
@@ -171,7 +188,7 @@ function CreditsPageContent() {
 
   async function startCheckout(packageId: string) {
     if (!paymentsEnabled) {
-      setMessage("在线支付暂未开放。当前可由管理员在后台为用户充值、赠送或补偿积分。");
+      setMessage("在线支付暂未开放，请扫码添加微信后联系充值。");
       return;
     }
     setCheckoutLoading(packageId);
@@ -188,6 +205,31 @@ function CreditsPageContent() {
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : "创建支付订单失败");
       setCheckoutLoading(null);
+    }
+  }
+
+  async function uploadContactQr(file: File | undefined) {
+    if (!file) return;
+    setContactQrUploading(true);
+    setError("");
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/credits/contact-qr", {
+        method: "POST",
+        body: form,
+      });
+      const payload = (await response.json().catch(() => ({}))) as ContactQrPayload;
+      if (!response.ok) throw new Error(payload.error || "上传二维码失败");
+      setContactQrUrl(payload.imageUrl || `/api/credits/contact-qr/image?v=${Date.now()}`);
+      setCanUploadContactQr(Boolean(payload.canUpload));
+      setMessage("充值二维码已更新。");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "上传二维码失败");
+    } finally {
+      setContactQrUploading(false);
+      if (contactQrInputRef.current) contactQrInputRef.current.value = "";
     }
   }
 
@@ -250,7 +292,7 @@ function CreditsPageContent() {
                   <div className={styles.sectionHeadCompact}>
                     <div>
                       <h2 className={shellStyles.cardTitle}>充值</h2>
-                      <p className={shellStyles.cardSubtitle}>{paymentsEnabled ? "一次性充值。" : "暂由管理员后台充值。"}</p>
+                      <p className={shellStyles.cardSubtitle}>{paymentsEnabled ? "一次性充值。" : "扫码联系充值。"}</p>
                     </div>
                   </div>
                   <div className={styles.packageGrid}>
@@ -271,7 +313,43 @@ function CreditsPageContent() {
                       </button>
                     ))}
                   </div>
-                  {!paymentsEnabled ? <p className={styles.inlineNotice}>在线支付未开放，当前联系管理员充值。</p> : null}
+                  {!paymentsEnabled ? (
+                    <div className={styles.contactTopupCard}>
+                      <div className={styles.contactQrWrap}>
+                        <Image
+                          src={contactQrUrl}
+                          alt="微信充值联系二维码"
+                          width={1024}
+                          height={1024}
+                          className={styles.contactQr}
+                          unoptimized
+                        />
+                      </div>
+                      <div className={styles.contactCopy}>
+                        <strong>在线支付暂未开放</strong>
+                        <span>扫码添加微信，备注账号邮箱或手机号，确认金额后为你后台充值。</span>
+                        {canUploadContactQr ? (
+                          <div className={styles.contactAdminTools}>
+                            <button
+                              type="button"
+                              className={styles.contactUploadButton}
+                              disabled={contactQrUploading}
+                              onClick={() => contactQrInputRef.current?.click()}
+                            >
+                              {contactQrUploading ? "上传中" : "更换二维码"}
+                            </button>
+                            <input
+                              ref={contactQrInputRef}
+                              type="file"
+                              accept="image/*"
+                              hidden
+                              onChange={(event) => void uploadContactQr(event.target.files?.[0])}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </section>
 
