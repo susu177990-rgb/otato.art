@@ -63,4 +63,12 @@ describe("generation error classifier", () => {
 
     expect(formatGenerationErrorForDisplay({ code: "IMAGE_UPSTREAM_POLL" })).toBe("IMAGE_UPSTREAM_POLL");
   });
+
+  it("formats local account limits separately from upstream quota failures", () => {
+    expect(formatGenerationErrorForDisplay({
+      code: "too_many_pending_generations",
+      reasonCode: "ACCOUNT_LIMIT",
+      userMessage: "当前账号同时生成任务过多，请等待已有任务完成。",
+    })).toBe("当前账号同时生成任务过多，请等待已有任务完成。（ACCOUNT_LIMIT）");
+  });
 });

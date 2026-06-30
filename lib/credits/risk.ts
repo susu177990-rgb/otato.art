@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { releaseCreditReservation } from "./accounts";
 
 export class CreditRiskError extends Error {
   readonly code: string;
@@ -18,6 +19,7 @@ function missingTable(error: { message?: string } | null): boolean {
 
 export async function assertCreditGenerationAllowed(userId: string) {
   const admin = createSupabaseAdminClient();
+  const now = new Date().toISOString();
   const flags = await admin
     .from("credit_account_flags")
     .select("id,flag_type")
@@ -30,11 +32,28 @@ export async function assertCreditGenerationAllowed(userId: string) {
     throw new CreditRiskError("account_restricted", "当前账号存在风控限制，请联系管理员。", 403);
   }
 
+  const expiredPending = await admin
+    .from("credit_reservations")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .lt("expires_at", now)
+    .limit(20);
+  if (expiredPending.error) throw expiredPending.error;
+  for (const item of expiredPending.data ?? []) {
+    await releaseCreditReservation({
+      reservationId: String(item.id),
+      reason: "expired_released_before_generation",
+      metadata: { riskCheck: true },
+    });
+  }
+
   const pending = await admin
     .from("credit_reservations")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .gt("expires_at", now);
   if (pending.error) throw pending.error;
   if ((pending.count ?? 0) >= 3) {
     throw new CreditRiskError("too_many_pending_generations", "当前账号同时生成任务过多，请等待已有任务完成。", 429);

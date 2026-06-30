@@ -534,7 +534,8 @@ export async function POST(req: NextRequest) {
           code: error.code,
           status: error.status,
           traceId,
-          fallbackReasonCode: "QUOTA_OR_BILLING",
+          fallbackReasonCode: "ACCOUNT_LIMIT",
+          userMessage: error.message,
         }),
         { status: error.status },
       );

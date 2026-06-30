@@ -37,6 +37,7 @@ function generationErrorJson(params: {
   code: string;
   status: number;
   fallbackReasonCode?: Parameters<typeof classifyGenerationError>[0]["fallbackReasonCode"];
+  userMessage?: string;
 }) {
   const classified = classifyGenerationError({
     message: params.message,
@@ -46,7 +47,8 @@ function generationErrorJson(params: {
   return {
     error: params.message,
     code: params.code,
-    ...classified,
+    reasonCode: classified.reasonCode,
+    userMessage: params.userMessage ?? classified.userMessage,
   };
 }
 
@@ -329,7 +331,8 @@ export async function POST(req: NextRequest) {
           message: error.message,
           code: error.code,
           status: error.status,
-          fallbackReasonCode: "QUOTA_OR_BILLING",
+          fallbackReasonCode: "ACCOUNT_LIMIT",
+          userMessage: error.message,
         }),
         { status: error.status },
       );

@@ -3,6 +3,7 @@ export type GenerationReasonCode =
   | "INVALID_PROMPT"
   | "AUTH_OR_KEY"
   | "QUOTA_OR_BILLING"
+  | "ACCOUNT_LIMIT"
   | "PROVIDER_UNAVAILABLE"
   | "TIMEOUT"
   | "STORAGE_FAILED"
@@ -18,6 +19,7 @@ const USER_MESSAGES: Record<GenerationReasonCode, string> = {
   INVALID_PROMPT: "提示词参数不符合模型限制，请缩短提示词或调整比例、参考图数量。",
   AUTH_OR_KEY: "系统 API 鉴权失败，请联系管理员检查密钥。",
   QUOTA_OR_BILLING: "上游额度不足或账户不可用，请联系管理员检查余额。",
+  ACCOUNT_LIMIT: "当前账号生成受限，请等待已有任务完成或联系管理员。",
   PROVIDER_UNAVAILABLE: "上游服务暂不可用，请稍后重试或换模型。",
   TIMEOUT: "任务等待超时，请稍后重试。",
   STORAGE_FAILED: "生成结果保存失败，请稍后重试。",
