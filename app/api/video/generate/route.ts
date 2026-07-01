@@ -369,6 +369,12 @@ export async function POST(req: NextRequest) {
       const message = error.code === "model_not_configured"
         ? "网站内部视频 API 暂未配置，请联系管理员。"
         : error.message;
+      console.error("[api/video/generate] video generation failed", {
+        code: error.code,
+        status,
+        upstreamStatus: error.upstreamStatus,
+        upstreamBody: error.upstreamBody,
+      });
       const classified = classifyGenerationError({
         message,
         status: error.upstreamStatus ?? status,
