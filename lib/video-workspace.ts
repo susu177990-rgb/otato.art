@@ -531,7 +531,7 @@ function coercePromptsRecord(value: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(value)) {
     if (typeof raw === "string") {
-      if (builtInIds.has(key) || key.startsWith("custom_video_")) {
+      if (builtInIds.has(key) || CUSTOM_VIDEO_MODE_ID_RE.test(key)) {
         out[key] = raw;
       }
     }
@@ -576,7 +576,7 @@ function coerceVideoCustomModes(value: unknown): CustomVideoMode[] {
     if (!isObject(item)) continue;
     const id = String(item.id ?? "").trim();
     const label = String(item.label ?? "").trim();
-    if (!id || !id.startsWith("custom_video_") || seen.has(id)) continue;
+    if (!CUSTOM_VIDEO_MODE_ID_RE.test(id) || seen.has(id)) continue;
     seen.add(id);
     out.push({
       id,
@@ -596,7 +596,7 @@ function migrateCustomPresets(value: unknown): { modes: CustomVideoMode[]; promp
     const label = String(item.label ?? "").trim() || id;
     const promptTemplate = typeof item.promptTemplate === "string" ? item.promptTemplate : "";
     if (!id || !promptTemplate.trim()) continue;
-    const nextId = id.startsWith("custom_video_") ? id : `custom_video_${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    const nextId = CUSTOM_VIDEO_MODE_ID_RE.test(id) ? id : `custom_video_${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
     modes.push({ id: nextId, label });
     prompts[nextId] = promptTemplate;
   }
@@ -654,7 +654,9 @@ function migrateLegacyPrompts(value: LegacyVideoWorkspaceSettings): { modes: Cus
     if (!promptTemplate.trim()) continue;
     if (builtInIds.has(legacyModeId)) continue;
     const customMode = customModes.find((item) => String(item?.id ?? "").trim() === legacyModeId);
-    const id = legacyModeId.startsWith("custom_video_") ? legacyModeId : `custom_video_${legacyModeId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    const id = CUSTOM_VIDEO_MODE_ID_RE.test(legacyModeId)
+      ? legacyModeId
+      : `custom_video_${legacyModeId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
     modes.push({
       id,
       label: String(customMode?.label ?? legacyModeId).trim() || legacyModeId,
@@ -744,7 +746,7 @@ export function newCustomVideoPresetId(): string {
 
 export const newCustomVideoModeId = newCustomVideoPresetId;
 
-const CUSTOM_VIDEO_MODE_ID_RE = /^custom_video_[a-zA-Z0-9_-]+$/;
+const CUSTOM_VIDEO_MODE_ID_RE = /^(custom_video_|user_preset_video_|community_)[a-zA-Z0-9_-]+$/;
 
 export function isKnownVideoModeId(modeId: string, customModes: CustomVideoMode[] = []): boolean {
   const id = modeId.trim();

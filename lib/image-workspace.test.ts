@@ -13,6 +13,7 @@ import {
   imagePromptMaxLengthForContext,
   imageReferenceLimitForContext,
   imageSupportsAspectRatioForContext,
+  isKnownImageModeId,
   mergeImageSettings,
   normalizeImageAspectRatioForContext,
 } from "@/lib/image-workspace";
@@ -73,5 +74,31 @@ describe("image workspace model capabilities", () => {
         "gpt-image-2": { modelName: "openai/gpt-image-2-stable" },
       },
     }).models["gpt-image-2"].modelName).toBe("openai/gpt-image-2-premium");
+  });
+
+  it("keeps prompt-library image preset ids valid for mode cover uploads", () => {
+    const merged = mergeImageSettings({
+      customModes: [
+        { id: "user_preset_image_abc123", label: "用户投稿" },
+        { id: "community_submission_abc123", label: "审核发布" },
+      ],
+      prompts: {
+        user_preset_image_abc123: "user prompt",
+        community_submission_abc123: "community prompt",
+      },
+      coverImageUrlByMode: {
+        user_preset_image_abc123: "https://example.com/user.webp",
+        community_submission_abc123: "https://example.com/community.webp",
+      },
+    });
+
+    expect(merged.customModes.map((mode) => mode.id)).toEqual([
+      "user_preset_image_abc123",
+      "community_submission_abc123",
+    ]);
+    expect(merged.prompts.user_preset_image_abc123).toBe("user prompt");
+    expect(merged.prompts.community_submission_abc123).toBe("community prompt");
+    expect(isKnownImageModeId("community_submission_abc123", merged.customModes)).toBe(true);
+    expect(isKnownImageModeId("community_missing", merged.customModes)).toBe(false);
   });
 });

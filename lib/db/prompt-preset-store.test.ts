@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyPromptLibraryToImageWorkspace,
   createPromptPresetSubmission,
   replaceSitePromptPresetsByKind,
   syncPromptLibraryFromWorkspaces,
@@ -209,6 +210,66 @@ describe("prompt preset ordering", () => {
     expect(deleteFilters).toEqual([["preset_type", ["image", "video"]]]);
     expect(deleteLikeFilters).toEqual([["id", "custom_%"]]);
     expect(deleteNotFilters).toEqual([["id", "in", '("custom-image","custom-video")']]);
+  });
+
+  it("orders image prompt presets by upload/create time instead of edited workspace order", () => {
+    const workspace = {
+      customModes: [
+        { id: "community_image_mqdncbk7_o37gk9", label: "女模特半身肖像" },
+        { id: "custom_2ee78e58-cdaf-474d-95ab-82d97867d127", label: "时尚大片分镜" },
+        { id: "custom_4964add3-61c4-433e-b934-ed203dbf0e9d", label: "广告片分镜" },
+      ],
+      prompts: {},
+      coverImageUrlByMode: {},
+      refSlotHintsByMode: {},
+      promptTagsByMode: {},
+      promptDescriptionsByMode: {},
+    };
+    const presets: SitePromptPreset[] = [
+      {
+        id: "custom_2ee78e58-cdaf-474d-95ab-82d97867d127",
+        kind: "image",
+        title: "时尚大片分镜",
+        promptTemplate: "",
+        coverImageUrl: "",
+        refSlotHints: [],
+        tags: [],
+        createdAt: "2026-06-24T13:05:51.160Z",
+      },
+      {
+        id: "community_image_mqdncbk7_o37gk9",
+        kind: "image",
+        title: "女模特半身肖像",
+        promptTemplate: "",
+        coverImageUrl: "",
+        refSlotHints: [],
+        tags: [],
+        createdAt: "2026-06-14T10:42:35.934Z",
+      },
+      {
+        id: "custom_4964add3-61c4-433e-b934-ed203dbf0e9d",
+        kind: "image",
+        title: "广告片分镜",
+        promptTemplate: "",
+        coverImageUrl: "",
+        refSlotHints: [],
+        tags: [],
+        createdAt: "2026-06-24T13:06:24.854Z",
+      },
+    ];
+
+    const merged = applyPromptLibraryToImageWorkspace(workspace as never, presets);
+
+    expect(merged.customModes.map((mode) => mode.label)).toEqual([
+      "女模特半身肖像",
+      "时尚大片分镜",
+      "广告片分镜",
+    ]);
+    expect(merged.customModes.map((mode) => mode.label).reverse()).toEqual([
+      "广告片分镜",
+      "时尚大片分镜",
+      "女模特半身肖像",
+    ]);
   });
 
   it("creates user uploads as pending submissions instead of public presets", async () => {

@@ -14,6 +14,8 @@ export type SitePromptPreset = {
   refSlotHints: string[];
   tags: string[];
   description?: string;
+  createdAt?: string;
+  sortOrder?: number | null;
   isFavorite?: boolean;
 };
 
@@ -74,6 +76,7 @@ type SitePromptPresetRow = {
   tags: unknown;
   description: string | null;
   sort_order: number | null;
+  created_at?: string | null;
 };
 
 type PromptPresetSubmissionRow = {
@@ -129,8 +132,32 @@ function rowToPreset(row: SitePromptPresetRow): SitePromptPreset {
     refSlotHints,
     tags: normalizePromptTags(row.tags),
     description: row.description ?? undefined,
+    createdAt: row.created_at ?? undefined,
+    sortOrder: row.sort_order,
     isFavorite: false,
   };
+}
+
+function parsePresetIdTimestamp(id: string): number | null {
+  const match = /^(?:user_preset|community)_(?:image|video|chat)_([a-z0-9]+)_/i.exec(id);
+  if (!match) return null;
+  const value = parseInt(match[1], 36);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function presetAddedMs(preset: SitePromptPreset): number {
+  const fromId = parsePresetIdTimestamp(preset.id);
+  if (fromId != null) return fromId;
+  const fromCreatedAt = Date.parse(preset.createdAt ?? "");
+  return Number.isFinite(fromCreatedAt) ? fromCreatedAt : Number.MAX_SAFE_INTEGER;
+}
+
+function comparePresetAddedAscending(a: SitePromptPreset, b: SitePromptPreset): number {
+  const byAdded = presetAddedMs(a) - presetAddedMs(b);
+  if (byAdded !== 0) return byAdded;
+  const bySortOrder = (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
+  if (bySortOrder !== 0) return bySortOrder;
+  return a.id.localeCompare(b.id);
 }
 
 function rowToSubmission(row: PromptPresetSubmissionRow): PromptPresetSubmission {
@@ -190,7 +217,7 @@ export async function listSitePromptPresetsByKind(
 ): Promise<SitePromptPreset[]> {
   const { data, error } = await supabase
     .from("site_prompt_presets")
-    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order")
+    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order, created_at")
     .eq("preset_type", kind)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -206,7 +233,7 @@ export async function listSitePromptPresetsByKind(
 export async function listSitePromptPresets(supabase: SupabaseClient): Promise<SitePromptPreset[]> {
   const { data, error } = await supabase
     .from("site_prompt_presets")
-    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order")
+    .select("id, preset_type, title, prompt_template, cover_image_url, ref_slot_hints, tags, description, sort_order, created_at")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -222,13 +249,15 @@ export function applyPromptLibraryToImageWorkspace(
   workspace: ImageWorkspaceSettings,
   presets: SitePromptPreset[],
 ): ImageWorkspaceSettings {
-  const imagePresets = presets.filter((preset) => preset.kind === "image");
+  const imagePresets = presets.filter((preset) => preset.kind === "image").sort(comparePresetAddedAscending);
   if (imagePresets.length === 0) return workspace;
 
   const prompts = { ...workspace.prompts };
   const coverImageUrlByMode = { ...workspace.coverImageUrlByMode };
   const refSlotHintsByMode = { ...workspace.refSlotHintsByMode };
-  const customModes = [...workspace.customModes];
+  const existingCustomModeById = new Map(workspace.customModes.map((mode) => [mode.id, mode]));
+  const presetIds = new Set(imagePresets.map((preset) => preset.id));
+  const customModes = workspace.customModes.filter((mode) => !presetIds.has(mode.id));
   const promptTagsByMode = { ...workspace.promptTagsByMode };
   const promptDescriptionsByMode = { ...workspace.promptDescriptionsByMode };
 
@@ -238,9 +267,7 @@ export function applyPromptLibraryToImageWorkspace(
     else delete coverImageUrlByMode[preset.id];
     if (preset.refSlotHints.length > 0) refSlotHintsByMode[preset.id] = preset.refSlotHints;
     else delete refSlotHintsByMode[preset.id];
-    if (!customModes.some((mode) => mode.id === preset.id)) {
-      customModes.push({ id: preset.id, label: preset.title });
-    }
+    customModes.push({ ...(existingCustomModeById.get(preset.id) ?? {}), id: preset.id, label: preset.title });
     promptTagsByMode[preset.id] = normalizePromptTags(preset.tags);
     if (preset.description?.trim()) promptDescriptionsByMode[preset.id] = preset.description.trim();
     else delete promptDescriptionsByMode[preset.id];
@@ -253,12 +280,14 @@ export function applyPromptLibraryToVideoWorkspace(
   workspace: VideoWorkspaceSettings,
   presets: SitePromptPreset[],
 ): VideoWorkspaceSettings {
-  const videoPresets = presets.filter((preset) => preset.kind === "video");
+  const videoPresets = presets.filter((preset) => preset.kind === "video").sort(comparePresetAddedAscending);
   if (videoPresets.length === 0) return workspace;
 
   const prompts = { ...workspace.prompts };
   const coverImageUrlByMode = { ...workspace.coverImageUrlByMode };
-  const customModes = [...workspace.customModes];
+  const existingCustomModeById = new Map(workspace.customModes.map((mode) => [mode.id, mode]));
+  const presetIds = new Set(videoPresets.map((preset) => preset.id));
+  const customModes = workspace.customModes.filter((mode) => !presetIds.has(mode.id));
   const promptTagsByMode = { ...workspace.promptTagsByMode };
   const promptDescriptionsByMode = { ...workspace.promptDescriptionsByMode };
 
@@ -266,9 +295,7 @@ export function applyPromptLibraryToVideoWorkspace(
     prompts[preset.id] = preset.promptTemplate;
     if (preset.coverImageUrl) coverImageUrlByMode[preset.id] = preset.coverImageUrl;
     else delete coverImageUrlByMode[preset.id];
-    if (!customModes.some((mode) => mode.id === preset.id)) {
-      customModes.push({ id: preset.id, label: preset.title });
-    }
+    customModes.push({ ...(existingCustomModeById.get(preset.id) ?? {}), id: preset.id, label: preset.title });
     promptTagsByMode[preset.id] = normalizePromptTags(preset.tags);
     if (preset.description?.trim()) promptDescriptionsByMode[preset.id] = preset.description.trim();
     else delete promptDescriptionsByMode[preset.id];

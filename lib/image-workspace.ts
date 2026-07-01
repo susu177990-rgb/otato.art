@@ -248,7 +248,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
   },
 };
 
-const CUSTOM_MODE_ID_RE = /^custom_[a-zA-Z0-9_-]+$/;
+const CUSTOM_MODE_ID_RE = /^(custom_|user_preset_image_|community_)[a-zA-Z0-9_-]+$/;
 
 /** 设置页封面 / 自定义模式 id 校验（不含 free） */
 export function isKnownImageModeId(modeId: string, customModes: CustomImageMode[] = []): boolean {
@@ -280,9 +280,9 @@ function coercePromptsRecord(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof v === "string") {
-      if (builtInIds.has(k) || k.startsWith("custom_")) out[k] = v;
+      if (builtInIds.has(k) || CUSTOM_MODE_ID_RE.test(k)) out[k] = v;
     } else if (v != null) {
-      if (builtInIds.has(k) || k.startsWith("custom_")) out[k] = String(v);
+      if (builtInIds.has(k) || CUSTOM_MODE_ID_RE.test(k)) out[k] = String(v);
     }
   }
   return out;

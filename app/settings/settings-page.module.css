@@ -747,6 +747,10 @@
 }
 
 .promptTagButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   min-height: 30px;
   padding: 0 10px;
   border: 2px solid #050505;
@@ -759,9 +763,13 @@
   cursor: pointer;
 }
 
-.promptTagButton:hover:not(:disabled),
+.promptTagButton:hover:not(:disabled) {
+  background: var(--otato-yellow-soft, #fff1a8);
+  color: #050505;
+}
+
 .promptTagButtonActive {
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
 }
 
@@ -774,7 +782,7 @@
 .settingsContent button.promptTagButtonActive,
 .settingsContent button.promptTagButtonActive:hover:not(:disabled) {
   border-color: #050505 !important;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
 }
 
@@ -792,6 +800,10 @@
 
 .promptModeProviderButton {
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   min-width: 88px;
   height: 34px;
   margin: 0;
@@ -821,13 +833,14 @@
 
 .settingsContent .promptModeProviderButtonActive {
   border-color: #050505;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
 }
 
 .settingsContent .promptModeProviderButtonActive:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
 }
 
@@ -1171,7 +1184,7 @@
 .promptModeProviderButtonActive,
 .defaultBadge {
   border-color: #050505;
-  background: #050505;
+  background: var(--otato-action, #ff4d3d);
   color: #ffffff;
 }
 
@@ -1250,8 +1263,9 @@
 .promptModeProviderButtonActive,
 .settingsContent .promptModeProviderButtonActive {
   border-color: #050505;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
+  box-shadow: var(--otato-control-shadow, 3px 3px 0 #050505) !important;
 }
 
 .promptPreviewBackdrop {
@@ -1360,7 +1374,21 @@
 .promptModeProviderButtonActive:hover:not(:disabled),
 .settingsContent .promptModeProviderButtonActive:hover:not(:disabled) {
   border-color: #050505;
-  background: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
+}
+
+.settingsContent button.promptTagButtonActive,
+.settingsContent button.promptTagButtonActive:hover:not(:disabled),
+.settingsContent button.promptTagButtonActive:active:not(:disabled),
+.settingsContent button.promptModeProviderButtonActive,
+.settingsContent button.promptModeProviderButtonActive:hover:not(:disabled),
+.settingsContent button.promptModeProviderButtonActive:active:not(:disabled),
+.settingsContent .promptModeProviderButtonActive,
+.settingsContent .promptModeProviderButtonActive:hover:not(:disabled),
+.settingsContent .promptModeProviderButtonActive:active:not(:disabled) {
+  border-color: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
   color: #ffffff !important;
 }
 
@@ -1650,6 +1678,20 @@
 .toggleSwitch:active .toggleSwitchSlider {
   background: var(--otato-yellow, #ffd86b) !important;
   color: #050505 !important;
+}
+
+.settingsContent button.promptTagButtonActive,
+.settingsContent button.promptTagButtonActive:hover:not(:disabled),
+.settingsContent button.promptTagButtonActive:active:not(:disabled),
+.settingsContent button.promptModeProviderButtonActive,
+.settingsContent button.promptModeProviderButtonActive:hover:not(:disabled),
+.settingsContent button.promptModeProviderButtonActive:active:not(:disabled),
+.settingsContent .promptModeProviderButtonActive,
+.settingsContent .promptModeProviderButtonActive:hover:not(:disabled),
+.settingsContent .promptModeProviderButtonActive:active:not(:disabled) {
+  border-color: #050505 !important;
+  background: var(--otato-action, #ff4d3d) !important;
+  color: #ffffff !important;
 }
 
 .defaultBadge,

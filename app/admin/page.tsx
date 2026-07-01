@@ -56,7 +56,6 @@ import {
   replaceSitePromptPresets,
   reviewPromptPresetSubmission,
 } from "@/lib/prompt-preset-api-client";
-import { promotePromptToFront, promotePromptToLatestForReversedList } from "@/lib/prompt-order";
 import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
 type SettingsCategory = "users" | "billing" | "prompts" | "api";
@@ -734,7 +733,7 @@ function ChatPromptsPanel({
   }
 
   async function handleSave(id: string) {
-    const next = promotePromptToFront(value.map((preset) =>
+    const next = value.map((preset) =>
       preset.id === id
         ? {
             ...preset,
@@ -744,7 +743,7 @@ function ChatPromptsPanel({
             tags: normalizePromptTags(draftTagsById[id] ?? preset.tags),
           }
         : preset,
-    ), id);
+    );
     await persist(next);
     setEditingId((cur) => (cur === id ? null : cur));
   }
@@ -757,13 +756,12 @@ function ChatPromptsPanel({
 
   async function setChatPromptTags(preset: SitePromptPreset, nextTagsRaw: string[], isEditing: boolean) {
     const nextTags = normalizePromptTags(nextTagsRaw);
+    setDraftTagsById((prev) => ({ ...prev, [preset.id]: nextTags }));
     if (isEditing) {
-      setDraftTagsById((prev) => ({ ...prev, [preset.id]: nextTags }));
       return;
     }
-    const next = promotePromptToFront(value.map((item) => (item.id === preset.id ? { ...item, tags: nextTags } : item)), preset.id);
-    onChange(next);
-    await persist(next);
+    handleEdit(preset);
+    setDraftTagsById((prev) => ({ ...prev, [preset.id]: nextTags }));
   }
 
   return (
@@ -1159,10 +1157,7 @@ function ImagePromptsPanel({
         const label = String(labelRaw).trim() || id;
         merged = {
           ...merged,
-          customModes: promotePromptToLatestForReversedList(
-            (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)),
-            id,
-          ),
+          customModes: (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)),
         };
       }
       return merged;
@@ -1206,15 +1201,7 @@ function ImagePromptsPanel({
       const label = String(labelRaw).trim() || modeId;
       next = {
         ...next,
-        customModes: promotePromptToLatestForReversedList(
-          (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)),
-          modeId,
-        ),
-      };
-    } else {
-      next = {
-        ...next,
-        customModes: promotePromptToLatestForReversedList(next.customModes ?? [], modeId),
+        customModes: (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)),
       };
     }
     onChange(next);
@@ -1418,32 +1405,18 @@ function ImagePromptsPanel({
       setDraftPromptProviders((prev) => ({ ...prev, [modeId]: nextProviders }));
       return;
     }
-
-    const next: ImageWorkspaceSettings = {
-      ...value,
-      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
-      promptModelProvidersByMode: {
-        ...value.promptModelProvidersByMode,
-        [modeId]: nextProviders,
-      },
-    };
-    onChange(next);
-    void onPersistImage(next);
+    handleEditPrompt(modeId);
+    setDraftPromptProviders((prev) => ({ ...prev, [modeId]: nextProviders }));
   }
 
   function setImagePromptTags(modeId: string, nextTagsRaw: string[], isEditing: boolean) {
     const nextTags = normalizePromptTags(nextTagsRaw);
+    setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
     if (isEditing) {
-      setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
       return;
     }
-    const next: ImageWorkspaceSettings = {
-      ...value,
-      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
-      promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
-    };
-    onChange(next);
-    void onPersistImage(next);
+    handleEditPrompt(modeId);
+    setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
   }
 
   return (
@@ -1517,7 +1490,7 @@ function ImagePromptsPanel({
               ) : null}
               <div className={styles.promptModeEditBody}>
                 <div className={styles.promptModeMainColumn}>
-                  <label className={styles.promptModeProviderField}>
+                  <div className={styles.promptModeProviderField}>
                     <span className={shellStyles.fieldLabel}>适配模型</span>
                     <div className={styles.promptModeProviderButtons} role="group" aria-label={`${mode.label} 适配模型`}>
                       <button
@@ -1547,7 +1520,7 @@ function ImagePromptsPanel({
                         Nano Banana
                       </button>
                     </div>
-                  </label>
+                  </div>
                   <PromptTagPicker
                     kind="image"
                     value={tagValues}
@@ -2079,10 +2052,7 @@ function VideoPromptsPanel({
         const label = String(labelRaw).trim() || id;
         merged = {
           ...merged,
-          customModes: promotePromptToLatestForReversedList(
-            (merged.customModes ?? []).map((mode) => (mode.id === id ? { ...mode, label } : mode)),
-            id,
-          ),
+          customModes: (merged.customModes ?? []).map((mode) => (mode.id === id ? { ...mode, label } : mode)),
         };
       }
       return merged;
@@ -2112,15 +2082,7 @@ function VideoPromptsPanel({
       const label = String(labelRaw).trim() || modeId;
       next = {
         ...next,
-        customModes: promotePromptToLatestForReversedList(
-          (next.customModes ?? []).map((mode) => (mode.id === modeId ? { ...mode, label } : mode)),
-          modeId,
-        ),
-      };
-    } else {
-      next = {
-        ...next,
-        customModes: promotePromptToLatestForReversedList(next.customModes ?? [], modeId),
+        customModes: (next.customModes ?? []).map((mode) => (mode.id === modeId ? { ...mode, label } : mode)),
       };
     }
     onChange(next);
@@ -2282,17 +2244,12 @@ function VideoPromptsPanel({
 
   function setVideoPromptTags(modeId: string, nextTagsRaw: string[], isEditing: boolean) {
     const nextTags = normalizePromptTags(nextTagsRaw);
+    setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
     if (isEditing) {
-      setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
       return;
     }
-    const next: VideoWorkspaceSettings = {
-      ...value,
-      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
-      promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
-    };
-    onChange(next);
-    void onPersistVideo(next);
+    handleEditPrompt(modeId);
+    setDraftPromptTags((prev) => ({ ...prev, [modeId]: nextTags }));
   }
 
   return (
