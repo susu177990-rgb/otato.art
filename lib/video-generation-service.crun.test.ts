@@ -852,6 +852,39 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
     } satisfies Partial<VideoGenerationError>);
   });
 
+  it("treats CRUN business-code quota failures as upstream billing errors", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ code: 402, message: "Insufficient Credits", data: { balance: 137.96 } }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "seedance-2.0": crunSeedanceModel }),
+      request: {
+        modelId: "seedance-2.0",
+        modeId: "text_to_video",
+        prompt: "quota",
+        durationSeconds: 5,
+        aspectRatio: "16:9",
+        resolution: "1080p",
+        references: [],
+      },
+    })).rejects.toMatchObject({
+      code: "provider_submit_failed",
+      message: "Insufficient Credits",
+      upstreamStatus: 402,
+      upstreamBody: {
+        code: 402,
+        message: "Insufficient Credits",
+        data: { balance: 137.96 },
+      },
+    } satisfies Partial<VideoGenerationError>);
+  });
+
   it("preserves CRUN poll moderation body for user-facing classification", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "moderated-task" } }), { status: 200 }))

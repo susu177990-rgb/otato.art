@@ -813,6 +813,26 @@ function parseProviderFailureMessage(data: Record<string, unknown>, fallback = "
   return fallback;
 }
 
+function crunBusinessCode(data: Record<string, unknown>): number | undefined {
+  const raw = data.code;
+  const code = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(code) ? code : undefined;
+}
+
+function assertCrunBusinessSuccess(
+  data: Record<string, unknown>,
+  stage: "provider_submit_failed" | "provider_poll_failed",
+  httpStatus: number,
+) {
+  const code = crunBusinessCode(data);
+  if (code === undefined || code === 200) return;
+  throw new VideoGenerationError(
+    stage,
+    parseProviderFailureMessage(data),
+    { upstreamStatus: code || httpStatus, upstreamBody: data },
+  );
+}
+
 function buildCrunVideoInput(payload: Record<string, unknown>): Record<string, unknown> {
   const rest = { ...payload };
   delete rest.model;
@@ -856,9 +876,14 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
       { upstreamStatus: submitRes.status, upstreamBody: submitData },
     );
   }
+  assertCrunBusinessSuccess(submitData, "provider_submit_failed", submitRes.status);
   const providerTaskId = parseCrunTaskId(submitData);
   if (!providerTaskId) {
-    throw new VideoGenerationError("provider_submit_failed", "CRUN 已响应，但没有返回任务 ID。");
+    throw new VideoGenerationError(
+      "provider_submit_failed",
+      parseProviderFailureMessage(submitData, "CRUN 已响应，但没有返回任务 ID。"),
+      { upstreamStatus: submitRes.status, upstreamBody: submitData },
+    );
   }
 
   const statusUrl = crunTaskInfoUrl(submitUrl);
@@ -887,6 +912,7 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
         { upstreamStatus: statusRes.status, upstreamBody: statusData },
       );
     }
+    assertCrunBusinessSuccess(statusData, "provider_poll_failed", statusRes.status);
     const statusContainer = statusData.data && typeof statusData.data === "object" ? statusData.data as Record<string, unknown> : statusData;
     const status = statusContainer.status ?? statusContainer.state ?? statusData.status;
     const remoteVideoUrl = extractCompletedTaskVideoUrl(statusContainer) || extractCompletedTaskVideoUrl(statusData);

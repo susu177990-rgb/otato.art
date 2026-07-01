@@ -11,6 +11,7 @@ alter table public.video_credit_prices
       'doubao-seedance-1.0-pro-fast',
       'seedance-1.0-pro',
       'kling-3.0',
+      'kling-3.0-motion',
       'kling-2.6-motion',
       'happyhorse-1.1',
       'happyhorse-1.0',

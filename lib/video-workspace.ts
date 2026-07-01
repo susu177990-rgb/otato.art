@@ -422,7 +422,7 @@ export const DEFAULT_VIDEO_SETTINGS: VideoWorkspaceSettings = {
     },
     defaultAspectRatio: "16:9",
     defaultDurationSeconds: 5,
-    defaultResolution: "1080p",
+    defaultResolution: "720p",
   },
 };
 
