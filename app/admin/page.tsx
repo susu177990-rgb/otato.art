@@ -56,6 +56,7 @@ import {
   replaceSitePromptPresets,
   reviewPromptPresetSubmission,
 } from "@/lib/prompt-preset-api-client";
+import { promotePromptToFront, promotePromptToLatestForReversedList } from "@/lib/prompt-order";
 import { PROMPT_TAG_GROUPS, normalizePromptTags, togglePromptTag } from "@/lib/prompt-tags";
 
 type SettingsCategory = "users" | "billing" | "prompts" | "api";
@@ -254,10 +255,10 @@ function AdminPageInner() {
     window.setTimeout(() => setSavedMessage(""), 1400);
   }
 
-  async function reviewPromptSubmission(submissionId: string, action: "approve" | "reject") {
+  async function reviewPromptSubmission(submissionId: string, action: "approve" | "reject", tags?: string[]) {
     setPromptSubmissionMessage("");
     try {
-      await reviewPromptPresetSubmission(submissionId, action);
+      await reviewPromptPresetSubmission(submissionId, action, "", tags);
       await refreshPromptSubmissions();
       if (action === "approve") {
         await refreshAdminWorkspace();
@@ -560,14 +561,15 @@ function PromptSubmissionsPanel({
   submissions: PromptPresetSubmission[];
   message: string;
   onRefresh: () => Promise<void>;
-  onReview: (submissionId: string, action: "approve" | "reject") => Promise<void>;
+  onReview: (submissionId: string, action: "approve" | "reject", tags?: string[]) => Promise<void>;
 }) {
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [draftTagsById, setDraftTagsById] = useState<Record<string, string[]>>({});
 
   async function review(submissionId: string, action: "approve" | "reject") {
     setSavingId(submissionId);
     try {
-      await onReview(submissionId, action);
+      await onReview(submissionId, action, draftTagsById[submissionId]);
     } finally {
       setSavingId(null);
     }
@@ -598,6 +600,7 @@ function PromptSubmissionsPanel({
         <div className={styles.promptModeGrid}>
           {submissions.map((submission) => {
             const saving = savingId === submission.id;
+            const tagValue = draftTagsById[submission.id] ?? submission.tags;
             return (
               <article
                 key={submission.id}
@@ -646,7 +649,16 @@ function PromptSubmissionsPanel({
                     </div>
                   ) : null}
                   <div className={styles.promptModeMainColumn}>
-                    <PromptTagPicker kind={submission.kind} value={submission.tags} onChange={() => {}} />
+                    <PromptTagPicker
+                      kind={submission.kind}
+                      value={tagValue}
+                      onChange={(next) =>
+                        setDraftTagsById((prev) => ({
+                          ...prev,
+                          [submission.id]: normalizePromptTags(next),
+                        }))
+                      }
+                    />
                     {submission.description ? (
                       <label className={shellStyles.field}>
                         <span className={shellStyles.fieldLabel}>投稿说明</span>
@@ -722,7 +734,7 @@ function ChatPromptsPanel({
   }
 
   async function handleSave(id: string) {
-    const next = value.map((preset) =>
+    const next = promotePromptToFront(value.map((preset) =>
       preset.id === id
         ? {
             ...preset,
@@ -732,7 +744,7 @@ function ChatPromptsPanel({
             tags: normalizePromptTags(draftTagsById[id] ?? preset.tags),
           }
         : preset,
-    );
+    ), id);
     await persist(next);
     setEditingId((cur) => (cur === id ? null : cur));
   }
@@ -749,7 +761,7 @@ function ChatPromptsPanel({
       setDraftTagsById((prev) => ({ ...prev, [preset.id]: nextTags }));
       return;
     }
-    const next = value.map((item) => (item.id === preset.id ? { ...item, tags: nextTags } : item));
+    const next = promotePromptToFront(value.map((item) => (item.id === preset.id ? { ...item, tags: nextTags } : item)), preset.id);
     onChange(next);
     await persist(next);
   }
@@ -1147,7 +1159,10 @@ function ImagePromptsPanel({
         const label = String(labelRaw).trim() || id;
         merged = {
           ...merged,
-          customModes: (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)),
+          customModes: promotePromptToLatestForReversedList(
+            (merged.customModes ?? []).map((m) => (m.id === id ? { ...m, label } : m)),
+            id,
+          ),
         };
       }
       return merged;
@@ -1185,13 +1200,21 @@ function ImagePromptsPanel({
         draftPromptDescriptions[modeId] ?? value.promptDescriptionsByMode?.[modeId] ?? "",
       ),
     };
-    if (modeId.startsWith("custom_")) {
+    if (isAdminEditableImagePromptId(modeId)) {
       const labelRaw =
         draftLabels[modeId] ?? value.customModes?.find((m) => m.id === modeId)?.label ?? modeId;
       const label = String(labelRaw).trim() || modeId;
       next = {
         ...next,
-        customModes: (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)),
+        customModes: promotePromptToLatestForReversedList(
+          (next.customModes ?? []).map((m) => (m.id === modeId ? { ...m, label } : m)),
+          modeId,
+        ),
+      };
+    } else {
+      next = {
+        ...next,
+        customModes: promotePromptToLatestForReversedList(next.customModes ?? [], modeId),
       };
     }
     onChange(next);
@@ -1398,6 +1421,7 @@ function ImagePromptsPanel({
 
     const next: ImageWorkspaceSettings = {
       ...value,
+      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
       promptModelProvidersByMode: {
         ...value.promptModelProvidersByMode,
         [modeId]: nextProviders,
@@ -1415,6 +1439,7 @@ function ImagePromptsPanel({
     }
     const next: ImageWorkspaceSettings = {
       ...value,
+      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
       promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
     };
     onChange(next);
@@ -2054,7 +2079,10 @@ function VideoPromptsPanel({
         const label = String(labelRaw).trim() || id;
         merged = {
           ...merged,
-          customModes: (merged.customModes ?? []).map((mode) => (mode.id === id ? { ...mode, label } : mode)),
+          customModes: promotePromptToLatestForReversedList(
+            (merged.customModes ?? []).map((mode) => (mode.id === id ? { ...mode, label } : mode)),
+            id,
+          ),
         };
       }
       return merged;
@@ -2079,12 +2107,20 @@ function VideoPromptsPanel({
         draftPromptDescriptions[modeId] ?? value.promptDescriptionsByMode?.[modeId] ?? "",
       ),
     };
-    if (modeId.startsWith("custom_video_")) {
+    if (isAdminEditableVideoPromptId(modeId)) {
       const labelRaw = draftLabels[modeId] ?? value.customModes?.find((mode) => mode.id === modeId)?.label ?? modeId;
       const label = String(labelRaw).trim() || modeId;
       next = {
         ...next,
-        customModes: (next.customModes ?? []).map((mode) => (mode.id === modeId ? { ...mode, label } : mode)),
+        customModes: promotePromptToLatestForReversedList(
+          (next.customModes ?? []).map((mode) => (mode.id === modeId ? { ...mode, label } : mode)),
+          modeId,
+        ),
+      };
+    } else {
+      next = {
+        ...next,
+        customModes: promotePromptToLatestForReversedList(next.customModes ?? [], modeId),
       };
     }
     onChange(next);
@@ -2252,6 +2288,7 @@ function VideoPromptsPanel({
     }
     const next: VideoWorkspaceSettings = {
       ...value,
+      customModes: promotePromptToLatestForReversedList(value.customModes ?? [], modeId),
       promptTagsByMode: { ...value.promptTagsByMode, [modeId]: nextTags },
     };
     onChange(next);

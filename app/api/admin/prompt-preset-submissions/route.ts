@@ -9,6 +9,7 @@ import {
   upsertSitePromptPreset,
   type PromptPresetSubmissionStatus,
 } from "@/lib/db/prompt-preset-store";
+import { normalizePromptTags } from "@/lib/prompt-tags";
 import { maybeCreateSupabaseAdminClient } from "@/lib/supabase/admin";
 
 function normalizeStatus(raw: string | null): PromptPresetSubmissionStatus | "all" {
@@ -46,6 +47,7 @@ export async function PATCH(req: Request) {
       submissionId?: unknown;
       action?: unknown;
       reviewNote?: unknown;
+      tags?: unknown;
     };
     const submissionId = typeof body.submissionId === "string" ? body.submissionId.trim() : "";
     const action = typeof body.action === "string" ? body.action : "";
@@ -79,6 +81,7 @@ export async function PATCH(req: Request) {
     }
 
     const publishedPresetId = publishedPresetIdForSubmission(submission.id);
+    const tags = Array.isArray(body.tags) ? normalizePromptTags(body.tags) : submission.tags;
     const publishedPreset = await upsertSitePromptPreset(writeClient, submission.kind, {
       id: publishedPresetId,
       kind: submission.kind,
@@ -86,7 +89,7 @@ export async function PATCH(req: Request) {
       promptTemplate: submission.promptTemplate,
       coverImageUrl: submission.coverImageUrl,
       refSlotHints: submission.refSlotHints,
-      tags: submission.tags,
+      tags,
       description: submission.description,
     });
     const reviewed = await markPromptPresetSubmissionReviewed(writeClient, submissionId, {

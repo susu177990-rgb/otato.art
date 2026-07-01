@@ -96,11 +96,12 @@ export async function reviewPromptPresetSubmission(
   submissionId: string,
   action: "approve" | "reject",
   reviewNote = "",
+  tags?: string[],
 ): Promise<{ submission: PromptPresetSubmission; preset?: SitePromptPreset }> {
   const res = await fetch("/api/admin/prompt-preset-submissions", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ submissionId, action, reviewNote }),
+    body: JSON.stringify({ submissionId, action, reviewNote, tags }),
   });
   if (!res.ok) throw new Error(await readApiError(res, "无法更新投稿审核状态"));
   return (await res.json()) as { submission: PromptPresetSubmission; preset?: SitePromptPreset };
