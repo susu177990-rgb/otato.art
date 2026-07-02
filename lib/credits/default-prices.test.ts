@@ -59,6 +59,8 @@ describe("default credit prices", () => {
     expect(prices.find((item) => item.modelId === "kling-2.6-motion" && item.modeId === "motion_control" && item.resolution === "1080p")?.creditsPerSecond).toBe(124);
     expect(prices.find((item) => item.modelId === "grok-imagine" && item.modeId === "start_frame" && item.resolution === "480p")?.creditsPerSecond).toBe(100);
     expect(prices.find((item) => item.modelId === "grok-imagine" && item.modeId === "start_frame" && item.resolution === "720p")?.creditsPerSecond).toBe(192);
+    expect(prices.find((item) => item.modelId === "grok-imagine" && item.modeId === "multi_image_reference" && item.resolution === "480p")?.creditsPerSecond).toBe(100);
+    expect(prices.find((item) => item.modelId === "grok-imagine" && item.modeId === "multi_image_reference" && item.resolution === "720p")?.creditsPerSecond).toBe(192);
     expect(roundCreditsToFive(287.5)).toBe(290);
 
     const groups = new Map<string, Set<number>>();

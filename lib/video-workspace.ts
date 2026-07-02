@@ -202,9 +202,10 @@ export function getVideoParameterCapabilities(
   if (modelId === "grok-imagine") {
     return {
       ...base,
-      aspectRatios: modeId === "start_frame" ? ["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "16:9", "9:16"] : GROK_RATIOS,
-      durationCapability: modeId === "start_frame" ? durationRange(1, 15, 6, [1, 3, 6, 10, 15]) : durationRange(6, 30, 6),
+      aspectRatios: modeId === "start_frame" ? [] : GROK_RATIOS,
+      durationCapability: durationRange(6, 30, 6),
       resolutions: ["480p", "720p"],
+      supportsAspectRatio: modeId !== "start_frame",
     };
   }
 
@@ -351,7 +352,7 @@ export function defaultVideoApiModelNameForMode(modelId: VideoModelId, modeId: V
   }
   if (modelId === "grok-imagine") {
     if (modeId === "text_to_video") return "grok-imagine/t2v";
-    if (modeId === "start_frame") return "grok-imagine-video-1.5-preview";
+    if (modeId === "start_frame" || modeId === "multi_image_reference") return "grok-imagine/i2v";
   }
   if (modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite") {
     const prefix =
@@ -474,7 +475,8 @@ function normalizeLegacyVideoApiModelName(
   if (!trimmed) return trimmed;
   if (modelId === "grok-imagine") {
     if (modeId === "text_to_video" && /^grok-imagine-text-to-video-beta$/i.test(trimmed)) return "grok-imagine/t2v";
-    if (modeId === "start_frame" && /^grok-imagine-image-to-video-beta$/i.test(trimmed)) return "grok-imagine-video-1.5-preview";
+    if ((modeId === "start_frame" || modeId === "multi_image_reference") && /^grok-imagine-image-to-video-beta$/i.test(trimmed)) return "grok-imagine/i2v";
+    if ((modeId === "start_frame" || modeId === "multi_image_reference") && /^grok-imagine-video-1\.5-preview$/i.test(trimmed)) return "grok-imagine/i2v";
   }
   if (modelId === "happyhorse-1.1") {
     if (modeId === "text_to_video" && /^happyhorse-1\.1-text-to-video$/i.test(trimmed)) return "happyhorse-1-1-t2v";

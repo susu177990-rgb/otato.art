@@ -188,6 +188,12 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
   if (request.modeId === "multi_image_reference" && isVeo31Family(request.modelId) && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
     throw new VideoGenerationError("invalid_mode", "Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
   }
+  if (request.modeId === "multi_image_reference" && request.modelId === "grok-imagine" && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
+    throw new VideoGenerationError("invalid_mode", "Grok Imagine 全能参考只支持 1~7 张图片参考，不支持视频或音频参考。");
+  }
+  if (request.modelId === "grok-imagine" && (request.modeId === "start_frame" || request.modeId === "multi_image_reference") && request.grokImagineMode === "spicy") {
+    throw new VideoGenerationError("invalid_mode", "Grok Imagine 图片生视频的 spicy 模式需要 task_id，当前图片 URL 路径暂不支持。");
+  }
   if (request.modelId === "gemini-omni") {
     if (request.prompt.length > 20_000) {
       throw new VideoGenerationError("invalid_mode", "Gemini Omni 提示词最多 20000 个字符。");
@@ -1033,8 +1039,15 @@ function normalizeGrokImagineMode(value: unknown): "normal" | "fun" | "spicy" {
 
 function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
   const startFrame = request.references.find((item) => item.role === "start_frame");
-  const imageUrls = startFrame ? [startFrame.url.trim()] : [];
-  const isImageToVideo = request.modeId === "start_frame";
+  const imageReferenceUrls = request.references
+    .filter((item) => item.role === "image_reference")
+    .map((item) => item.url.trim());
+  const imageUrls = request.modeId === "multi_image_reference"
+    ? imageReferenceUrls
+    : startFrame
+      ? [startFrame.url.trim()]
+      : [];
+  const isImageToVideo = request.modeId === "start_frame" || request.modeId === "multi_image_reference";
   for (const ref of imageUrls) {
     assertCrunVideoReference(ref, "CRUN Grok Imagine");
   }
@@ -1043,8 +1056,16 @@ function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, api
     prompt: request.prompt,
     duration: request.durationSeconds,
     ...(request.resolution ? { resolution: request.resolution } : {}),
-    ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
-    ...(isImageToVideo ? { img_urls: imageUrls } : { mode: normalizeGrokImagineMode(request.grokImagineMode) }),
+    ...(request.modeId === "multi_image_reference" && request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
+    ...(isImageToVideo
+      ? {
+          img_urls: imageUrls,
+          mode: normalizeGrokImagineMode(request.grokImagineMode),
+        }
+      : {
+          ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
+          mode: normalizeGrokImagineMode(request.grokImagineMode),
+        }),
   };
 }
 

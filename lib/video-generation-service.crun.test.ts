@@ -498,7 +498,7 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
     });
   });
 
-  it("submits Grok Imagine image-to-video preview with img_urls", async () => {
+  it("submits Grok Imagine image-to-video with img_urls", async () => {
     vi.mocked(persistGeneratedVideoToStorage).mockResolvedValue("https://storage.example.com/grok-i2v.mp4");
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -519,21 +519,64 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
         modeId: "start_frame",
         prompt: "animate this",
         durationSeconds: 8,
-        aspectRatio: "auto",
         resolution: "720p",
-        grokImagineMode: "fun",
+        grokImagineMode: "normal",
         references: [{ role: "start_frame", url: "https://example.com/grok.png" }],
       },
     });
 
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
-      model: "grok-imagine-video-1.5-preview",
+      model: "grok-imagine/i2v",
       input: {
         prompt: "animate this",
         duration: 8,
         resolution: "720p",
-        aspect_ratio: "auto",
         img_urls: ["https://example.com/grok.png"],
+        mode: "normal",
+      },
+    });
+  });
+
+  it("submits Grok Imagine multi-image references through i2v", async () => {
+    vi.mocked(persistGeneratedVideoToStorage).mockResolvedValue("https://storage.example.com/grok-r2v.mp4");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "grok-r2v-task" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ code: 200, message: "success", data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/grok-r2v.mp4"] } }),
+          { status: 200 },
+        ),
+      );
+
+    await generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "grok-imagine": crunModel("grok-imagine") }),
+      request: {
+        modelId: "grok-imagine",
+        modeId: "multi_image_reference",
+        prompt: "animate these together",
+        durationSeconds: 12,
+        aspectRatio: "2:3",
+        resolution: "720p",
+        grokImagineMode: "fun",
+        references: [
+          { role: "image_reference", url: "https://example.com/grok-a.png" },
+          { role: "image_reference", url: "https://example.com/grok-b.png" },
+        ],
+      },
+    });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      model: "grok-imagine/i2v",
+      input: {
+        prompt: "animate these together",
+        duration: 12,
+        resolution: "720p",
+        aspect_ratio: "2:3",
+        img_urls: ["https://example.com/grok-a.png", "https://example.com/grok-b.png"],
+        mode: "fun",
       },
     });
   });

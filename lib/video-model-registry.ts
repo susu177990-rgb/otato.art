@@ -341,19 +341,19 @@ export const VIDEO_MODEL_REGISTRY: Record<VideoModelId, VideoModelDefinition> = 
     label: "Grok Imagine",
     defaultApiModelName: "",
     capabilities: {
-      supportedModes: ["text_to_video", "start_frame"],
+      supportedModes: ["text_to_video", "start_frame", "multi_image_reference"],
       aspectRatios: ["16:9", "9:16", "1:1", "3:2", "2:3"],
       durations: [6, 12, 18, 24, 30],
       durationCapability: { type: "range", min: 6, max: 30, step: 1, defaultValue: 6 },
       resolutions: ["480p", "720p"],
-      maxImageReferences: 1,
+      maxImageReferences: 7,
       maxVideoReferences: 0,
       maxAudioReferences: 0,
       supportsFirstLastFrames: false,
       supportsMotionControl: false,
       supportsNativeAudio: false,
       supportsVideoExtension: false,
-      supportsMultipleImageReferences: false,
+      supportsMultipleImageReferences: true,
     },
   }),
   "veo-3.1": model({
@@ -496,7 +496,8 @@ export const DEFAULT_VIDEO_PRESETS: Record<
   },
   "grok-imagine": {
     text_to_video: preset("Grok Imagine · 文生视频", "Grok Imagine 文生视频", TEXT_TO_VIDEO_PROMPT),
-    start_frame: preset("Grok Imagine · 单图", "Grok Imagine 单图图生视频", START_FRAME_PROMPT),
+    start_frame: preset("Grok Imagine · 单图", "Grok Imagine 图生视频", START_FRAME_PROMPT),
+    multi_image_reference: preset("Grok Imagine · 全能参考", "Grok Imagine 图片参考视频", MULTI_IMAGE_PROMPT),
   },
   "veo-3.1": {
     text_to_video: preset("Veo 3.1 · 文生视频", "Veo 文生视频", TEXT_TO_VIDEO_PROMPT),

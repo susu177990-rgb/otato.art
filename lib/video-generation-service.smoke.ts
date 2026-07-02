@@ -551,33 +551,80 @@ const grokStart = validateUnifiedVideoRequest({
   modeId: "start_frame",
   prompt: "the person starts dancing",
   durationSeconds: 8,
-  aspectRatio: "auto",
   resolution: "720p",
   references: [{ role: "start_frame", url: "https://example.com/grok.png" }],
   grokImagineMode: "normal",
 });
 const grokStartPayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokStart));
-assert.equal(grokStartPayload.model, "grok-imagine-video-1.5-preview");
+assert.equal(grokStartPayload.model, "grok-imagine/i2v");
 assert.deepEqual((grokStartPayload.input as Record<string, unknown>).img_urls, ["https://example.com/grok.png"]);
-assert.equal((grokStartPayload.input as Record<string, unknown>).aspect_ratio, "auto");
-assert.equal("mode" in (grokStartPayload.input as Record<string, unknown>), false);
+assert.equal("aspect_ratio" in (grokStartPayload.input as Record<string, unknown>), false);
+assert.equal((grokStartPayload.input as Record<string, unknown>).mode, "normal");
+
+const grokReference = validateUnifiedVideoRequest({
+  modelId: "grok-imagine",
+  modeId: "multi_image_reference",
+  prompt: "two images move together",
+  durationSeconds: 12,
+  aspectRatio: "2:3",
+  resolution: "720p",
+  references: [
+    { role: "image_reference", url: "https://example.com/grok-a.png" },
+    { role: "image_reference", url: "https://example.com/grok-b.png" },
+  ],
+  grokImagineMode: "fun",
+});
+const grokReferencePayload = buildVideoCreatePayloadForTest(ctxFor("grok-imagine", grokReference));
+assert.equal(grokReferencePayload.model, "grok-imagine/i2v");
+assert.deepEqual((grokReferencePayload.input as Record<string, unknown>).img_urls, [
+  "https://example.com/grok-a.png",
+  "https://example.com/grok-b.png",
+]);
+assert.equal((grokReferencePayload.input as Record<string, unknown>).aspect_ratio, "2:3");
+assert.equal((grokReferencePayload.input as Record<string, unknown>).mode, "fun");
 
 assert.throws(
   () =>
     validateUnifiedVideoRequest({
       modelId: "grok-imagine",
       modeId: "multi_image_reference",
-      prompt: "bad grok multi image reference",
+      prompt: "bad grok spicy image url path",
       durationSeconds: 12,
       aspectRatio: "2:3",
       resolution: "720p",
-      references: [
-        { role: "image_reference", url: "https://example.com/grok-a.png" },
-        { role: "image_reference", url: "https://example.com/grok-b.png" },
-      ],
+      references: [{ role: "image_reference", url: "https://example.com/grok-a.png" }],
       grokImagineMode: "spicy",
     }),
-  /不支持/,
+  /task_id/,
+);
+assert.throws(
+  () =>
+    validateUnifiedVideoRequest({
+      modelId: "grok-imagine",
+      modeId: "multi_image_reference",
+      prompt: "bad grok video reference",
+      durationSeconds: 12,
+      aspectRatio: "2:3",
+      resolution: "720p",
+      references: [{ role: "video_reference", url: "https://example.com/grok.mp4" }],
+    }),
+  /只支持 1~7 张图片参考/,
+);
+assert.throws(
+  () =>
+    validateUnifiedVideoRequest({
+      modelId: "grok-imagine",
+      modeId: "multi_image_reference",
+      prompt: "too many grok references",
+      durationSeconds: 12,
+      aspectRatio: "2:3",
+      resolution: "720p",
+      references: Array.from({ length: 8 }, (_, index) => ({
+        role: "image_reference" as const,
+        url: `https://example.com/grok-${index}.png`,
+      })),
+    }),
+  /最多只支持 7 张参考图/,
 );
 
 assert.throws(

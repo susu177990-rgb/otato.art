@@ -102,10 +102,10 @@ assert.equal(happyHorseEditParams.soundControl?.defaultEnabled, false);
 assert.equal(VIDEO_MODEL_ORDER.includes("grok-imagine"), true);
 assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("text_to_video"), true);
 assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("start_frame"), true);
-assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("multi_image_reference"), false);
+assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("multi_image_reference"), true);
 assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("start_end_frame"), false);
 assert.equal(getVideoCapabilities("grok-imagine").supportedModes.includes("video_edit"), false);
-assert.equal(getVideoCapabilities("grok-imagine").maxImageReferences, 1);
+assert.equal(getVideoCapabilities("grok-imagine").maxImageReferences, 7);
 assert.equal(getVideoCapabilities("grok-imagine").maxVideoReferences, 0);
 const grokTextParams = getVideoParameterCapabilities("grok-imagine", "text_to_video");
 assert.equal(grokTextParams.durationCapability?.type, "range");
@@ -114,11 +114,14 @@ assert.equal(grokTextParams.resolutions.includes("480p"), true);
 assert.equal(grokTextParams.soundControl, undefined);
 assert.equal(grokTextParams.aspectRatios.includes("3:2"), true);
 const grokStartParams = getVideoParameterCapabilities("grok-imagine", "start_frame");
-assert.equal(grokStartParams.supportsAspectRatio, true);
-assert.equal(grokStartParams.aspectRatios.includes("auto"), true);
+assert.equal(grokStartParams.supportsAspectRatio, false);
+assert.equal(grokStartParams.aspectRatios.includes("auto"), false);
 assert.equal(grokStartParams.durationCapability?.type, "range");
-assert.equal(grokStartParams.durationCapability?.type === "range" ? grokStartParams.durationCapability.min : 0, 1);
-assert.equal(grokStartParams.durationCapability?.type === "range" ? grokStartParams.durationCapability.max : 0, 15);
+assert.equal(grokStartParams.durationCapability?.type === "range" ? grokStartParams.durationCapability.min : 0, 6);
+assert.equal(grokStartParams.durationCapability?.type === "range" ? grokStartParams.durationCapability.max : 0, 30);
+const grokReferenceParams = getVideoParameterCapabilities("grok-imagine", "multi_image_reference");
+assert.equal(grokReferenceParams.supportsAspectRatio, true);
+assert.deepEqual(grokReferenceParams.aspectRatios, ["16:9", "9:16", "1:1", "3:2", "2:3"]);
 
 assert.equal(modelSupportsUiMode("seedance-2.0", "start_end_frame"), true);
 assert.equal(modelSupportsUiMode("seedance-2.0", "multi_image_reference"), true);
@@ -143,6 +146,7 @@ const legacyCrunNames = mergeVideoSettings({
       apiModelNameByMode: {
         text_to_video: "grok-imagine-text-to-video-beta",
         start_frame: "grok-imagine-image-to-video-beta",
+        multi_image_reference: "grok-imagine-video-1.5-preview",
       },
     },
     "happyhorse-1.1": {
@@ -155,7 +159,8 @@ const legacyCrunNames = mergeVideoSettings({
   },
 });
 assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.text_to_video, "grok-imagine/t2v");
-assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.start_frame, "grok-imagine-video-1.5-preview");
+assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.start_frame, "grok-imagine/i2v");
+assert.equal(legacyCrunNames.models["grok-imagine"].apiModelNameByMode.multi_image_reference, "grok-imagine/i2v");
 assert.equal(legacyCrunNames.models["happyhorse-1.1"].apiModelNameByMode.start_frame, "happyhorse-1-1-i2v");
 assert.equal(
   mergeVideoSettings({ models: { "happyhorse-1.1": { baseUrl: "https://api.evolink.ai" } } }).models["happyhorse-1.1"].baseUrl,
@@ -172,7 +177,7 @@ assert.equal(referenceUiModels.includes("seedance-1.0-pro"), false);
 assert.equal(referenceUiModels.includes("kling-3.0"), true);
 assert.equal(referenceUiModels.includes("happyhorse-1.1"), true);
 assert.equal(referenceUiModels.includes("happyhorse-1.0"), true);
-assert.equal(referenceUiModels.includes("grok-imagine"), false);
+assert.equal(referenceUiModels.includes("grok-imagine"), true);
 assert.equal(referenceUiModels.includes("veo-3.1"), false);
 assert.equal(referenceUiModels.includes("veo-3.1-fast"), true);
 assert.equal(referenceUiModels.includes("veo-3.1-lite"), true);

@@ -1115,6 +1115,18 @@ export default function VideoPage() {
       setError("Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
       return;
     }
+    if (isGrokImagineVideoModel(safeModelId) && finalEffectiveModeId === "multi_image_reference" && (!hasImageReferences || hasVideoReferences || hasAudioReferences)) {
+      setError("Grok Imagine 全能参考只支持 1~7 张图片参考，不支持视频或音频参考。");
+      return;
+    }
+    if (isGrokImagineVideoModel(safeModelId) && finalEffectiveModeId === "multi_image_reference" && imageReferenceCount > 7) {
+      setError("Grok Imagine 全能参考最多支持 7 张图片参考。");
+      return;
+    }
+    if (isGrokImagineVideoModel(safeModelId) && (finalEffectiveModeId === "start_frame" || finalEffectiveModeId === "multi_image_reference") && selectedGrokMode === "spicy") {
+      setError("Grok Imagine 图片生视频的 spicy 模式需要 task_id，当前图片 URL 路径暂不支持。");
+      return;
+    }
     if (finalEffectiveModeId === "video_edit" && !capabilities.supportedModes.includes("video_edit")) {
       setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持视频编辑模式。`);
       return;
