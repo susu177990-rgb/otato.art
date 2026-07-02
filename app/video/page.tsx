@@ -120,6 +120,10 @@ function isGrokImagineVideoModel(modelId: VideoModelId): boolean {
   return modelId === "grok-imagine";
 }
 
+function isGrokImageBackedMode(modeId: VideoGenerationModeId): boolean {
+  return modeId === "start_frame" || modeId === "multi_image_reference";
+}
+
 function isVeo31VideoModel(modelId: VideoModelId): boolean {
   return modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite";
 }
@@ -180,6 +184,7 @@ const GROK_IMAGINE_MODES: ReadonlyArray<{ id: VideoGrokImagineMode; label: strin
   { id: "fun", label: "有趣" },
   { id: "spicy", label: "热辣" },
 ];
+const GROK_IMAGINE_IMAGE_MODES = GROK_IMAGINE_MODES.filter((mode) => mode.id !== "spicy");
 
 const REFERENCE_KINDS: ReferenceKind[] = ["image", "video", "audio"];
 
@@ -468,6 +473,9 @@ export default function VideoPage() {
     () => getVideoParameterCapabilities(safeModelId, effectiveModeId, currentParameterReferences),
     [currentParameterReferences, effectiveModeId, safeModelId],
   );
+  const availableGrokModes = isGrokImagineVideoModel(safeModelId) && isGrokImageBackedMode(effectiveModeId)
+    ? GROK_IMAGINE_IMAGE_MODES
+    : GROK_IMAGINE_MODES;
   const durationCapability = parameterCapabilities.durationCapability;
   const soundControl = parameterCapabilities.soundControl;
 
@@ -720,7 +728,7 @@ export default function VideoPage() {
       parameterCapabilities.resolutions.includes(current) ? current : parameterCapabilities.resolutions[0],
     );
     setSelectedSoundEnabled(soundControl?.defaultEnabled ?? false);
-    setSelectedGrokMode("normal");
+    setSelectedGrokMode((current) => availableGrokModes.some((mode) => mode.id === current) ? current : "normal");
     if (!capabilities.supportsFirstLastFrames) {
       setReferences((current) => {
         if (!current.frames[1]) return current;
@@ -729,7 +737,7 @@ export default function VideoPage() {
       });
     }
     setToolbarPickerMenu(null);
-  }, [capabilities, durationCapability, effectiveModeId, parameterCapabilities, safeModelId, selectedUiModeId, soundControl, videoWorkspace.uiDefaults.defaultAspectRatio]);
+  }, [availableGrokModes, capabilities, durationCapability, effectiveModeId, parameterCapabilities, safeModelId, selectedUiModeId, soundControl, videoWorkspace.uiDefaults.defaultAspectRatio]);
 
   function createLocalPreviewUrl(file: File): string {
     const url = URL.createObjectURL(file);
@@ -1123,10 +1131,6 @@ export default function VideoPage() {
       setError("Grok Imagine 全能参考最多支持 7 张图片参考。");
       return;
     }
-    if (isGrokImagineVideoModel(safeModelId) && (finalEffectiveModeId === "start_frame" || finalEffectiveModeId === "multi_image_reference") && selectedGrokMode === "spicy") {
-      setError("Grok Imagine 图片生视频的 spicy 模式需要 task_id，当前图片 URL 路径暂不支持。");
-      return;
-    }
     if (finalEffectiveModeId === "video_edit" && !capabilities.supportedModes.includes("video_edit")) {
       setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持视频编辑模式。`);
       return;
@@ -1157,6 +1161,9 @@ export default function VideoPage() {
       setError("HappyHorse 1.0 视频编辑最多支持 5 张参考图。");
       return;
     }
+    const requestGrokMode = isGrokImagineVideoModel(safeModelId) && isGrokImageBackedMode(finalEffectiveModeId) && selectedGrokMode === "spicy"
+      ? "normal"
+      : selectedGrokMode;
 
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
@@ -1195,7 +1202,7 @@ export default function VideoPage() {
           aspectRatio: requestAspectRatio,
           resolution: selectedResolution,
           soundEnabled: finalParameterCapabilities.soundControl ? selectedSoundEnabled : undefined,
-          grokImagineMode: isGrokImagineVideoModel(safeModelId) ? selectedGrokMode : undefined,
+          grokImagineMode: isGrokImagineVideoModel(safeModelId) ? requestGrokMode : undefined,
           references: allReferences,
           projectId,
         }),
@@ -1303,7 +1310,7 @@ export default function VideoPage() {
             onSelect: () => {},
           }])
         : toolbarPickerMenu.kind === "grokMode"
-          ? GROK_IMAGINE_MODES.map((mode) => ({
+          ? availableGrokModes.map((mode) => ({
               id: mode.id,
               label: mode.label,
               active: selectedGrokMode === mode.id,
@@ -1675,7 +1682,7 @@ export default function VideoPage() {
                     setToolbarPickerMenu((current) => current?.kind === "grokMode" ? null : { kind: "grokMode", anchor });
                   }}
                 >
-                  <span className={styles.composerPickerLabel}>{GROK_IMAGINE_MODES.find((mode) => mode.id === selectedGrokMode)?.label ?? "普通"}</span>
+                  <span className={styles.composerPickerLabel}>{availableGrokModes.find((mode) => mode.id === selectedGrokMode)?.label ?? "普通"}</span>
                 </button>
               ) : null}
 
