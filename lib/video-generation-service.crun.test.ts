@@ -537,6 +537,70 @@ describe("generateUnifiedVideo CRUN Seedance adapter", () => {
     });
   });
 
+  it("submits Grok Imagine spicy image-to-video with task_id and index", async () => {
+    vi.mocked(persistGeneratedVideoToStorage).mockResolvedValue("https://storage.example.com/grok-spicy.mp4");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "grok-spicy-i2v-task" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ code: 200, message: "success", data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/grok-spicy.mp4"] } }),
+          { status: 200 },
+        ),
+      );
+
+    await generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "grok-imagine": crunModel("grok-imagine") }),
+      request: {
+        modelId: "grok-imagine",
+        modeId: "start_frame",
+        prompt: "animate this spicy",
+        durationSeconds: 8,
+        resolution: "720p",
+        grokImagineMode: "spicy",
+        references: [{
+          role: "start_frame",
+          url: "https://example.com/grok.png",
+          sourceProvider: "crun",
+          sourceTaskId: "grok-image-task",
+          sourceTaskModel: "grok-imagine/t2i",
+          sourceTaskOutputIndex: 0,
+        }],
+      },
+    });
+
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
+      model: "grok-imagine/i2v",
+      input: {
+        prompt: "animate this spicy",
+        duration: 8,
+        resolution: "720p",
+        task_id: "grok-image-task",
+        index: 0,
+        mode: "spicy",
+      },
+    });
+  });
+
+  it("rejects Grok Imagine spicy image-to-video without a Grok task source", async () => {
+    await expect(generateUnifiedVideo({
+      supabase: {} as never,
+      userId: "user-1",
+      workspaceSnapshot: workspaceSnapshot({ "grok-imagine": crunModel("grok-imagine") }),
+      request: {
+        modelId: "grok-imagine",
+        modeId: "start_frame",
+        prompt: "animate this spicy",
+        durationSeconds: 8,
+        resolution: "720p",
+        grokImagineMode: "spicy",
+        references: [{ role: "start_frame", url: "https://example.com/grok.png" }],
+      },
+    })).rejects.toThrow("Spicy 需要选择带 task_id 的 Grok 文生图/图生图记录。");
+  });
+
   it("submits Grok Imagine multi-image references through i2v", async () => {
     vi.mocked(persistGeneratedVideoToStorage).mockResolvedValue("https://storage.example.com/grok-r2v.mp4");
     const fetchMock = vi

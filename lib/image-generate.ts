@@ -347,6 +347,15 @@ type Route =
   | { kind: "openai-images"; baseUrl: string }
   | { kind: "chat-completions"; url: string };
 
+type ImageGenerateResult = {
+  imageUrl: string;
+  payloadKind: string;
+  sourceProvider?: "crun";
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
+};
+
 /**
  * 文档：异步绘画提交为 POST `/v1/draw/{nano-banana|completions|...}`，
  * 单独取结果：POST `/v1/draw/result`，Body `{ "id": "<任务 id>" }`，
@@ -584,7 +593,7 @@ async function generateViaCrunTask(
   gptImageQuality: GptImageQuality | undefined,
   gptImageBackground: GptImageBackground | undefined,
   refImages: string[],
-): Promise<string> {
+): Promise<ImageGenerateResult> {
   const diagnosticBase = {
     routeKind: route.kind,
     endpoint: endpointForDiagnostics(route.submitUrl),
@@ -684,9 +693,18 @@ async function generateViaCrunTask(
     );
   }
   const immediate = parseCrunMediaUrl(submitData);
-  if (immediate) return immediate;
-
   const taskId = parseCrunTaskId(submitData);
+  if (immediate) {
+    return {
+      imageUrl: immediate,
+      payloadKind: route.kind,
+      sourceProvider: "crun",
+      sourceTaskId: taskId || undefined,
+      sourceTaskModel: submitModelName,
+      sourceTaskOutputIndex: 0,
+    };
+  }
+
   if (!taskId) {
     throw new ImageGenerationError(
       "CRUN 已响应，但没有返回任务 ID。",
@@ -724,7 +742,16 @@ async function generateViaCrunTask(
     const statusContainer = data?.data && typeof data.data === "object" ? data.data as Record<string, unknown> : data ?? {};
     const status = statusContainer.status ?? statusContainer.state ?? data?.status;
     const mediaUrl = parseCrunMediaUrl(statusContainer) ?? parseCrunMediaUrl(data);
-    if (mediaUrl && (!status || crunTaskSucceeded(status))) return mediaUrl;
+    if (mediaUrl && (!status || crunTaskSucceeded(status))) {
+      return {
+        imageUrl: mediaUrl,
+        payloadKind: route.kind,
+        sourceProvider: "crun",
+        sourceTaskId: taskId,
+        sourceTaskModel: submitModelName,
+        sourceTaskOutputIndex: 0,
+      };
+    }
     if (crunTaskFailed(status)) {
       const reason = crunFailureReason(statusContainer, data);
       throw new ImageGenerationError(reason, {
@@ -1262,7 +1289,7 @@ export type GenerateImageParams = {
   refImages?: string[];
 };
 
-export async function generateImage(params: GenerateImageParams): Promise<{ imageUrl: string; payloadKind: string }> {
+export async function generateImage(params: GenerateImageParams): Promise<ImageGenerateResult> {
   const model = params.model;
   const prompt = params.prompt?.trim() || "";
   if (!prompt) throw new Error("prompt 必填");
@@ -1277,9 +1304,9 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
   const modelName = model.modelName.trim();
 
   const route = inferRoute(endpointUrl, model.provider);
-  let imageUrl: string;
+  let result: ImageGenerateResult;
   if (route.kind === "grsai-nano-banana" || route.kind === "grsai-gpt-image") {
-    imageUrl = await generateViaGrsai(
+    const imageUrl = await generateViaGrsai(
       model.apiKey,
       route,
       modelName,
@@ -1290,8 +1317,9 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       gptImageBackground,
       refImages,
     );
+    result = { imageUrl, payloadKind: route.kind };
   } else if (route.kind === "crun-task") {
-    imageUrl = await generateViaCrunTask(
+    result = await generateViaCrunTask(
       model.apiKey,
       route,
       modelName,
@@ -1303,7 +1331,7 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       refImages,
     );
   } else if (route.kind === "openai-images") {
-    imageUrl = await generateViaOpenAIImages(
+    const imageUrl = await generateViaOpenAIImages(
       model.apiKey,
       route.baseUrl,
       modelName,
@@ -1314,8 +1342,9 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       gptImageBackground,
       refImages,
     );
+    result = { imageUrl, payloadKind: route.kind };
   } else {
-    imageUrl = await generateViaChatCompletions(
+    const imageUrl = await generateViaChatCompletions(
       model.apiKey,
       route.url,
       modelName,
@@ -1324,9 +1353,10 @@ export async function generateImage(params: GenerateImageParams): Promise<{ imag
       imageSize,
       refImages,
     );
+    result = { imageUrl, payloadKind: route.kind };
   }
 
-  return { imageUrl, payloadKind: route.kind };
+  return result;
 }
 
 export { buildGrsaiNanoBananaPayload, parseGenerateRequest, type GenerateBody };

@@ -191,8 +191,16 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
   if (request.modeId === "multi_image_reference" && request.modelId === "grok-imagine" && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
     throw new VideoGenerationError("invalid_mode", "Grok Imagine 全能参考只支持 1~7 张图片参考，不支持视频或音频参考。");
   }
-  if (request.modelId === "grok-imagine" && (request.modeId === "start_frame" || request.modeId === "multi_image_reference") && request.grokImagineMode === "spicy") {
-    throw new VideoGenerationError("invalid_mode", "Grok Imagine 图片生视频的 spicy 模式需要 task_id，当前图片 URL 路径暂不支持。");
+  if (request.modelId === "grok-imagine" && request.modeId === "multi_image_reference" && request.grokImagineMode === "spicy") {
+    throw new VideoGenerationError("invalid_mode", "Spicy 需要选择带 task_id 的 Grok 文生图/图生图记录。");
+  }
+  if (
+    request.modelId === "grok-imagine" &&
+    request.modeId === "start_frame" &&
+    request.grokImagineMode === "spicy" &&
+    !isGrokSpicyReadyReference(request.references.find((item) => item.role === "start_frame"))
+  ) {
+    throw new VideoGenerationError("invalid_mode", "Spicy 需要选择带 task_id 的 Grok 文生图/图生图记录。");
   }
   if (request.modelId === "gemini-omni") {
     if (request.prompt.length > 20_000) {
@@ -1037,6 +1045,24 @@ function normalizeGrokImagineMode(value: unknown): "normal" | "fun" | "spicy" {
   return value === "fun" || value === "spicy" || value === "normal" ? value : "normal";
 }
 
+function isGrokSpicyReadyReference(ref: UnifiedVideoReference | undefined): ref is UnifiedVideoReference & {
+  sourceProvider: "crun";
+  sourceTaskId: string;
+  sourceTaskModel: "grok-imagine/t2i" | "grok-imagine/i2i";
+  sourceTaskOutputIndex: number;
+} {
+  const outputIndex = ref?.sourceTaskOutputIndex;
+  return Boolean(
+    ref &&
+      ref.sourceProvider === "crun" &&
+      ref.sourceTaskId?.trim() &&
+      (ref.sourceTaskModel === "grok-imagine/t2i" || ref.sourceTaskModel === "grok-imagine/i2i") &&
+      Number.isInteger(outputIndex) &&
+      typeof outputIndex === "number" &&
+      outputIndex >= 0,
+  );
+}
+
 function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, apiModelName: string) {
   const startFrame = request.references.find((item) => item.role === "start_frame");
   const imageReferenceUrls = request.references
@@ -1048,8 +1074,20 @@ function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, api
       ? [startFrame.url.trim()]
       : [];
   const isImageToVideo = request.modeId === "start_frame" || request.modeId === "multi_image_reference";
+  const grokMode = normalizeGrokImagineMode(request.grokImagineMode);
   for (const ref of imageUrls) {
     assertCrunVideoReference(ref, "CRUN Grok Imagine");
+  }
+  if (request.modeId === "start_frame" && grokMode === "spicy" && isGrokSpicyReadyReference(startFrame)) {
+    return {
+      model: apiModelName.trim(),
+      prompt: request.prompt,
+      duration: request.durationSeconds,
+      ...(request.resolution ? { resolution: request.resolution } : {}),
+      task_id: startFrame.sourceTaskId.trim(),
+      index: startFrame.sourceTaskOutputIndex,
+      mode: grokMode,
+    };
   }
   return {
     model: apiModelName.trim(),
@@ -1060,11 +1098,11 @@ function buildGrokImagineCreatePayload(request: UnifiedVideoGenerateRequest, api
     ...(isImageToVideo
       ? {
           img_urls: imageUrls,
-          mode: normalizeGrokImagineMode(request.grokImagineMode),
+          mode: grokMode,
         }
       : {
           ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
-          mode: normalizeGrokImagineMode(request.grokImagineMode),
+          mode: grokMode,
         }),
   };
 }

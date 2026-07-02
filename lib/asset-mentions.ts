@@ -28,6 +28,10 @@ export type AssetMentionCandidate = {
   text?: string;
   nodeType?: "text" | "image" | "video" | "audio";
   durationSeconds?: number;
+  sourceProvider?: "crun";
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
 };
 
 export type ParsedAssetMention = {

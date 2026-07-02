@@ -83,6 +83,10 @@ describe("generateImage CRUN task adapter", () => {
     expect(result).toEqual({
       imageUrl: "https://cdn.example.com/generated.png",
       payloadKind: "crun-task",
+      sourceProvider: "crun",
+      sourceTaskId: "task-1",
+      sourceTaskModel: "google/nano-banana-2",
+      sourceTaskOutputIndex: 0,
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [submitUrl, submitInit] = fetchMock.mock.calls[0];

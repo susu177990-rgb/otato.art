@@ -365,6 +365,13 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(submitBody.model).toBe("grok-imagine/i2i");
     expect(submitBody.input.img_urls).toEqual(["https://storage.example.com/ref.png"]);
     expect(submitBody.input.aspect_ratio).toBeUndefined();
+    const data = await response.json();
+    expect(data.galleryRecord).toMatchObject({
+      sourceProvider: "crun",
+      sourceTaskId: "task-1",
+      sourceTaskModel: "grok-imagine/i2i",
+      sourceTaskOutputIndex: 0,
+    });
   });
 
   it("allows long Grok prompts when uploaded references make the request I2I", async () => {
@@ -422,6 +429,13 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(submitBody.model).toBe("grok-imagine/t2i");
     expect(submitBody.input.aspect_ratio).toBe("9:16");
     expect(submitBody.input.img_urls).toBeUndefined();
+    const data = await response.json();
+    expect(data.galleryRecord).toMatchObject({
+      sourceProvider: "crun",
+      sourceTaskId: "task-1",
+      sourceTaskModel: "grok-imagine/t2i",
+      sourceTaskOutputIndex: 0,
+    });
   });
 
   it("returns a user-friendly content rejection for CRUN moderation failures", async () => {

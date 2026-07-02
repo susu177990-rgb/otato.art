@@ -127,6 +127,10 @@ export interface ImageGalleryRecord {
   imageUrl?: string;
   /** Lightweight gallery/list preview. Original stays in imageUrl. */
   thumbnailUrl?: string;
+  sourceProvider?: "crun";
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
   refImageCount: number;
   /**
    * 生成当时的参考图快照。按槽位保存，便于从右侧历史记录一键恢复输入状态。

@@ -150,6 +150,12 @@ function parseReferences(raw: unknown): UnifiedVideoReference[] {
         durationSeconds: Number.isFinite(Number(row.durationSeconds)) && Number(row.durationSeconds) > 0
           ? Number(row.durationSeconds)
           : undefined,
+        sourceProvider: row.sourceProvider === "crun" ? "crun" : undefined,
+        sourceTaskId: typeof row.sourceTaskId === "string" && row.sourceTaskId.trim() ? row.sourceTaskId.trim() : undefined,
+        sourceTaskModel: typeof row.sourceTaskModel === "string" && row.sourceTaskModel.trim() ? row.sourceTaskModel.trim() : undefined,
+        sourceTaskOutputIndex: Number.isInteger(Number(row.sourceTaskOutputIndex)) && Number(row.sourceTaskOutputIndex) >= 0
+          ? Number(row.sourceTaskOutputIndex)
+          : undefined,
       } satisfies UnifiedVideoReference;
     })
     .filter((item) => item.url);

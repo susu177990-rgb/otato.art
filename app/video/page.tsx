@@ -12,9 +12,11 @@ import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog, type ProjectAssetMediaKind } from "@/components/project-assets/ProjectAssetPickerDialog";
+import { ProjectGenerationRecordPickerDialog, type ProjectGenerationRecordSelection } from "@/components/project-assets/ProjectGenerationRecordPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import type { ProjectAsset } from "@/lib/project-assets";
+import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
 import { mediaContentType, mediaFileExtension, mediaFileMatchesKind } from "@/lib/media-file";
 import {
@@ -94,7 +96,19 @@ function durationPresets(capability: VideoDurationCapability): number[] {
 }
 
 type ReferenceKind = "image" | "video" | "audio";
-type ReferenceSlot = { kind: ReferenceKind; url: string; previewUrl: string; label: string; mimeType: string; file?: File; durationSeconds?: number } | null;
+type ReferenceSlot = {
+  kind: ReferenceKind;
+  url: string;
+  previewUrl: string;
+  label: string;
+  mimeType: string;
+  file?: File;
+  durationSeconds?: number;
+  sourceProvider?: "crun";
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
+} | null;
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
 type PendingVideoGeneration = {
   id: string;
@@ -163,6 +177,7 @@ type ReferenceUploadMenuState = {
 type ToolbarPickerKind = "mode" | "model" | "ratio" | "duration" | "resolution" | "grokMode";
 type ToolbarPickerMenuState = { kind: ToolbarPickerKind; anchor: MenuAnchor } | null;
 type ProjectAssetPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
+type GenerationRecordPickerState = { kind: Extract<ReferenceKind, "image" | "video">; index: number } | null;
 type CreditQuoteState = {
   loading: boolean;
   credits?: number;
@@ -187,6 +202,30 @@ const GROK_IMAGINE_MODES: ReadonlyArray<{ id: VideoGrokImagineMode; label: strin
 const GROK_IMAGINE_IMAGE_MODES = GROK_IMAGINE_MODES.filter((mode) => mode.id !== "spicy");
 
 const REFERENCE_KINDS: ReferenceKind[] = ["image", "video", "audio"];
+
+function isGrokSpicyReadySource(input: {
+  sourceProvider?: string;
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
+}): boolean {
+  return (
+    input.sourceProvider === "crun" &&
+    Boolean(input.sourceTaskId?.trim()) &&
+    (input.sourceTaskModel === "grok-imagine/t2i" || input.sourceTaskModel === "grok-imagine/i2i") &&
+    Number.isInteger(input.sourceTaskOutputIndex) &&
+    Number(input.sourceTaskOutputIndex) >= 0
+  );
+}
+
+function sourceFieldsFromImageRecord(record: ImageGalleryRecord) {
+  return {
+    sourceProvider: record.sourceProvider,
+    sourceTaskId: record.sourceTaskId,
+    sourceTaskModel: record.sourceTaskModel,
+    sourceTaskOutputIndex: record.sourceTaskOutputIndex,
+  };
+}
 
 function createEmptyReferences(): ReferenceState {
   return {
@@ -301,6 +340,10 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         url: slot.url,
         label: "主体图",
         mimeType: slot.mimeType,
+        sourceProvider: slot.sourceProvider,
+        sourceTaskId: slot.sourceTaskId,
+        sourceTaskModel: slot.sourceTaskModel,
+        sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
       })),
       ...references.allPurpose.video.slice(0, 1).map((slot) => ({
         role: "motion_source_video" as const,
@@ -325,6 +368,10 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         url: slot.url,
         label: `参考图${index + 1}`,
         mimeType: slot.mimeType,
+        sourceProvider: slot.sourceProvider,
+        sourceTaskId: slot.sourceTaskId,
+        sourceTaskModel: slot.sourceTaskModel,
+        sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
       })),
     ];
   }
@@ -336,6 +383,10 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         label: kindSlotLabel(kind, index),
         mimeType: slot.mimeType,
         durationSeconds: kind === "video" ? slot.durationSeconds : undefined,
+        sourceProvider: slot.sourceProvider,
+        sourceTaskId: slot.sourceTaskId,
+        sourceTaskModel: slot.sourceTaskModel,
+        sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
       })),
     );
   }
@@ -347,6 +398,10 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
       url: references.frames[0].url,
       label: "首帧",
       mimeType: references.frames[0].mimeType,
+      sourceProvider: references.frames[0].sourceProvider,
+      sourceTaskId: references.frames[0].sourceTaskId,
+      sourceTaskModel: references.frames[0].sourceTaskModel,
+      sourceTaskOutputIndex: references.frames[0].sourceTaskOutputIndex,
     });
   }
   if (references.frames[1]) {
@@ -446,6 +501,7 @@ export default function VideoPage() {
   const [referenceUploadMenu, setReferenceUploadMenu] = useState<ReferenceUploadMenuState>(null);
   const [toolbarPickerMenu, setToolbarPickerMenu] = useState<ToolbarPickerMenuState>(null);
   const [projectAssetPicker, setProjectAssetPicker] = useState<ProjectAssetPickerState>(null);
+  const [generationRecordPicker, setGenerationRecordPicker] = useState<GenerationRecordPickerState>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -469,11 +525,17 @@ export default function VideoPage() {
     () => buildReferences(selectedUiModeId, references),
     [references, selectedUiModeId],
   );
+  const grokSpicyTaskReference = useMemo(() => {
+    if (!isGrokImagineVideoModel(safeModelId) || effectiveModeId !== "start_frame") return undefined;
+    const startFrame = currentParameterReferences.find((ref) => ref.role === "start_frame");
+    if (!startFrame || !isGrokSpicyReadySource(startFrame)) return undefined;
+    return startFrame;
+  }, [currentParameterReferences, effectiveModeId, safeModelId]);
   const parameterCapabilities = useMemo(
     () => getVideoParameterCapabilities(safeModelId, effectiveModeId, currentParameterReferences),
     [currentParameterReferences, effectiveModeId, safeModelId],
   );
-  const availableGrokModes = isGrokImagineVideoModel(safeModelId) && isGrokImageBackedMode(effectiveModeId)
+  const availableGrokModes = isGrokImagineVideoModel(safeModelId) && isGrokImageBackedMode(effectiveModeId) && !grokSpicyTaskReference
     ? GROK_IMAGINE_IMAGE_MODES
     : GROK_IMAGINE_MODES;
   const durationCapability = parameterCapabilities.durationCapability;
@@ -685,6 +747,10 @@ export default function VideoPage() {
           description: slot.label,
           thumbnailUrl: slot.previewUrl,
           url: slot.url,
+          sourceProvider: slot.sourceProvider,
+          sourceTaskId: slot.sourceTaskId,
+          sourceTaskModel: slot.sourceTaskModel,
+          sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
         });
       });
       return candidates;
@@ -701,6 +767,10 @@ export default function VideoPage() {
           thumbnailUrl: kind === "image" ? slot.previewUrl : undefined,
           url: slot.url,
           durationSeconds: slot.durationSeconds,
+          sourceProvider: slot.sourceProvider,
+          sourceTaskId: slot.sourceTaskId,
+          sourceTaskModel: slot.sourceTaskModel,
+          sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
         });
       });
     });
@@ -957,6 +1027,54 @@ export default function VideoPage() {
     setProjectAssetPicker(null);
   }
 
+  async function applyGenerationRecordAsReference(
+    kind: Extract<ReferenceKind, "image" | "video">,
+    index: number,
+    selection: ProjectGenerationRecordSelection,
+  ) {
+    if (kind === "image" && selection.kind !== "image") return;
+    if (kind === "video" && selection.kind !== "video") return;
+    const url = selection.kind === "image" ? selection.record.imageUrl?.trim() : selection.record.videoUrl?.trim();
+    if (!url) {
+      setError("生成记录没有可用媒体");
+      return;
+    }
+    const durationSeconds = kind === "video" ? await readVideoDuration(url) : undefined;
+    const label = selection.kind === "image"
+      ? selection.record.userInput || selection.record.finalPrompt || "生成图片"
+      : selection.record.finalPrompt || "生成视频";
+    const slot: NonNullable<ReferenceSlot> = {
+      kind,
+      url,
+      previewUrl: url,
+      label,
+      mimeType: kind === "video" ? "video/mp4" : "image/png",
+      durationSeconds,
+      ...(selection.kind === "image" ? sourceFieldsFromImageRecord(selection.record) : {}),
+    };
+    setReferences((prev) => {
+      if (selectedUiModeId === "start_end_frame") {
+        const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
+        if (index === 0 || index === 1) {
+          revokeLocalPreviewUrl(frames[index]?.previewUrl);
+          frames[index] = slot;
+        }
+        return { ...prev, frames };
+      }
+      const current = [...prev.allPurpose[kind]];
+      revokeLocalPreviewUrl(current[index]?.previewUrl);
+      current[index] = slot;
+      return {
+        ...prev,
+        allPurpose: {
+          ...prev.allPurpose,
+          [kind]: compactReferenceList(current),
+        },
+      };
+    });
+    setGenerationRecordPicker(null);
+  }
+
   function clearReference(kind: ReferenceKind, index: number) {
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
@@ -1063,6 +1181,10 @@ export default function VideoPage() {
           candidate.role === "video_reference" || candidate.role === "motion_source_video"
             ? candidate.durationSeconds
             : undefined,
+        sourceProvider: candidate.sourceProvider,
+        sourceTaskId: candidate.sourceTaskId,
+        sourceTaskModel: candidate.sourceTaskModel,
+        sourceTaskOutputIndex: candidate.sourceTaskOutputIndex,
       }));
     let allReferences = mentionResolution.hasMentions ? mentionedReferences : buildReferences(selectedUiModeId, references);
     if (modeError && !mentionResolution.hasMentions) {
@@ -1161,9 +1283,7 @@ export default function VideoPage() {
       setError("HappyHorse 1.0 视频编辑最多支持 5 张参考图。");
       return;
     }
-    const requestGrokMode = isGrokImagineVideoModel(safeModelId) && isGrokImageBackedMode(finalEffectiveModeId) && selectedGrokMode === "spicy"
-      ? "normal"
-      : selectedGrokMode;
+    const requestGrokMode = selectedGrokMode;
 
     const liveSnapshot = await fetchWorkspaceSnapshot();
     const liveModel = liveSnapshot.videoWorkspace.models[safeModelId];
@@ -1962,6 +2082,18 @@ export default function VideoPage() {
               >
                 项目素材
               </button>
+              <button
+                type="button"
+                disabled={!projectId || !referenceUploadMenu.projectAssetKind}
+                onClick={() => {
+                  const { projectAssetKind, index } = referenceUploadMenu;
+                  if (!projectAssetKind) return;
+                  setReferenceUploadMenu(null);
+                  setGenerationRecordPicker({ kind: projectAssetKind, index });
+                }}
+              >
+                生成记录
+              </button>
             </div>,
             document.body,
           )
@@ -1973,6 +2105,17 @@ export default function VideoPage() {
               allowedKinds={[projectAssetPicker.kind]}
               onClose={() => setProjectAssetPicker(null)}
               onSelect={(asset) => void applyProjectAssetAsReference(projectAssetPicker.kind, projectAssetPicker.index, asset)}
+            />,
+            document.body,
+          )
+        : null}
+      {portalMounted && projectId && generationRecordPicker
+        ? createPortal(
+            <ProjectGenerationRecordPickerDialog
+              projectId={projectId}
+              allowedKinds={[generationRecordPicker.kind]}
+              onClose={() => setGenerationRecordPicker(null)}
+              onSelect={(selection) => void applyGenerationRecordAsReference(generationRecordPicker.kind, generationRecordPicker.index, selection)}
             />,
             document.body,
           )

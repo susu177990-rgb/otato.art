@@ -58,6 +58,10 @@ export type UnifiedVideoReference = {
   label?: string;
   mimeType?: string;
   durationSeconds?: number;
+  sourceProvider?: "crun";
+  sourceTaskId?: string;
+  sourceTaskModel?: string;
+  sourceTaskOutputIndex?: number;
 };
 
 export type VideoProviderOptions = Record<string, string | number | boolean | null | undefined>;

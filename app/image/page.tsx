@@ -33,6 +33,7 @@ import { AssetMentionEditor } from "@/components/AssetMentionEditor";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
 import { TopbarAccountActions } from "@/components/TopbarAccountActions";
 import { ProjectAssetPickerDialog } from "@/components/project-assets/ProjectAssetPickerDialog";
+import { ProjectGenerationRecordPickerDialog, type ProjectGenerationRecordSelection } from "@/components/project-assets/ProjectGenerationRecordPickerDialog";
 import { useOptionalWorkspaceProject } from "@/components/workspace/WorkspaceProjectContext";
 import { WorkspaceModeDock } from "@/components/workspace/WorkspaceModeDock";
 import { resolveAssetMentions, type AssetMentionCandidate } from "@/lib/asset-mentions";
@@ -250,6 +251,21 @@ async function refSlotFromProjectAsset(asset: ProjectAsset): Promise<NonNullable
     { type: blob.type || "image/png" },
   );
   return { file, previewUrl: asset.primaryImageUrl };
+}
+
+async function refSlotFromImageRecord(record: ImageGalleryRecord): Promise<NonNullable<RefSlot>> {
+  const imageUrl = record.imageUrl?.trim();
+  if (!imageUrl) throw new Error("生成记录没有可用图片");
+  const blob = await fetchReferenceImageBlob(imageUrl);
+  if (!blob) throw new Error("生成记录读取失败");
+  if (!blob.type.startsWith("image/")) throw new Error("请选择图片生成记录");
+  const title = record.userInput || record.finalPrompt || "generation-record";
+  const file = new File(
+    [blob],
+    mediaFileNameFromUrl(imageUrl, `${Array.from(title).slice(0, 20).join("") || "generation-record"}.png`),
+    { type: blob.type || "image/png" },
+  );
+  return { file, previewUrl: imageUrl };
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -505,6 +521,7 @@ export default function ImagePage() {
   const [refUploadMenu, setRefUploadMenu] = useState<RefUploadMenuState>(null);
   const [toolbarPickerMenu, setToolbarPickerMenu] = useState<ToolbarPickerMenuState>(null);
   const [assetPickerSlot, setAssetPickerSlot] = useState<number | null>(null);
+  const [generationRecordPickerSlot, setGenerationRecordPickerSlot] = useState<number | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
   const [portalMounted, setPortalMounted] = useState(false);
   const [error, setError] = useState("");
@@ -967,6 +984,24 @@ export default function ImagePage() {
       setAssetPickerSlot(null);
     } catch (assetError) {
       setError(assetError instanceof Error ? assetError.message : "项目素材载入失败");
+    }
+  }
+
+  async function fillRefImageFromGenerationRecord(index: number, selection: ProjectGenerationRecordSelection) {
+    if (selection.kind !== "image") return;
+    setError("");
+    try {
+      const slot = await refSlotFromImageRecord(selection.record);
+      markRefSlotsUserEdited();
+      setRefSlots((prev) => {
+        const next = normalizeRefSlots(prev);
+        revokeRefPreview(next[index]);
+        next[index] = slot;
+        return next;
+      });
+      setGenerationRecordPickerSlot(null);
+    } catch (recordError) {
+      setError(recordError instanceof Error ? recordError.message : "生成记录载入失败");
     }
   }
 
@@ -1927,6 +1962,17 @@ export default function ImagePage() {
               >
                 项目素材
               </button>
+              <button
+                type="button"
+                disabled={!projectId}
+                onClick={() => {
+                  const { index } = refUploadMenu;
+                  setRefUploadMenu(null);
+                  setGenerationRecordPickerSlot(index);
+                }}
+              >
+                生成记录
+              </button>
             </div>,
             document.body,
           )
@@ -1938,6 +1984,17 @@ export default function ImagePage() {
               allowedKinds={["image"]}
               onClose={() => setAssetPickerSlot(null)}
               onSelect={(asset) => void fillRefImageFromProjectAsset(assetPickerSlot, asset)}
+            />,
+            document.body,
+          )
+        : null}
+      {portalMounted && projectId && generationRecordPickerSlot !== null
+        ? createPortal(
+            <ProjectGenerationRecordPickerDialog
+              projectId={projectId}
+              allowedKinds={["image"]}
+              onClose={() => setGenerationRecordPickerSlot(null)}
+              onSelect={(selection) => void fillRefImageFromGenerationRecord(generationRecordPickerSlot, selection)}
             />,
             document.body,
           )
