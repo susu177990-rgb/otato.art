@@ -994,28 +994,35 @@ export default function VideoPage() {
     }
   }
 
-  async function applyProjectAssetAsReference(kind: Extract<ReferenceKind, "image" | "video">, index: number, asset: ProjectAsset) {
-    const durationSeconds = kind === "video" ? await readVideoDuration(asset.primaryImageUrl) : undefined;
-    const slot: NonNullable<ReferenceSlot> = {
-      kind,
-      url: asset.primaryImageUrl,
-      previewUrl: asset.primaryImageUrl,
-      label: asset.name,
-      mimeType: mimeTypeFromAssetUrl(asset.primaryImageUrl, kind),
-      durationSeconds,
-    };
+  async function applyProjectAssetsAsReferences(kind: Extract<ReferenceKind, "image" | "video">, index: number, assets: ProjectAsset[]) {
+    const slots = await Promise.all(assets.map(async (asset) => {
+      const durationSeconds = kind === "video" ? await readVideoDuration(asset.primaryImageUrl) : undefined;
+      return {
+        kind,
+        url: asset.primaryImageUrl,
+        previewUrl: asset.primaryImageUrl,
+        label: asset.name,
+        mimeType: mimeTypeFromAssetUrl(asset.primaryImageUrl, kind),
+        durationSeconds,
+      } satisfies NonNullable<ReferenceSlot>;
+    }));
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
         const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
-        if (index === 0 || index === 1) {
-          revokeLocalPreviewUrl(frames[index]?.previewUrl);
-          frames[index] = slot;
-        }
+        slots.forEach((slot, offset) => {
+          const slotIndex = index + offset;
+          if (slotIndex === 0 || slotIndex === 1) {
+            revokeLocalPreviewUrl(frames[slotIndex]?.previewUrl);
+            frames[slotIndex] = slot;
+          }
+        });
         return { ...prev, frames };
       }
       const current = [...prev.allPurpose[kind]];
-      revokeLocalPreviewUrl(current[index]?.previewUrl);
-      current[index] = slot;
+      slots.forEach((slot, offset) => {
+        revokeLocalPreviewUrl(current[index + offset]?.previewUrl);
+        current[index + offset] = slot;
+      });
       return {
         ...prev,
         allPurpose: {
@@ -1027,43 +1034,52 @@ export default function VideoPage() {
     setProjectAssetPicker(null);
   }
 
-  async function applyGenerationRecordAsReference(
+  async function applyGenerationRecordsAsReferences(
     kind: Extract<ReferenceKind, "image" | "video">,
     index: number,
-    selection: ProjectGenerationRecordSelection,
+    selections: ProjectGenerationRecordSelection[],
   ) {
-    if (kind === "image" && selection.kind !== "image") return;
-    if (kind === "video" && selection.kind !== "video") return;
-    const url = selection.kind === "image" ? selection.record.imageUrl?.trim() : selection.record.videoUrl?.trim();
-    if (!url) {
+    const kindSelections = selections.filter((selection) => selection.kind === kind);
+    if (kindSelections.length === 0) return;
+    const slots: Array<NonNullable<ReferenceSlot> | null> = await Promise.all(kindSelections.map(async (selection) => {
+      const url = selection.kind === "image" ? selection.record.imageUrl?.trim() : selection.record.videoUrl?.trim();
+      if (!url) return null;
+      const durationSeconds = kind === "video" ? await readVideoDuration(url) : undefined;
+      const label = selection.kind === "image"
+        ? selection.record.userInput || selection.record.finalPrompt || "生成图片"
+        : selection.record.finalPrompt || "生成视频";
+      return {
+        kind,
+        url,
+        previewUrl: url,
+        label,
+        mimeType: kind === "video" ? "video/mp4" : "image/png",
+        durationSeconds,
+        ...(selection.kind === "image" ? sourceFieldsFromImageRecord(selection.record) : {}),
+      } satisfies NonNullable<ReferenceSlot>;
+    }));
+    const validSlots = slots.filter((slot): slot is NonNullable<ReferenceSlot> => Boolean(slot));
+    if (validSlots.length === 0) {
       setError("生成记录没有可用媒体");
       return;
     }
-    const durationSeconds = kind === "video" ? await readVideoDuration(url) : undefined;
-    const label = selection.kind === "image"
-      ? selection.record.userInput || selection.record.finalPrompt || "生成图片"
-      : selection.record.finalPrompt || "生成视频";
-    const slot: NonNullable<ReferenceSlot> = {
-      kind,
-      url,
-      previewUrl: url,
-      label,
-      mimeType: kind === "video" ? "video/mp4" : "image/png",
-      durationSeconds,
-      ...(selection.kind === "image" ? sourceFieldsFromImageRecord(selection.record) : {}),
-    };
     setReferences((prev) => {
       if (selectedUiModeId === "start_end_frame") {
         const frames: [ReferenceSlot, ReferenceSlot] = [...prev.frames];
-        if (index === 0 || index === 1) {
-          revokeLocalPreviewUrl(frames[index]?.previewUrl);
-          frames[index] = slot;
-        }
+        validSlots.forEach((slot, offset) => {
+          const slotIndex = index + offset;
+          if (slotIndex === 0 || slotIndex === 1) {
+            revokeLocalPreviewUrl(frames[slotIndex]?.previewUrl);
+            frames[slotIndex] = slot;
+          }
+        });
         return { ...prev, frames };
       }
       const current = [...prev.allPurpose[kind]];
-      revokeLocalPreviewUrl(current[index]?.previewUrl);
-      current[index] = slot;
+      validSlots.forEach((slot, offset) => {
+        revokeLocalPreviewUrl(current[index + offset]?.previewUrl);
+        current[index + offset] = slot;
+      });
       return {
         ...prev,
         allPurpose: {
@@ -2104,7 +2120,7 @@ export default function VideoPage() {
               projectId={projectId}
               allowedKinds={[projectAssetPicker.kind]}
               onClose={() => setProjectAssetPicker(null)}
-              onSelect={(asset) => void applyProjectAssetAsReference(projectAssetPicker.kind, projectAssetPicker.index, asset)}
+              onSelect={(assets) => void applyProjectAssetsAsReferences(projectAssetPicker.kind, projectAssetPicker.index, assets)}
             />,
             document.body,
           )
@@ -2115,7 +2131,7 @@ export default function VideoPage() {
               projectId={projectId}
               allowedKinds={[generationRecordPicker.kind]}
               onClose={() => setGenerationRecordPicker(null)}
-              onSelect={(selection) => void applyGenerationRecordAsReference(generationRecordPicker.kind, generationRecordPicker.index, selection)}
+              onSelect={(selections) => void applyGenerationRecordsAsReferences(generationRecordPicker.kind, generationRecordPicker.index, selections)}
             />,
             document.body,
           )

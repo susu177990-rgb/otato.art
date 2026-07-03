@@ -970,15 +970,20 @@ export default function ImagePage() {
     });
   }
 
-  async function fillRefImageFromProjectAsset(index: number, asset: ProjectAsset) {
+  async function fillRefImagesFromProjectAssets(index: number, assets: ProjectAsset[]) {
     setError("");
     try {
-      const slot = await refSlotFromProjectAsset(asset);
+      const slots = await Promise.all(assets.map((asset) => refSlotFromProjectAsset(asset)));
       markRefSlotsUserEdited();
       setRefSlots((prev) => {
         const next = normalizeRefSlots(prev);
-        revokeRefPreview(next[index]);
-        next[index] = slot;
+        slots.forEach((slot, offset) => {
+          const slotIndex = index + offset;
+          if (slotIndex < next.length) {
+            revokeRefPreview(next[slotIndex]);
+            next[slotIndex] = slot;
+          }
+        });
         return next;
       });
       setAssetPickerSlot(null);
@@ -987,16 +992,22 @@ export default function ImagePage() {
     }
   }
 
-  async function fillRefImageFromGenerationRecord(index: number, selection: ProjectGenerationRecordSelection) {
-    if (selection.kind !== "image") return;
+  async function fillRefImagesFromGenerationRecords(index: number, selections: ProjectGenerationRecordSelection[]) {
+    const imageSelections = selections.filter((selection): selection is Extract<ProjectGenerationRecordSelection, { kind: "image" }> => selection.kind === "image");
+    if (imageSelections.length === 0) return;
     setError("");
     try {
-      const slot = await refSlotFromImageRecord(selection.record);
+      const slots = await Promise.all(imageSelections.map((selection) => refSlotFromImageRecord(selection.record)));
       markRefSlotsUserEdited();
       setRefSlots((prev) => {
         const next = normalizeRefSlots(prev);
-        revokeRefPreview(next[index]);
-        next[index] = slot;
+        slots.forEach((slot, offset) => {
+          const slotIndex = index + offset;
+          if (slotIndex < next.length) {
+            revokeRefPreview(next[slotIndex]);
+            next[slotIndex] = slot;
+          }
+        });
         return next;
       });
       setGenerationRecordPickerSlot(null);
@@ -1983,7 +1994,7 @@ export default function ImagePage() {
               projectId={projectId}
               allowedKinds={["image"]}
               onClose={() => setAssetPickerSlot(null)}
-              onSelect={(asset) => void fillRefImageFromProjectAsset(assetPickerSlot, asset)}
+              onSelect={(assets) => void fillRefImagesFromProjectAssets(assetPickerSlot, assets)}
             />,
             document.body,
           )
@@ -1994,7 +2005,7 @@ export default function ImagePage() {
               projectId={projectId}
               allowedKinds={["image"]}
               onClose={() => setGenerationRecordPickerSlot(null)}
-              onSelect={(selection) => void fillRefImageFromGenerationRecord(generationRecordPickerSlot, selection)}
+              onSelect={(selections) => void fillRefImagesFromGenerationRecords(generationRecordPickerSlot, selections)}
             />,
             document.body,
           )

@@ -16,7 +16,7 @@ type ProjectGenerationRecordPickerDialogProps = {
   projectId: string;
   allowedKinds: ProjectGenerationRecordKind[];
   onClose: () => void;
-  onSelect: (selection: ProjectGenerationRecordSelection) => void;
+  onSelect: (selections: ProjectGenerationRecordSelection[]) => void;
 };
 
 function isGrokSpicyReadyRecord(record: ImageGalleryRecord): boolean {
@@ -47,6 +47,10 @@ function formatCreatedAt(value: string): string {
   });
 }
 
+function selectionKey(selection: ProjectGenerationRecordSelection): string {
+  return `${selection.kind}:${selection.record.id}`;
+}
+
 async function responseJson<T>(promise: Promise<T>): Promise<T> {
   return promise;
 }
@@ -62,6 +66,7 @@ export function ProjectGenerationRecordPickerDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [imageFilter, setImageFilter] = useState<"all" | "grok-spicy">("all");
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   const allowedKindSet = useMemo(() => new Set(allowedKinds), [allowedKinds]);
   const showImages = allowedKindSet.has("image");
@@ -77,7 +82,27 @@ export function ProjectGenerationRecordPickerDialog({
     () => videos.filter((record) => record.status === "success" && Boolean(record.videoUrl?.trim())),
     [videos],
   );
+  const visibleSelections = useMemo<ProjectGenerationRecordSelection[]>(
+    () => [
+      ...(showImages ? visibleImages.map((record) => ({ kind: "image" as const, record })) : []),
+      ...(showVideos ? visibleVideos.map((record) => ({ kind: "video" as const, record })) : []),
+    ],
+    [showImages, showVideos, visibleImages, visibleVideos],
+  );
+  const selectedSelections = useMemo(
+    () => selectedKeys
+      .map((key) => visibleSelections.find((selection) => selectionKey(selection) === key))
+      .filter((selection): selection is ProjectGenerationRecordSelection => Boolean(selection)),
+    [selectedKeys, visibleSelections],
+  );
   const isEmpty = (!showImages || visibleImages.length === 0) && (!showVideos || visibleVideos.length === 0);
+
+  function toggleSelected(selection: ProjectGenerationRecordSelection) {
+    const key = selectionKey(selection);
+    setSelectedKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -132,10 +157,16 @@ export function ProjectGenerationRecordPickerDialog({
 
         {showImages ? (
           <div className={styles.actions} role="group" aria-label="图片记录筛选">
-            <button type="button" className={imageFilter === "all" ? styles.active : ""} onClick={() => setImageFilter("all")}>
+            <button type="button" className={imageFilter === "all" ? styles.active : ""} onClick={() => {
+              setImageFilter("all");
+              setSelectedKeys([]);
+            }}>
               全部图片
             </button>
-            <button type="button" className={imageFilter === "grok-spicy" ? styles.active : ""} onClick={() => setImageFilter("grok-spicy")}>
+            <button type="button" className={imageFilter === "grok-spicy" ? styles.active : ""} onClick={() => {
+              setImageFilter("grok-spicy");
+              setSelectedKeys([]);
+            }}>
               Grok 可 Spicy
             </button>
           </div>
@@ -151,17 +182,21 @@ export function ProjectGenerationRecordPickerDialog({
           {showImages
             ? visibleImages.map((record) => {
                 const spicyReady = isGrokSpicyReadyRecord(record);
+                const selection: ProjectGenerationRecordSelection = { kind: "image", record };
+                const selected = selectedKeys.includes(selectionKey(selection));
                 return (
                   <button
                     type="button"
                     key={`image:${record.id}`}
-                    className={styles.card}
-                    onClick={() => onSelect({ kind: "image", record })}
+                    className={[styles.card, selected ? styles.cardSelected : ""].filter(Boolean).join(" ")}
+                    aria-pressed={selected}
+                    onClick={() => toggleSelected(selection)}
                   >
                     <span className={styles.media}>
                       <span style={{ backgroundImage: `url(${JSON.stringify(record.thumbnailUrl || record.imageUrl || "")})` }} />
                     </span>
                     <span className={styles.badge}>{spicyReady ? "Grok 可 Spicy" : "图片"}</span>
+                    {selected ? <span className={styles.checkMark} aria-hidden>✓</span> : null}
                     <strong>{recordTitle(record.userInput || record.finalPrompt, "生成图片")}</strong>
                     <small>{record.modelName} · {formatCreatedAt(record.createdAt)}</small>
                   </button>
@@ -169,25 +204,39 @@ export function ProjectGenerationRecordPickerDialog({
               })
             : null}
           {showVideos
-            ? visibleVideos.map((record) => (
-                <button
-                  type="button"
-                  key={`video:${record.id}`}
-                  className={styles.card}
-                  onClick={() => onSelect({ kind: "video", record })}
-                >
-                  <span className={styles.media}>
-                    <video src={record.videoUrl} muted playsInline preload="metadata" />
-                  </span>
-                  <span className={styles.badge}>视频</span>
-                  <strong>{recordTitle(record.finalPrompt, "生成视频")}</strong>
-                  <small>{record.modelName} · {formatCreatedAt(record.createdAt)}</small>
-                </button>
-              ))
+            ? visibleVideos.map((record) => {
+                const selection: ProjectGenerationRecordSelection = { kind: "video", record };
+                const selected = selectedKeys.includes(selectionKey(selection));
+                return (
+                  <button
+                    type="button"
+                    key={`video:${record.id}`}
+                    className={[styles.card, selected ? styles.cardSelected : ""].filter(Boolean).join(" ")}
+                    aria-pressed={selected}
+                    onClick={() => toggleSelected(selection)}
+                  >
+                    <span className={styles.media}>
+                      <video src={record.videoUrl} muted playsInline preload="metadata" />
+                    </span>
+                    <span className={styles.badge}>视频</span>
+                    {selected ? <span className={styles.checkMark} aria-hidden>✓</span> : null}
+                    <strong>{recordTitle(record.finalPrompt, "生成视频")}</strong>
+                    <small>{record.modelName} · {formatCreatedAt(record.createdAt)}</small>
+                  </button>
+                );
+              })
             : null}
         </div>
+        <footer className={styles.footer}>
+          <span>已选 {selectedSelections.length} 个</span>
+          <div>
+            <button type="button" onClick={onClose}>取消</button>
+            <button type="button" disabled={selectedSelections.length === 0} onClick={() => onSelect(selectedSelections)}>
+              上传
+            </button>
+          </div>
+        </footer>
       </section>
     </div>
   );
 }
-

@@ -10,7 +10,7 @@ export type ProjectAssetPickerDialogProps = {
   projectId: string;
   allowedKinds: ProjectAssetMediaKind[];
   onClose: () => void;
-  onSelect: (asset: ProjectAsset) => void;
+  onSelect: (assets: ProjectAsset[]) => void;
 };
 
 function isVideoUrl(value: string): boolean {
@@ -40,12 +40,25 @@ export function ProjectAssetPickerDialog({
   const [assets, setAssets] = useState<ProjectAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const allowedKindSet = useMemo(() => new Set(allowedKinds), [allowedKinds]);
   const visibleAssets = useMemo(
     () => assets.filter((asset) => allowedKindSet.has(assetKind(asset))),
     [allowedKindSet, assets],
   );
+  const selectedAssets = useMemo(
+    () => selectedIds
+      .map((id) => visibleAssets.find((asset) => asset.id === id))
+      .filter((asset): asset is ProjectAsset => Boolean(asset)),
+    [selectedIds, visibleAssets],
+  );
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -103,12 +116,14 @@ export function ProjectAssetPickerDialog({
         <div className={styles.grid}>
           {visibleAssets.map((asset) => {
             const kind = assetKind(asset);
+            const selected = selectedIds.includes(asset.id);
             return (
               <button
                 type="button"
                 key={asset.id}
-                className={styles.card}
-                onClick={() => onSelect(asset)}
+                className={[styles.card, selected ? styles.cardSelected : ""].filter(Boolean).join(" ")}
+                aria-pressed={selected}
+                onClick={() => toggleSelected(asset.id)}
               >
                 <span className={styles.media}>
                   {kind === "video" ? (
@@ -118,11 +133,21 @@ export function ProjectAssetPickerDialog({
                   )}
                 </span>
                 <span className={styles.badge}>{kindLabel(kind)}</span>
+                {selected ? <span className={styles.checkMark} aria-hidden>✓</span> : null}
                 <strong>{asset.name}</strong>
               </button>
             );
           })}
         </div>
+        <footer className={styles.footer}>
+          <span>已选 {selectedAssets.length} 个</span>
+          <div>
+            <button type="button" onClick={onClose}>取消</button>
+            <button type="button" disabled={selectedAssets.length === 0} onClick={() => onSelect(selectedAssets)}>
+              上传
+            </button>
+          </div>
+        </footer>
       </section>
     </div>
   );
