@@ -16,6 +16,10 @@ import { DEFAULT_VIDEO_SETTINGS, type VideoWorkspaceSettings } from "@/lib/video
 import { fetchWorkspaceSnapshot } from "@/lib/workspace-api";
 import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
+import {
+  isWorkspaceSettingsStorageKey,
+  WORKSPACE_SETTINGS_UPDATED_EVENT,
+} from "@/lib/workspace-settings-sync";
 
 type ApiSettingsContextValue = {
   settings: Settings;
@@ -82,7 +86,32 @@ export function ApiSettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshWorkspace();
-  }, [refreshWorkspace]);
+  }, [pathname, refreshWorkspace]);
+
+  useEffect(() => {
+    if (isPublicAuthPath) return;
+
+    const refresh = () => {
+      void refreshWorkspace();
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (isWorkspaceSettingsStorageKey(event.key)) refresh();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener(WORKSPACE_SETTINGS_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener(WORKSPACE_SETTINGS_UPDATED_EVENT, refresh);
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [isPublicAuthPath, refreshWorkspace]);
 
   const openSettings = useCallback(() => {
     router.push("/me");

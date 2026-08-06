@@ -2,6 +2,7 @@ import type { ImageWorkspaceSettings } from "@/lib/image-workspace";
 import type { VideoWorkspaceSettings } from "@/lib/video-workspace";
 import type { Settings } from "@/lib/types";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
+import { notifyWorkspaceSettingsUpdated } from "@/lib/workspace-settings-sync";
 
 export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   const res = await fetch("/api/workspace-settings", { cache: "no-store" });
@@ -35,7 +36,9 @@ export async function saveAdminWorkspaceSnapshot(payload: {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error?.trim() || "无法保存全局设置");
   }
-  return (await res.json()) as WorkspaceSnapshot;
+  const snapshot = (await res.json()) as WorkspaceSnapshot;
+  notifyWorkspaceSettingsUpdated();
+  return snapshot;
 }
 
 export async function uploadImageModeCover(
