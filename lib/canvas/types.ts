@@ -52,6 +52,8 @@ export type CanvasNodeMetadata = {
   parentId?: string;
   /** image node generation runtime */
   imageModelId?: ImageModelId;
+  /** Identifies the image generation currently responsible for this node. */
+  imageGenerationRequestId?: string;
   aspectRatio?: ImageAspectRatio;
   imageSize?: ImageSizeTier;
   gptImageQuality?: GptImageQuality;

@@ -11,6 +11,7 @@ import { captureCreditReservation, releaseCreditReservation, reserveCreditsForQu
 import { quoteImageCredits } from "@/lib/credits/pricing";
 import { assertCreditGenerationAllowed } from "@/lib/credits/risk";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getCanvasBoard, updateCanvasBoard } from "@/lib/canvas/board-store";
 
 
 
@@ -18,6 +19,67 @@ type CanvasImageGenerationResult = {
   sourceNode: CanvasNode;
   galleryRecord: ImageGalleryRecord;
 };
+
+export function mergeCanvasImageGenerationResult(
+  board: CanvasBoard,
+  nodeId: string,
+  requestId: string,
+  generatedNode: CanvasNode,
+): CanvasBoard["nodes"] | null {
+  const currentNode = board.nodes.find((node) => node.id === nodeId);
+  if (!currentNode || currentNode.type !== "image") return null;
+
+  const activeRequestId = currentNode.metadata?.imageGenerationRequestId?.trim();
+  if (activeRequestId && activeRequestId !== requestId) return null;
+
+  const generatedMetadata = generatedNode.metadata;
+  return board.nodes.map((node) => node.id === nodeId
+    ? {
+        ...node,
+        width: generatedNode.width,
+        height: generatedNode.height,
+        metadata: {
+          ...node.metadata,
+          imageUrl: generatedMetadata?.imageUrl,
+          previewImageUrl: generatedMetadata?.previewImageUrl,
+          imageGenerationRequestId: requestId,
+          status: generatedMetadata?.status,
+          lastRunAt: generatedMetadata?.lastRunAt,
+          lastError: generatedMetadata?.lastError,
+          naturalWidth: generatedMetadata?.naturalWidth,
+          naturalHeight: generatedMetadata?.naturalHeight,
+        },
+      }
+    : node);
+}
+
+async function persistCanvasImageGenerationResult(params: {
+  boardId: string;
+  nodeId: string;
+  requestId: string;
+  generatedNode: CanvasNode;
+  projectId?: string | null;
+}): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const scope = params.projectId === undefined ? {} : { projectId: params.projectId };
+  const latestBoard = await getCanvasBoard(admin, params.boardId, scope);
+  if (!latestBoard) return;
+  const nodes = mergeCanvasImageGenerationResult(
+    latestBoard,
+    params.nodeId,
+    params.requestId,
+    params.generatedNode,
+  );
+  if (!nodes) return;
+  await updateCanvasBoard(admin, latestBoard.id, {
+    data: {
+      nodes,
+      connections: latestBoard.connections,
+      viewport: latestBoard.viewport,
+      snapToGrid: latestBoard.snapToGrid,
+    },
+  }, scope);
+}
 
 function mustBeImageNode(node: CanvasNode | undefined): CanvasNode {
   if (!node || node.type !== "image") {
@@ -172,6 +234,7 @@ export async function executeCanvasImageGeneration(params: {
   userId: string;
   board: CanvasBoard;
   nodeId: string;
+  requestId: string;
   workspaceSnapshot: WorkspaceSnapshot;
   projectId?: string | null;
 }): Promise<CanvasImageGenerationResult> {
@@ -194,7 +257,7 @@ export async function executeCanvasImageGeneration(params: {
   const reservation = await reserveCreditsForQuote({
     userId: params.userId,
     projectId: params.projectId,
-    requestId: `canvas-image:${params.board.id}:${sourceNode.id}:${randomUUID()}`,
+    requestId: params.requestId,
     quote,
     metadata: {
       boardId: params.board.id,
@@ -233,6 +296,7 @@ export async function executeCanvasImageGeneration(params: {
         ...sourceNode.metadata,
         imageUrl,
         previewImageUrl: imageUrl,
+        imageGenerationRequestId: params.requestId,
         status: "success",
         lastRunAt: new Date().toISOString(),
         lastError: undefined,
@@ -257,6 +321,13 @@ export async function executeCanvasImageGeneration(params: {
       reservationId: reservation.id,
       resultRef: imageUrl,
       metadata: { galleryRecordId: galleryRecord.id, boardId: params.board.id, nodeId: sourceNode.id },
+    });
+    await persistCanvasImageGenerationResult({
+      boardId: params.board.id,
+      nodeId: sourceNode.id,
+      requestId: params.requestId,
+      generatedNode: nextSourceNode,
+      projectId: params.projectId,
     });
 
     return {

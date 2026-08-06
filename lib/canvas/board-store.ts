@@ -126,6 +126,9 @@ function normalizeNode(value: unknown): CanvasNode | null {
       children: Array.isArray(metadata.children) ? metadata.children.filter((c): c is string => typeof c === "string") : undefined,
       parentId: typeof metadata.parentId === "string" ? metadata.parentId : undefined,
       imageModelId: type === "image" ? imageModelId : undefined,
+      imageGenerationRequestId: type === "image" && typeof metadata.imageGenerationRequestId === "string"
+        ? metadata.imageGenerationRequestId
+        : undefined,
       aspectRatio: type === "image" ? aspectRatio : undefined,
       imageSize: type === "image" ? imageSize : undefined,
       gptImageQuality: type === "image" && imageModelId === "gpt-image-2" ? gptImageQuality : undefined,

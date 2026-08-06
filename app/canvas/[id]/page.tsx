@@ -1585,7 +1585,9 @@ export default function CanvasBoardPage() {
   const runImageGenNode = useCallback(async (nodeId: string) => {
     const targetNode = nodesRef.current.find((node) => node.id === nodeId);
     if (!targetNode || targetNode.type !== "image") return;
+    const requestId = `canvas-image:${boardId}:${nodeId}:${crypto.randomUUID()}`;
     updateImageGenNodeSettings(nodeId, {
+      imageGenerationRequestId: requestId,
       status: "running",
       lastError: undefined,
     });
@@ -1593,7 +1595,7 @@ export default function CanvasBoardPage() {
       const res = await fetch("/api/canvas/image-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boardId, nodeId, projectId }),
+        body: JSON.stringify({ boardId, nodeId, projectId, requestId }),
       });
       let rawText = "";
       try {

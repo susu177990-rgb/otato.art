@@ -6,6 +6,7 @@ import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { projectIdFromRequest } from "@/lib/db/project-scope";
 import { classifyGenerationError } from "@/lib/generation-error-classifier";
 import { CreditRiskError } from "@/lib/credits/risk";
+import { randomUUID } from "crypto";
 
 function generationErrorJson(message: string, code: string, status: number) {
   return {
@@ -28,10 +29,14 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as {
       boardId?: unknown;
       nodeId?: unknown;
+      requestId?: unknown;
       projectId?: string | null;
     };
     const boardId = typeof body.boardId === "string" ? body.boardId.trim() : "";
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.trim() : "";
+    const requestId = typeof body.requestId === "string" && body.requestId.trim()
+      ? body.requestId.trim()
+      : `canvas-image:${boardId}:${nodeId}:${randomUUID()}`;
     if (!boardId || !nodeId) {
       return Response.json(generationErrorJson("缺少 boardId 或 nodeId", "canvas_image_missing_node", 400), { status: 400 });
     }
@@ -53,6 +58,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       board,
       nodeId,
+      requestId,
       workspaceSnapshot,
       projectId,
     });
