@@ -9,6 +9,7 @@ export type ProjectAssetMediaKind = "image" | "video";
 export type ProjectAssetPickerDialogProps = {
   projectId: string;
   allowedKinds: ProjectAssetMediaKind[];
+  maxSelection?: number;
   onClose: () => void;
   onSelect: (assets: ProjectAsset[]) => void;
 };
@@ -34,6 +35,7 @@ async function responseJson<T>(response: Response): Promise<T> {
 export function ProjectAssetPickerDialog({
   projectId,
   allowedKinds,
+  maxSelection,
   onClose,
   onSelect,
 }: ProjectAssetPickerDialogProps) {
@@ -55,9 +57,12 @@ export function ProjectAssetPickerDialog({
   );
 
   function toggleSelected(id: string) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
+    setSelectedIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (maxSelection === 1) return [id];
+      if (maxSelection && current.length >= maxSelection) return current;
+      return [...current, id];
+    });
   }
 
   useEffect(() => {

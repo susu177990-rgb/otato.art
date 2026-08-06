@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deleteChatConversation, getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
+import { deleteChatConversation, getChatConversation, updateChatConversationMetadata } from "@/lib/db/chat-store";
 import type { ChatConversation } from "@/lib/chat/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { projectIdFromRequest } from "@/lib/db/project-scope";
@@ -41,14 +41,26 @@ export async function PUT(req: Request, ctx: RouteCtx) {
     const existing = await getChatConversation(supabase, user.id, id, scope);
     if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-    const merged: ChatConversation = {
-      ...existing,
-      ...body,
-      id,
-      updatedAt: body.updatedAt ?? Date.now(),
+    const patch = {
+      ...(typeof body.title === "string" ? { title: body.title } : {}),
+      ...(body.chatMode === "skill" || body.chatMode === "prompt" ? { chatMode: body.chatMode } : {}),
+      ...(body.selectedSkillPackId === null || typeof body.selectedSkillPackId === "string"
+        ? { selectedSkillPackId: body.selectedSkillPackId }
+        : {}),
+      ...(body.selectedChatPresetId === null || typeof body.selectedChatPresetId === "string"
+        ? { selectedChatPresetId: body.selectedChatPresetId }
+        : {}),
+      ...(body.preferredLlmModelId === null || typeof body.preferredLlmModelId === "string"
+        ? { preferredLlmModelId: body.preferredLlmModelId }
+        : {}),
+      ...(typeof body.preferredImageModelId === "string"
+        ? { preferredImageModelId: body.preferredImageModelId }
+        : {}),
     };
-    await saveChatConversation(supabase, user.id, merged, scope);
-    return NextResponse.json({ conversation: merged });
+    await updateChatConversationMetadata(supabase, user.id, id, patch, scope);
+    const conversation = await getChatConversation(supabase, user.id, id, scope);
+    if (!conversation) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return NextResponse.json({ conversation });
   } catch (e) {
     console.error("[chat/conversations/id PUT]", e);
     return NextResponse.json({ error: "write_failed" }, { status: 500 });

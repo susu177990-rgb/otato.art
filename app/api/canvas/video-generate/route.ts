@@ -6,6 +6,7 @@ import { executeCanvasVideoGeneration } from "@/lib/canvas/video-gen-runtime";
 import { projectIdFromRequest } from "@/lib/db/project-scope";
 import { classifyGenerationError } from "@/lib/generation-error-classifier";
 import { CreditRiskError } from "@/lib/credits/risk";
+import { VideoReferenceSecurityError } from "@/lib/video-reference-security";
 
 function generationErrorJson(message: string, code: string, status: number) {
   return {
@@ -29,9 +30,13 @@ export async function POST(req: NextRequest) {
       boardId?: unknown;
       nodeId?: unknown;
       projectId?: string | null;
+      requestId?: unknown;
     };
     const boardId = typeof body.boardId === "string" ? body.boardId.trim() : "";
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.trim() : "";
+    const requestId = typeof body.requestId === "string" && body.requestId.trim()
+      ? body.requestId.trim()
+      : crypto.randomUUID();
     if (!boardId || !nodeId) {
       return Response.json(generationErrorJson("缺少 boardId 或 nodeId", "canvas_video_missing_node", 400), { status: 400 });
     }
@@ -54,11 +59,16 @@ export async function POST(req: NextRequest) {
       nodeId,
       workspaceSnapshot,
       projectId,
+      requestId,
+      callbackOrigin: (process.env.APP_ORIGIN?.trim() || req.nextUrl.origin),
     });
-    return Response.json(result);
+    return Response.json(result, { status: 202 });
   } catch (error) {
     if (error instanceof CreditRiskError) {
       return Response.json(generationErrorJson(error.message, error.code, error.status), { status: error.status });
+    }
+    if (error instanceof VideoReferenceSecurityError) {
+      return Response.json(generationErrorJson(error.message, error.code, 400), { status: 400 });
     }
     const message = error instanceof Error ? error.message : "无线画布生视频失败";
     return Response.json(generationErrorJson(message, "canvas_video_generation_failed", 500), { status: 500 });

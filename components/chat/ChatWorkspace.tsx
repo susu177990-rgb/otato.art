@@ -10,11 +10,14 @@ import { ChatSessionRail } from "@/components/chat/ChatSessionRail";
 import { ChatSkillRail } from "@/components/chat/ChatSkillRail";
 import { InlineVideoPlayer } from "@/components/media/InlineVideoPlayer";
 import { PromptPresetLibraryDialog } from "@/components/prompt-presets/PromptPresetLibraryDialog";
-import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/completion";
+import {
+  CHAT_MAX_ATTACHMENT_BYTES,
+  CHAT_MAX_ATTACHMENTS_PER_TURN,
+  CHAT_MAX_TOTAL_ATTACHMENT_BYTES,
+} from "@/lib/chat/limits";
 import type { SitePromptPreset } from "@/lib/db/prompt-preset-store";
 import type {
   ChatAttachment,
-  ChatAttachmentKind,
   ChatMode,
   ChatConversation,
   ChatConversationSummary,
@@ -33,6 +36,7 @@ import { buildChatEmptyGuideMarkdown, buildChatPromptPresetGuideMarkdown } from 
 import { fetchSitePromptPresets } from "@/lib/prompt-preset-api-client";
 import { fetchSiteSkillPacks } from "@/lib/skill-packs-api-client";
 import type { ImageModelId } from "@/lib/image-workspace";
+import { resolveLlmModelId } from "@/lib/llm-models";
 import shellStyles from "@/app/shared/shell.module.css";
 import styles from "./chat-workspace.module.css";
 
@@ -44,12 +48,6 @@ type ParsedToolMedia = {
   isVideo: boolean;
 };
 
-function attachmentKindFromFile(file: File): ChatAttachmentKind {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  return "file";
-}
-
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -57,6 +55,12 @@ async function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("读取文件失败"));
     reader.readAsDataURL(file);
   });
+}
+
+function dataUrlByteLength(dataUrl: string): number {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) return dataUrl.length;
+  return Math.floor((dataUrl.length - comma - 1) * 0.75);
 }
 
 function parseToolMedia(text: string): ParsedToolMedia | null {
@@ -235,8 +239,13 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   const [selectedLlmModelId, setSelectedLlmModelId] = useState<string>(llmSettings.defaultModelId);
   const [isSavingSkill, setIsSavingSkill] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  const [attachmentReads, setAttachmentReads] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<string | null>(null);
+  const sendLockRef = useRef(false);
+  const attachmentEpochRef = useRef(0);
+  const listRequestRef = useRef(0);
+  const deepLinkConsumedRef = useRef(false);
 
   activeIdRef.current = activeId;
 
@@ -254,23 +263,35 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   }, []);
 
   const loadLists = useCallback(async () => {
-    const [convs, packsRes, promptPresets] = await Promise.all([
-      fetchChatConversations(projectId),
-      fetchSiteSkillPacks(),
-      fetchSitePromptPresets("chat"),
-    ]);
+    const requestId = ++listRequestRef.current;
+    const convs = await fetchChatConversations(projectId);
+    if (requestId !== listRequestRef.current) return;
     setSummaries(convs);
-    setSkillPacks(packsRes.skillPacks);
-    setChatPromptPresets(promptPresets);
-    if (requestedConversationId && convs.some((conv) => conv.id === requestedConversationId)) {
-      setActiveId(requestedConversationId);
-    } else if (!activeId && convs[0]) {
-      setActiveId(convs[0].id);
-    }
-  }, [activeId, projectId, requestedConversationId]);
+    setActiveId((current) => {
+      if (!deepLinkConsumedRef.current && requestedConversationId) {
+        deepLinkConsumedRef.current = true;
+        if (convs.some((conv) => conv.id === requestedConversationId)) return requestedConversationId;
+      }
+      return current && convs.some((conv) => conv.id === current) ? current : (convs[0]?.id ?? null);
+    });
+
+    void Promise.allSettled([fetchSiteSkillPacks(), fetchSitePromptPresets("chat")]).then((results) => {
+      if (requestId !== listRequestRef.current) return;
+      const [packsResult, presetsResult] = results;
+      if (packsResult.status === "fulfilled") setSkillPacks(packsResult.value.skillPacks);
+      if (presetsResult.status === "fulfilled") setChatPromptPresets(presetsResult.value);
+    });
+  }, [projectId, requestedConversationId]);
 
   useEffect(() => {
     if (!workspaceReady) return;
+    listRequestRef.current += 1;
+    deepLinkConsumedRef.current = false;
+    activeIdRef.current = null;
+    setActiveId(null);
+    setConversation(null);
+    setSummaries([]);
+    setError(null);
     void loadLists().catch((e) => setError(e instanceof Error ? e.message : "加载失败"));
   }, [workspaceReady, loadLists]);
 
@@ -291,6 +312,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   }, [workspaceReady, loadSkillPacks, loadChatPromptPresets]);
 
   useEffect(() => {
+    attachmentEpochRef.current += 1;
     setInputText("");
     setPendingAttachments([]);
     setError(null);
@@ -345,12 +367,8 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   }, [conversation?.preferredImageModelId, activeId]);
 
   useEffect(() => {
-    if (conversation?.preferredLlmModelId) {
-      setSelectedLlmModelId(conversation.preferredLlmModelId);
-    } else {
-      setSelectedLlmModelId(llmSettings.defaultModelId);
-    }
-  }, [conversation?.preferredLlmModelId, llmSettings.defaultModelId]);
+    setSelectedLlmModelId(resolveLlmModelId(llmSettings, conversation?.preferredLlmModelId));
+  }, [conversation?.preferredLlmModelId, llmSettings]);
 
   const handleImageModelChange = (id: ImageModelId) => {
     setSelectedImageModelId(id);
@@ -554,54 +572,84 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
   };
 
   const handleDeleteConv = async (id: string) => {
-    await deleteChatConversationApi(id, projectId);
-    const next = summaries.filter((s) => s.id !== id);
-    setSummaries(next);
-    if (activeId === id) {
-      setActiveId(next[0]?.id ?? null);
+    try {
+      await deleteChatConversationApi(id, projectId);
+      const next = summaries.filter((summary) => summary.id !== id);
+      setSummaries(next);
+      if (activeId === id) setActiveId(next[0]?.id ?? null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "删除会话失败");
     }
   };
 
   const commitRename = async () => {
-    if (!renamingId || !conversation || renamingId !== conversation.id) return;
+    if (!renamingId) return;
+    const target = conversation?.id === renamingId
+      ? conversation
+      : await fetchChatConversation(renamingId, projectId);
     const title = renameDraft.trim() || "新对话";
-    const updated = { ...conversation, title, updatedAt: Date.now() };
+    const updated = { ...target, title, updatedAt: Date.now() };
     const saved = await saveChatConversation(updated, projectId);
-    setConversation(saved);
+    if (activeIdRef.current === saved.id) setConversation(saved);
     setSummaries((prev) => prev.map((s) => (s.id === saved.id ? { ...s, title: saved.title, updatedAt: saved.updatedAt } : s)));
     setRenamingId(null);
   };
 
   const addAttachments = async (files: FileList | File[]) => {
-    for (const file of Array.from(files)) {
+    const epoch = attachmentEpochRef.current;
+    const targetConversationId = activeIdRef.current;
+    const availableSlots = Math.max(0, CHAT_MAX_ATTACHMENTS_PER_TURN - pendingAttachments.length);
+    const selected = Array.from(files).slice(0, availableSlots);
+    if (Array.from(files).length > availableSlots) {
+      setError(`每轮最多上传 ${CHAT_MAX_ATTACHMENTS_PER_TURN} 张图片。`);
+    }
+    const existingBytes = pendingAttachments.reduce((total, attachment) => total + dataUrlByteLength(attachment.dataUrl), 0);
+    let acceptedBytes = existingBytes;
+    const nextAttachments: ChatAttachment[] = [];
+    setAttachmentReads((count) => count + 1);
+    try {
+      for (const file of selected) {
+        if (!file.type.startsWith("image/")) {
+          setError(`当前对话仅支持图片附件：「${file.name}」未添加。`);
+          continue;
+        }
       if (file.size > CHAT_MAX_ATTACHMENT_BYTES) {
         setError(`「${file.name}」超过 12MB，未添加`);
         continue;
       }
+      if (acceptedBytes + file.size > CHAT_MAX_TOTAL_ATTACHMENT_BYTES) {
+        setError(`本轮图片总大小不能超过 ${CHAT_MAX_TOTAL_ATTACHMENT_BYTES / 1024 / 1024}MB。`);
+        continue;
+      }
       const dataUrl = await fileToDataUrl(file);
-      setPendingAttachments((prev) => [
-        ...prev,
-        {
-          kind: attachmentKindFromFile(file),
+        acceptedBytes += file.size;
+        nextAttachments.push({
+          kind: "image",
           mime: file.type || "application/octet-stream",
           name: file.name || `file-${Date.now()}`,
           dataUrl,
-        },
-      ]);
+        });
+      }
+      if (attachmentEpochRef.current !== epoch || activeIdRef.current !== targetConversationId) return;
+      setPendingAttachments((previous) => [...previous, ...nextAttachments].slice(0, CHAT_MAX_ATTACHMENTS_PER_TURN));
+    } finally {
+      setAttachmentReads((count) => Math.max(0, count - 1));
     }
   };
 
   const handleSend = async () => {
+    if (sendLockRef.current || isLoadingConversation || attachmentReads > 0) return;
     const trimmed = inputText.trim();
     if (!trimmed && pendingAttachments.length === 0) return;
+    sendLockRef.current = true;
     setError(null);
     setIsSending(true);
 
-    const uid = `msg-${Date.now()}-u`;
+    const uid = `msg-${crypto.randomUUID()}`;
     const userParts: ChatMessage["parts"] = [];
     if (trimmed) userParts.push({ type: "text", text: trimmed });
     for (const att of pendingAttachments) {
-      const rid = `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const rid = `att-${crypto.randomUUID()}`;
       userParts.push({
         type: "attachment",
         attachment: { ...att, registryId: rid },
@@ -616,22 +664,27 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
     };
 
     const imageModelForTurn = selectedImageModelId;
+    const draftText = inputText;
+    const draftAttachments = pendingAttachments;
     setInputText("");
     setPendingAttachments([]);
 
+    let sendConvId: string | null = null;
     try {
       let convId = activeIdRef.current;
       let conv = conversation?.id === convId ? conversation : null;
 
-      if (!convId || !conv) {
+      if (!convId) {
         const created = await createChatConversation(undefined, projectId);
         convId = created.id;
         conv = { ...created, preferredLlmModelId: selectedLlmModelId };
         activeIdRef.current = created.id;
         setSummaries((prev) => [{ id: created.id, title: created.title, updatedAt: created.updatedAt }, ...prev]);
+      } else if (!conv) {
+        conv = await fetchChatConversation(convId, projectId);
       }
 
-      const sendConvId = convId;
+      sendConvId = convId;
       const optimistic: ChatConversation = {
         ...conv,
         messages: [...conv.messages, userMessage],
@@ -643,7 +696,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
         setActiveId(sendConvId);
       }
 
-      const updated = await sendChatAgentTurn(
+      const result = await sendChatAgentTurn(
         sendConvId,
         userMessage,
         imageModelForTurn,
@@ -651,31 +704,41 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
         projectId,
       );
 
-      if (activeIdRef.current !== sendConvId) {
-        setError("回复已生成，但你已切换到其他会话，请切回该会话查看。");
-        return;
-      }
+      const updated = result.conversation;
+      setSummaries((prev) => {
+        const row = { id: updated.id, title: updated.title, updatedAt: updated.updatedAt };
+        const rest = prev.filter((summary) => summary.id !== updated.id);
+        return [row, ...rest].sort((a, b) => b.updatedAt - a.updatedAt);
+      });
+      if (activeIdRef.current !== sendConvId) return;
 
-      const hasAssistant = updated.messages.some(
+      const hasAssistant = result.newMessages.some(
         (m) =>
           m.role === "assistant" &&
           m.parts.some((p) => p.type === "text" && typeof p.text === "string" && p.text.trim().length > 0),
       );
-      const hasTool = updated.messages.some((m) => m.role === "tool");
+      const hasTool = result.newMessages.some((m) => m.role === "tool");
       if (!hasAssistant && !hasTool) {
         setError("模型未返回任何内容，请联系管理员检查系统 LLM API 或更换模型后重试。");
         return;
       }
 
       setConversation(updated);
-      setSummaries((prev) => {
-        const row = { id: updated.id, title: updated.title, updatedAt: updated.updatedAt };
-        const rest = prev.filter((s) => s.id !== updated.id);
-        return [row, ...rest].sort((a, b) => b.updatedAt - a.updatedAt);
-      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "发送失败");
+      if (sendConvId && activeIdRef.current === sendConvId) {
+        try {
+          setConversation(await fetchChatConversation(sendConvId, projectId));
+        } catch {
+          // Keep the optimistic thread if reconciliation is temporarily unavailable.
+        }
+        setInputText((current) => current || draftText);
+        setPendingAttachments((current) => current.length ? current : draftAttachments);
+      }
+      if (!sendConvId || activeIdRef.current === sendConvId) {
+        setError(e instanceof Error ? e.message : "发送失败");
+      }
     } finally {
+      sendLockRef.current = false;
       setIsSending(false);
     }
   };
@@ -742,7 +805,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
         pendingAttachments={pendingAttachments}
         onAddFiles={addAttachments}
         onRemoveAttachment={(i) => setPendingAttachments((p) => p.filter((_, j) => j !== i))}
-        isSending={isSending}
+        isSending={isSending || isLoadingConversation || attachmentReads > 0}
         onSend={handleSend}
         error={error}
         imageWorkspace={imageWorkspace}
@@ -805,6 +868,7 @@ export function ChatWorkspace({ projectId }: { projectId?: string } = {}) {
           setRenameDraft(title);
         }}
         onCommitRename={() => void commitRename()}
+        onCancelRename={() => setRenamingId(null)}
         onDelete={(id) => void handleDeleteConv(id)}
       />
 

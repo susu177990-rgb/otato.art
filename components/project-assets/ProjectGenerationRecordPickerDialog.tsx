@@ -15,6 +15,7 @@ export type ProjectGenerationRecordSelection =
 type ProjectGenerationRecordPickerDialogProps = {
   projectId: string;
   allowedKinds: ProjectGenerationRecordKind[];
+  maxSelection?: number;
   onClose: () => void;
   onSelect: (selections: ProjectGenerationRecordSelection[]) => void;
 };
@@ -58,6 +59,7 @@ async function responseJson<T>(promise: Promise<T>): Promise<T> {
 export function ProjectGenerationRecordPickerDialog({
   projectId,
   allowedKinds,
+  maxSelection,
   onClose,
   onSelect,
 }: ProjectGenerationRecordPickerDialogProps) {
@@ -99,9 +101,12 @@ export function ProjectGenerationRecordPickerDialog({
 
   function toggleSelected(selection: ProjectGenerationRecordSelection) {
     const key = selectionKey(selection);
-    setSelectedKeys((current) =>
-      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
-    );
+    setSelectedKeys((current) => {
+      if (current.includes(key)) return current.filter((item) => item !== key);
+      if (maxSelection === 1) return [key];
+      if (maxSelection && current.length >= maxSelection) return current;
+      return [...current, key];
+    });
   }
 
   useEffect(() => {

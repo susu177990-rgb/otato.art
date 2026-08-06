@@ -5,7 +5,6 @@ import {
   isStoredGeneratedVideoUrl,
   persistGeneratedVideoToStorage,
 } from "@/lib/db/persist-generated-video";
-import { deleteMediaObjects, mediaObjectKeyFromPublicUrl } from "@/lib/media-storage";
 import {
   applyProjectScope,
   normalizePageLimit,
@@ -101,18 +100,6 @@ export async function replaceVideoGalleryRecords(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
-  const deleteQuery = applyProjectScope(
-    supabase
-    .from("video_gallery_records")
-    .delete()
-      .eq("user_id", user.id),
-    scope,
-  );
-  const { error: delError } = await deleteQuery;
-  if (delError) throw delError;
-
-  if (records.length === 0) return;
-
   const persisted = await Promise.all(records.map((r) => persistVideoRecordMedia(supabase, user.id, r)));
   const rows = persisted.map((record) => ({
     id: record.id,
@@ -121,8 +108,16 @@ export async function replaceVideoGalleryRecords(
     data: sanitizeVideoGalleryRecordForStorage(record),
     created_at: record.createdAt,
   }));
-  const { error } = await supabase.from("video_gallery_records").insert(rows);
+  const { error } = rows.length
+    ? await supabase.from("video_gallery_records").upsert(rows, { onConflict: "id" })
+    : { error: null };
   if (error) throw error;
+  const { error: finalizeError } = await supabase.rpc("finalize_gallery_replacement", {
+    p_gallery: "video",
+    p_keep_ids: persisted.map((record) => record.id),
+    p_project_id: scope.projectId ?? null,
+  });
+  if (finalizeError) throw finalizeError;
 }
 
 export async function prependVideoGalleryRecord(
@@ -169,21 +164,9 @@ export async function deleteVideoGalleryRecord(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
-  const existing = await getVideoGalleryRecord(supabase, id, scope);
-  const query = applyProjectScope(
-    supabase.from("video_gallery_records").delete().eq("user_id", user.id).eq("id", id).select("id"),
-    scope,
-  );
-  const { data, error } = await query;
+  const { data, error } = await supabase.rpc("delete_gallery_record_with_cleanup", {
+    p_gallery: "video", p_id: id, p_project_id: scope.projectId ?? null,
+  });
   if (error) throw error;
-  const deleted = (data?.length ?? 0) > 0;
-  if (!deleted) return false;
-
-  const key = existing?.videoUrl ? mediaObjectKeyFromPublicUrl(existing.videoUrl) : null;
-  if (key?.startsWith(`${user.id}/`) || key?.startsWith(`ephemeral/${user.id}/`)) {
-    await deleteMediaObjects([key]).catch((cleanupError) => {
-      console.warn("[video/gallery storage cleanup]", cleanupError);
-    });
-  }
-  return true;
+  return Boolean(data);
 }

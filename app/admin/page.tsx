@@ -12,7 +12,7 @@ import type { Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
 import { API_KEY_MASK_PLACEHOLDER, isApiKeyConfiguredPlaceholder } from "@/lib/api-key-redaction";
 import { normalizeModel } from "@/lib/model-presets";
-import { normalizeLlmSettings } from "@/lib/llm-models";
+import { normalizeLlmSettings, setDefaultLlmModel } from "@/lib/llm-models";
 import {
   deleteImageModeCover,
   deleteVideoModeCover,
@@ -917,7 +917,7 @@ function LlmApiPanel({
                 <button
                   type="button"
                   className={styles.setDefaultBtn}
-                  onClick={() => onChange({ ...value, defaultModelId: model.id })}
+                  onClick={() => onChange(setDefaultLlmModel(value, model.id))}
                 >
                   设为默认
                 </button>
@@ -929,15 +929,21 @@ function LlmApiPanel({
                   type="checkbox"
                   className={styles.toggleSwitchInput}
                   checked={model.enabled}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    const nextDefaultId = !enabled && model.id === value.defaultModelId
+                      ? modelList.find((candidate) => candidate.id !== model.id && candidate.enabled)?.id
+                      : value.defaultModelId;
+                    if (!enabled && model.id === value.defaultModelId && !nextDefaultId) return;
                     onChange({
                       ...value,
+                      defaultModelId: nextDefaultId ?? value.defaultModelId,
                       models: {
                         ...value.models,
-                        [model.id]: { ...model, enabled: e.target.checked },
+                        [model.id]: { ...model, enabled },
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
                 <span className={styles.toggleSwitchSlider} />
               </label>

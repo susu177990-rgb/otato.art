@@ -64,6 +64,21 @@ export type UnifiedVideoReference = {
   sourceTaskOutputIndex?: number;
 };
 
+export type VideoReferenceRoleConstraint = {
+  min: number;
+  max: number;
+};
+
+export type VideoReferenceConstraints = {
+  roles: Record<UnifiedVideoReferenceRole, VideoReferenceRoleConstraint>;
+  /** At least one of these roles must be present. */
+  requireOneOf?: UnifiedVideoReferenceRole[];
+  /** Conditional image cap used by multimodal contracts such as Gemini Omni. */
+  maxImageReferencesWithVideo?: number;
+  maxTotalVideoDurationSeconds?: number;
+  maxTotalAudioDurationSeconds?: number;
+};
+
 export type VideoProviderOptions = Record<string, string | number | boolean | null | undefined>;
 export type VideoGrokImagineMode = "normal" | "fun" | "spicy";
 

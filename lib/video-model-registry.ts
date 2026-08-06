@@ -4,6 +4,8 @@ import type {
   VideoModelDefinition,
   VideoModelId,
   VideoPresetDefinition,
+  VideoReferenceConstraints,
+  UnifiedVideoReferenceRole,
 } from "@/lib/video-core";
 
 function preset(title: string, description: string, promptTemplate: string): VideoPresetDefinition {
@@ -527,4 +529,85 @@ export const DEFAULT_VIDEO_PRESETS: Record<
 
 export function getVideoModelDefinition(modelId: VideoModelId): VideoModelDefinition {
   return VIDEO_MODEL_REGISTRY[modelId];
+}
+
+const REFERENCE_ROLES: UnifiedVideoReferenceRole[] = [
+  "start_frame",
+  "end_frame",
+  "image_reference",
+  "video_reference",
+  "audio_reference",
+  "motion_source_video",
+];
+
+function constraints(
+  entries: Partial<Record<UnifiedVideoReferenceRole, { min?: number; max: number }>>,
+  extras: Omit<VideoReferenceConstraints, "roles"> = {},
+): VideoReferenceConstraints {
+  return {
+    roles: Object.fromEntries(REFERENCE_ROLES.map((role) => {
+      const entry = entries[role];
+      return [role, { min: entry?.min ?? 0, max: entry?.max ?? 0 }];
+    })) as VideoReferenceConstraints["roles"],
+    ...extras,
+  };
+}
+
+/**
+ * Resolves the provider contract at model + mode granularity. This is shared by
+ * UI capacity controls and server validation; model-level capability maxima are
+ * retained only for backwards-compatible summaries.
+ */
+export function getVideoReferenceConstraints(
+  modelId: VideoModelId,
+  modeId: VideoGenerationModeId,
+): VideoReferenceConstraints {
+  const modelCapabilities = VIDEO_MODEL_REGISTRY[modelId].capabilities;
+
+  if (modeId === "text_to_video") return constraints({});
+  if (modeId === "start_frame") return constraints({ start_frame: { min: 1, max: 1 } });
+  if (modeId === "start_end_frame") {
+    return constraints({ start_frame: { min: 1, max: 1 }, end_frame: { min: 1, max: 1 } });
+  }
+  if (modeId === "motion_control") {
+    return constraints({
+      start_frame: { min: 1, max: 1 },
+      motion_source_video: { min: 1, max: 1 },
+    });
+  }
+  if (modeId === "video_edit") {
+    return constraints({
+      video_reference: { min: 1, max: 1 },
+      image_reference: { max: modelId === "happyhorse-1.0" ? 5 : modelCapabilities.maxImageReferences },
+    });
+  }
+
+  if (modelId === "seedance-2.0" || modelId === "seedance-2.0-fast" || modelId === "seedance-2.0-mini") {
+    return constraints({
+      image_reference: { max: 9 },
+      video_reference: { max: 3 },
+      audio_reference: { max: 3 },
+    }, {
+      requireOneOf: ["image_reference", "video_reference"],
+      maxTotalVideoDurationSeconds: 15,
+      maxTotalAudioDurationSeconds: 15,
+    });
+  }
+
+  if (modelId === "gemini-omni") {
+    return constraints({
+      image_reference: { max: 7 },
+      video_reference: { max: 1 },
+    }, {
+      requireOneOf: ["image_reference", "video_reference"],
+      maxImageReferencesWithVideo: 5,
+    });
+  }
+
+  return constraints({
+    image_reference: {
+      min: 1,
+      max: modelCapabilities.maxImageReferences,
+    },
+  });
 }

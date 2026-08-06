@@ -74,6 +74,8 @@ export interface ChatConversation {
   preferredImageModelId?: ImageModelId;
   /** 当前会话记住的文本对话模型 */
   preferredLlmModelId?: string | null;
+  /** 用于检测过期写入；由数据库在消息追加时递增。 */
+  revision?: number;
 }
 
 export interface ChatApiConfig {

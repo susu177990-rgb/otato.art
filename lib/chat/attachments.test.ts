@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { compactAllAttachmentsForTextOnlyApi, compactMessagesForAgentApi } from "./attachments";
+import {
+  CHAT_HISTORY_MAX_MESSAGES,
+  compactAllAttachmentsForTextOnlyApi,
+  compactMessagesForAgentApi,
+  prepareConversationHistoryForLlm,
+} from "./attachments";
 import type { ChatMessage } from "./types";
 
 describe("compactAllAttachmentsForTextOnlyApi", () => {
@@ -94,5 +99,55 @@ describe("compactMessagesForAgentApi", () => {
     });
     expect(compacted[1].parts[1]).toMatchObject({ type: "attachment" });
     expect(JSON.stringify(compacted[1])).toContain("data:image/png;base64,LATEST");
+  });
+
+  it("also strips legacy historical attachments without registry ids", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "legacy",
+        role: "user",
+        createdAt: 1,
+        parts: [{
+          type: "attachment",
+          attachment: { kind: "image", mime: "image/png", name: "legacy.png", dataUrl: "data:image/png;base64,OLD" },
+        }],
+      },
+      { id: "latest", role: "user", createdAt: 2, parts: [{ type: "text", text: "继续" }] },
+    ];
+
+    const compacted = compactMessagesForAgentApi(messages);
+    expect(JSON.stringify(compacted)).not.toContain("data:image");
+    expect(compacted[0].parts[0].type).toBe("text");
+  });
+});
+
+describe("prepareConversationHistoryForLlm", () => {
+  it("turns persisted local tool output into valid assistant context", () => {
+    const messages: ChatMessage[] = [{
+      id: "tool-1",
+      role: "tool",
+      createdAt: 1,
+      toolCallId: "local-image",
+      parts: [{ type: "text", text: '{"success":true,"media_url":"https://example.com/a.png"}' }],
+    }];
+
+    const prepared = prepareConversationHistoryForLlm(messages);
+    expect(prepared[0].role).toBe("assistant");
+    expect(prepared[0].toolCallId).toBeUndefined();
+    expect(JSON.stringify(prepared[0])).toContain("先前的系统工具结果");
+  });
+
+  it("keeps only a bounded recent history", () => {
+    const messages: ChatMessage[] = Array.from({ length: CHAT_HISTORY_MAX_MESSAGES + 5 }, (_, index) => ({
+      id: `m-${index}`,
+      role: index % 2 === 0 ? "user" as const : "assistant" as const,
+      createdAt: index,
+      parts: [{ type: "text" as const, text: `message-${index}` }],
+    }));
+
+    const prepared = prepareConversationHistoryForLlm(messages);
+    expect(prepared).toHaveLength(CHAT_HISTORY_MAX_MESSAGES);
+    expect(prepared[0].id).toBe("m-5");
+    expect(prepared.at(-1)?.id).toBe(`m-${CHAT_HISTORY_MAX_MESSAGES + 4}`);
   });
 });

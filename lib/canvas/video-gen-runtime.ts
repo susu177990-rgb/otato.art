@@ -2,17 +2,20 @@ import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanvasBoard, CanvasNode } from "@/lib/canvas/types";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
-import { prependVideoGalleryRecord } from "@/lib/db/video-gallery-store";
 import { resolveMentions } from "@/lib/prompt-mention";
 import type { VideoGalleryRecord } from "@/lib/video-gallery";
+import { VideoGenerationError, type UnifiedVideoGenerationSuccess } from "@/lib/video-generation-service";
 import {
-  generateUnifiedVideo,
-  type UnifiedVideoGenerationSuccess,
-} from "@/lib/video-generation-service";
-import { captureCreditReservation, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
+  releaseCreditReservation,
+  reserveCreditsForQuote,
+} from "@/lib/credits/accounts";
 import { quoteVideoCredits } from "@/lib/credits/pricing";
 import { assertCreditGenerationAllowed } from "@/lib/credits/risk";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { verifyBillableVideoReference } from "@/lib/video-reference-security";
+import { createVideoGenerationJob, updateVideoJob } from "@/lib/video-jobs/repository";
+import { submitCreatedVideoJob } from "@/lib/video-jobs/lifecycle";
+import { updateCanvasBoard } from "@/lib/canvas/board-store";
 import {
   VIDEO_MODE_LABELS,
   getVideoCapabilities,
@@ -27,7 +30,8 @@ import {
 
 type CanvasVideoGenerationResult = {
   sourceNode: CanvasNode;
-  galleryRecord: VideoGalleryRecord;
+  jobId: string;
+  status: "queued" | "submitted";
 };
 
 function mustBeVideoNode(node: CanvasNode | undefined): CanvasNode {
@@ -219,6 +223,8 @@ export async function executeCanvasVideoGeneration(params: {
   nodeId: string;
   workspaceSnapshot: WorkspaceSnapshot;
   projectId?: string | null;
+  requestId: string;
+  callbackOrigin: string;
 }): Promise<CanvasVideoGenerationResult> {
   const sourceNode = mustBeVideoNode(params.board.nodes.find((node) => node.id === params.nodeId));
   const modelId = sourceNode.metadata?.videoModelId ?? params.workspaceSnapshot.videoWorkspace.uiDefaults.defaultModelId;
@@ -229,10 +235,10 @@ export async function executeCanvasVideoGeneration(params: {
   const promptInfo = buildPrompt(params.board, sourceNode);
   const { prompt } = promptInfo;
   const mentionedReferences = collectMentionedReferences(promptInfo);
-  const references = mentionedReferences.length > 0 ? mentionedReferences : collectReferences(params.board, sourceNode);
+  const unverifiedReferences = mentionedReferences.length > 0 ? mentionedReferences : collectReferences(params.board, sourceNode);
 
-  const hasStartFrame = references.some((ref) => ref.role === "start_frame");
-  const hasEndFrame = references.some((ref) => ref.role === "end_frame");
+  const hasStartFrame = unverifiedReferences.some((ref) => ref.role === "start_frame");
+  const hasEndFrame = unverifiedReferences.some((ref) => ref.role === "end_frame");
 
   let effectiveModeId: VideoGenerationModeId;
   if (mentionedReferences.some((ref) => ref.role === "motion_source_video")) {
@@ -253,6 +259,12 @@ export async function executeCanvasVideoGeneration(params: {
     effectiveModeId = inferredMode;
   }
 
+  const verifiedReference = await verifyBillableVideoReference({
+    userId: params.userId,
+    modeId: effectiveModeId,
+    references: unverifiedReferences,
+  });
+  const references = verifiedReference.references;
   const parameterCapabilities = getVideoParameterCapabilities(modelId, effectiveModeId, references);
   const resolution = sourceNode.metadata?.videoResolution ?? parameterCapabilities.resolutions[0];
   if (!resolution) {
@@ -281,7 +293,7 @@ export async function executeCanvasVideoGeneration(params: {
   const reservation = await reserveCreditsForQuote({
     userId: params.userId,
     projectId: params.projectId,
-    requestId: `canvas-video:${params.board.id}:${sourceNode.id}:${randomUUID()}`,
+    requestId: params.requestId,
     quote,
     metadata: {
       boardId: params.board.id,
@@ -291,64 +303,68 @@ export async function executeCanvasVideoGeneration(params: {
     },
   });
 
-  try {
-    const result = await generateUnifiedVideo({
-      supabase: params.supabase,
-      userId: params.userId,
-      workspaceSnapshot: params.workspaceSnapshot,
+  const admin = createSupabaseAdminClient();
+  const galleryRecord = buildGalleryRecord({
+    result: { providerTaskId: "", videoUrl: "" },
+    prompt,
+    node: sourceNode,
+    modelId,
+    modeId: effectiveModeId,
+    references,
+  });
+  const created = await createVideoGenerationJob({
+    admin,
+    userId: params.userId,
+    projectId: params.projectId ?? null,
+    requestId: params.requestId,
+    reservationId: reservation.id,
+    snapshot: {
       request,
-    });
-
-    const nextSourceNode: CanvasNode = {
-      ...sourceNode,
-      metadata: {
-        ...sourceNode.metadata,
-        videoUrl: result.videoUrl,
-        previewVideoUrl: result.videoUrl,
-        videoModelId: modelId,
-        videoModeId: modeId,
-        videoAspectRatio: request.aspectRatio,
-        videoResolution: request.resolution,
-        videoDurationSeconds: request.durationSeconds,
-        status: "success",
-        lastRunAt: new Date().toISOString(),
-        lastError: undefined,
-      },
-    };
-
-    const galleryRecord = buildGalleryRecord({
-      result,
-      prompt,
-      node: nextSourceNode,
-      modelId,
-      modeId: effectiveModeId,
-      references,
-    });
-    await prependVideoGalleryRecord(
-      params.supabase,
       galleryRecord,
-      params.projectId === undefined ? {} : { projectId: params.projectId },
-    );
-    await captureCreditReservation({
-      reservationId: reservation.id,
-      resultRef: result.videoUrl,
-      metadata: { galleryRecordId: galleryRecord.id, providerTaskId: result.providerTaskId, boardId: params.board.id, nodeId: sourceNode.id },
-    });
-
-    return {
-      sourceNode: nextSourceNode,
-      galleryRecord,
-    };
+      canvas: { boardId: params.board.id, nodeId: sourceNode.id },
+    },
+  });
+  const nextSourceNode: CanvasNode = {
+    ...sourceNode,
+    metadata: {
+      ...sourceNode.metadata,
+      videoJobId: created.job.id,
+      videoModelId: modelId,
+      videoModeId: modeId,
+      videoAspectRatio: request.aspectRatio,
+      videoResolution: request.resolution,
+      videoDurationSeconds: request.durationSeconds,
+      status: "running",
+      lastRunAt: new Date().toISOString(),
+      lastError: undefined,
+    },
+  };
+  await updateCanvasBoard(admin, params.board.id, {
+    data: {
+      nodes: params.board.nodes.map((node) => node.id === sourceNode.id ? nextSourceNode : node),
+      connections: params.board.connections,
+      viewport: params.board.viewport,
+      snapToGrid: params.board.snapToGrid,
+    },
+  }, params.projectId === undefined ? {} : { projectId: params.projectId });
+  if (!created.created) {
+    return { sourceNode: nextSourceNode, jobId: created.job.id, status: created.job.status === "queued" ? "queued" : "submitted" };
+  }
+  const callbackUrl = `${params.callbackOrigin.replace(/\/+$/, "")}/api/video/jobs/${created.job.id}/callback?token=${encodeURIComponent(created.callbackToken)}`;
+  try {
+    const submitted = await submitCreatedVideoJob(admin, created.job, callbackUrl);
+    return { sourceNode: nextSourceNode, jobId: submitted.id, status: submitted.status === "queued" ? "queued" : "submitted" };
   } catch (error) {
-    await releaseCreditReservation({
-      reservationId: reservation.id,
-      reason: error instanceof Error ? error.message : "canvas_video_generation_failed",
-      metadata: { boardId: params.board.id, nodeId: sourceNode.id },
-    }).catch((releaseError) => {
-      console.error("[canvas/video-gen-runtime] release reservation failed", {
-        reservationId: reservation.id,
-        releaseError,
-      });
+    const safeToRelease = error instanceof VideoGenerationError && error.code === "provider_submit_failed";
+    if (safeToRelease) {
+      await releaseCreditReservation({ reservationId: reservation.id, reason: error.message, metadata: { videoJobId: created.job.id } });
+    }
+    await updateVideoJob(admin, created.job.id, {
+      status: safeToRelease ? "failed" : "needs_review",
+      billing_status: safeToRelease ? "released" : "needs_review",
+      error: { message: error instanceof Error ? error.message : "canvas_video_submission_failed" },
+      completed_at: safeToRelease ? new Date().toISOString() : null,
+      next_poll_at: null,
     });
     throw error;
   }

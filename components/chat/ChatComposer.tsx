@@ -199,6 +199,7 @@ export function ChatComposer({
               <input
                 ref={fileInputRef}
                 type="file"
+                accept="image/*"
                 multiple
                 className={imageStyles.hiddenInput}
                 disabled={isSending}

@@ -27,7 +27,14 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { classifyGenerationError, type GenerationReasonCode } from "@/lib/generation-error-classifier";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { captureCreditReservation, ensureCreditAccount, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
+import {
+  captureCreditReservation,
+  CreditReservationConflictError,
+  ensureCreditAccount,
+  markCreditReservationCapturePending,
+  releaseCreditReservation,
+  reserveCreditsForQuote,
+} from "@/lib/credits/accounts";
 import { CreditPricingError, quoteImageCredits } from "@/lib/credits/pricing";
 import { CreditRiskError, assertCreditGenerationAllowed } from "@/lib/credits/risk";
 import type { CreditReservation } from "@/lib/credits/types";
@@ -412,6 +419,7 @@ export async function POST(req: NextRequest) {
 
   const requestId = body.requestId?.trim() || traceId;
   let reservation: CreditReservation | null = null;
+  let assetProduced = false;
   try {
     await assertCreditGenerationAllowed(user.id);
     const quote = await quoteImageCredits(createSupabaseAdminClient(), {
@@ -474,6 +482,18 @@ export async function POST(req: NextRequest) {
         error,
       );
     }
+    assetProduced = true;
+    await markCreditReservationCapturePending({
+      reservationId: reservation.id,
+      resultRef: storedImage.imageUrl,
+      metadata: { payloadKind: result.payloadKind, traceId, stage: "asset_persisted" },
+    }).catch((pendingError) => {
+      console.error("[api/image/generate] failed to mark capture pending", {
+        traceId,
+        reservationId: reservation?.id,
+        pendingError,
+      });
+    });
 
     const galleryRecord: ImageGalleryRecord = {
       id: requestId,
@@ -501,11 +521,26 @@ export async function POST(req: NextRequest) {
       status: "success",
     };
     const galleryRecords = await prependGalleryRecord(supabase, galleryRecord, { projectId });
-    const captured = await captureCreditReservation({
-      reservationId: reservation.id,
-      resultRef: storedImage.imageUrl,
-      metadata: { payloadKind: result.payloadKind, traceId },
-    });
+    let captured: CreditReservation;
+    let billingPending = false;
+    try {
+      captured = await captureCreditReservation({
+        reservationId: reservation.id,
+        resultRef: storedImage.imageUrl,
+        metadata: { payloadKind: result.payloadKind, traceId },
+      });
+    } catch (captureError) {
+      billingPending = true;
+      captured = await markCreditReservationCapturePending({
+        reservationId: reservation.id,
+        resultRef: storedImage.imageUrl,
+        metadata: {
+          payloadKind: result.payloadKind,
+          traceId,
+          captureError: captureError instanceof Error ? captureError.message : "capture_failed",
+        },
+      }).catch(() => reservation!);
+    }
     const account = await ensureCreditAccount(user.id);
     return Response.json({
       ...storedImage,
@@ -516,9 +551,10 @@ export async function POST(req: NextRequest) {
       reservationId: captured.id,
       creditsCharged: captured.capturedCredits ?? quote.credits,
       balanceAfter: account.availableCredits,
+      billingPending,
     });
   } catch (error) {
-    if (reservation?.id) {
+    if (reservation?.id && !assetProduced) {
       await releaseCreditReservation({
         reservationId: reservation.id,
         reason: error instanceof Error ? error.message : "image_generation_failed",
@@ -530,6 +566,14 @@ export async function POST(req: NextRequest) {
           releaseError,
         });
       });
+    }
+    if (error instanceof CreditReservationConflictError) {
+      return Response.json({
+        error: error.code,
+        code: error.code,
+        traceId,
+        resultRef: error.reservation?.resultRef ?? null,
+      }, { status: 409 });
     }
     if (error instanceof CreditPricingError) {
       return Response.json(

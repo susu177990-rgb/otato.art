@@ -3,7 +3,6 @@ import type { ImageGalleryRecord } from "@/lib/image-workspace";
 import { sanitizeGalleryRecordForStorage } from "@/lib/gallery-record-storage";
 import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
 import { isStoredGeneratedImageUrl } from "@/lib/generated-image-storage";
-import { deleteMediaObjects, mediaObjectKeyFromPublicUrl } from "@/lib/media-storage";
 import {
   applyProjectScope,
   normalizePageLimit,
@@ -41,38 +40,6 @@ function toGalleryRow(userId: string, record: ImageGalleryRecord, scope: Project
     data: sanitizeGalleryRecordForStorage(record),
     created_at: record.createdAt,
   };
-}
-
-function storedGeneratedImagePath(url: string, userId: string): string | null {
-  if (!isStoredGeneratedImageUrl(url)) return null;
-  const path = mediaObjectKeyFromPublicUrl(url);
-  if (!path?.startsWith(`${userId}/`) && !path?.startsWith(`ephemeral/${userId}/`)) return null;
-  return path;
-}
-
-function galleryRecordStoragePaths(
-  rows: Array<{ data: ImageGalleryRecord }>,
-  userId: string,
-): string[] {
-  return rows
-    .flatMap((row) => [
-      storedGeneratedImagePath(row.data?.imageUrl || "", userId),
-      storedGeneratedImagePath(row.data?.thumbnailUrl || "", userId),
-    ])
-    .filter((path): path is string => Boolean(path));
-}
-
-async function removeGalleryStorageObjects(
-  supabase: SupabaseClient,
-  paths: string[],
-): Promise<void> {
-  if (paths.length === 0) return;
-  const uniquePaths = Array.from(new Set(paths));
-  await deleteMediaObjects(uniquePaths).catch((error) => console.warn("[image/gallery storage cleanup]", error));
-}
-
-function postgrestTextInList(values: string[]): string {
-  return `(${values.map((value) => JSON.stringify(value)).join(",")})`;
 }
 
 export function mergePrependedGalleryRecords(
@@ -170,68 +137,22 @@ export async function replaceGalleryRecords(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
-  if (records.length === 0) {
-    const oldQuery = applyProjectScope(
-      supabase
-        .from("image_gallery_records")
-        .select("data")
-        .eq("user_id", user.id),
-      scope,
-    );
-    const { data: oldRows, error: oldError } = await oldQuery;
-    if (oldError) throw oldError;
-    await removeGalleryStorageObjects(
-      supabase,
-      galleryRecordStoragePaths((oldRows ?? []) as Array<{ data: ImageGalleryRecord }>, user.id),
-    );
-    const deleteQuery = applyProjectScope(
-      supabase
-        .from("image_gallery_records")
-        .delete()
-        .eq("user_id", user.id),
-      scope,
-    );
-    const { error: delError } = await deleteQuery;
-    if (delError) throw delError;
-    return;
-  }
-
   const persisted = await Promise.all(
     records.map((record) => persistGalleryRecordImage(supabase, user.id, record)),
   );
   const rows = persisted.map((record) => toGalleryRow(user.id, record, scope));
 
-  const { error: upsertError } = await supabase
-    .from("image_gallery_records")
-    .upsert(rows, { onConflict: "id" });
+  const { error: upsertError } = rows.length
+    ? await supabase.from("image_gallery_records").upsert(rows, { onConflict: "id" })
+    : { error: null };
   if (upsertError) throw upsertError;
 
-  const keepIds = persisted.map((record) => record.id);
-  const oldQuery = applyProjectScope(
-    supabase
-      .from("image_gallery_records")
-      .select("data")
-      .eq("user_id", user.id)
-      .not("id", "in", postgrestTextInList(keepIds)),
-    scope,
-  );
-  const { data: oldRows, error: oldError } = await oldQuery;
-  if (oldError) throw oldError;
-  await removeGalleryStorageObjects(
-    supabase,
-    galleryRecordStoragePaths((oldRows ?? []) as Array<{ data: ImageGalleryRecord }>, user.id),
-  );
-
-  const deleteQuery = applyProjectScope(
-    supabase
-      .from("image_gallery_records")
-      .delete()
-      .eq("user_id", user.id)
-      .not("id", "in", postgrestTextInList(keepIds)),
-    scope,
-  );
-  const { error: delError } = await deleteQuery;
-  if (delError) throw delError;
+  const { error: finalizeError } = await supabase.rpc("finalize_gallery_replacement", {
+    p_gallery: "image",
+    p_keep_ids: persisted.map((record) => record.id),
+    p_project_id: scope.projectId ?? null,
+  });
+  if (finalizeError) throw finalizeError;
 }
 
 export async function prependGalleryRecord(
@@ -281,24 +202,11 @@ export async function deleteGalleryRecord(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("未登录");
 
-  const existingQuery = applyProjectScope(
-    supabase.from("image_gallery_records").select("data").eq("user_id", user.id).eq("id", id),
-    scope,
-  );
-  const { data: existing, error: existingError } = await existingQuery.maybeSingle();
-  if (existingError) throw existingError;
-  if (!existing) return false;
-  await removeGalleryStorageObjects(
-    supabase,
-    galleryRecordStoragePaths([existing as { data: ImageGalleryRecord }], user.id),
-  );
-  const deleteQuery = applyProjectScope(
-    supabase.from("image_gallery_records").delete().eq("user_id", user.id).eq("id", id).select("id"),
-    scope,
-  );
-  const { data, error } = await deleteQuery;
+  const { data, error } = await supabase.rpc("delete_gallery_record_with_cleanup", {
+    p_gallery: "image", p_id: id, p_project_id: scope.projectId ?? null,
+  });
   if (error) throw error;
-  return (data?.length ?? 0) > 0;
+  return Boolean(data);
 }
 
 /** 迁移：为指定用户批量导入 */

@@ -64,6 +64,8 @@ import { DEFAULT_CANVAS_VIEWPORT } from "@/lib/canvas/types";
 import { CanvasAudioPlayer, CanvasIcon, type CanvasIconName } from "./canvas-ui";
 import styles from "../canvas-page.module.css";
 import { formatGenerationErrorForDisplay } from "@/lib/generation-error-classifier";
+import { fetchVideoJob, videoJobResultUrl } from "@/lib/video-jobs-client";
+import { resolveLlmModelId } from "@/lib/llm-models";
 
 // ─── Interaction state types ───────────────────────────────────────────────────
 
@@ -106,7 +108,9 @@ type CanvasImageGenerateResponse = {
 
 type CanvasVideoGenerateResponse = {
   sourceNode: CanvasNode;
-  galleryRecord: VideoGalleryRecord;
+  galleryRecord?: VideoGalleryRecord;
+  jobId?: string;
+  status?: string;
 };
 
 type CanvasChatRunResponse = {
@@ -830,6 +834,45 @@ export default function CanvasBoardPage() {
   useEffect(() => {
     setPortalMounted(true);
   }, []);
+
+  const activeCanvasVideoJobIds = useMemo(
+    () => nodes.flatMap((node) => node.type === "video" && node.metadata?.status === "running" && node.metadata.videoJobId
+      ? [node.metadata.videoJobId]
+      : []).join("|"),
+    [nodes],
+  );
+
+  useEffect(() => {
+    if (!activeCanvasVideoJobIds) return;
+    let cancelled = false;
+    const poll = async () => {
+      const jobs = await Promise.allSettled(activeCanvasVideoJobIds.split("|").map((id) => fetchVideoJob(id)));
+      if (cancelled) return;
+      setNodes((current) => {
+        const next = current.map((node) => {
+          const jobId = node.metadata?.videoJobId;
+          if (!jobId) return node;
+          const outcome = jobs.find((item) => item.status === "fulfilled" && item.value.id === jobId);
+          if (!outcome || outcome.status !== "fulfilled") return node;
+          const job = outcome.value;
+          if (job.status === "succeeded") {
+            const url = videoJobResultUrl(job);
+            return { ...node, metadata: { ...node.metadata, videoUrl: url, previewVideoUrl: url, status: "success" as const, lastError: undefined } };
+          }
+          if (job.status === "failed") {
+            const message = typeof job.error === "string" ? job.error : job.error?.message;
+            return { ...node, metadata: { ...node.metadata, status: "error" as const, lastError: message || "CRUN 明确返回生成失败。" } };
+          }
+          return node;
+        });
+        nodesRef.current = next;
+        return next;
+      });
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 15_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [activeCanvasVideoJobIds]);
 
   const openPresetLibraryForAddingNode = useCallback((pos: CanvasPosition) => {
     setPresetAddNodePos(pos);
@@ -1644,10 +1687,11 @@ export default function CanvasBoardPage() {
       lastError: undefined,
     });
     try {
+      const requestId = `canvas-video:${boardId}:${nodeId}:${crypto.randomUUID()}`;
       const res = await fetch("/api/canvas/video-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boardId, nodeId, projectId }),
+        body: JSON.stringify({ boardId, nodeId, projectId, requestId }),
       });
       let rawText = "";
       try {
@@ -1663,7 +1707,7 @@ export default function CanvasBoardPage() {
         // Not JSON
       }
 
-      if (!res.ok || !data.sourceNode || !data.galleryRecord) {
+      if (!res.ok || !data.sourceNode || (res.status !== 202 && !data.galleryRecord)) {
         throw new Error(formatGenerationErrorForDisplay({
           code: data.code,
           reasonCode: data.reasonCode,
@@ -1733,7 +1777,7 @@ export default function CanvasBoardPage() {
           nodeId,
           userMessage,
           preferredImageModelId: targetNode.metadata?.chatPreferredImageModelId,
-          preferredLlmModelId: targetNode.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId,
+          preferredLlmModelId: resolveLlmModelId(llmSettings, targetNode.metadata?.chatPreferredLlmModelId),
         }),
       });
       let rawText = "";
@@ -1777,7 +1821,7 @@ export default function CanvasBoardPage() {
         },
       }));
     }
-  }, [boardId, llmSettings.defaultModelId, markDirty, patchNode]);
+  }, [boardId, llmSettings, markDirty, patchNode]);
 
   const focusNode = useCallback((node: CanvasNode) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -2539,15 +2583,14 @@ export default function CanvasBoardPage() {
                         />
                         <div className={styles.generatorToolbar}>
                           {renderCanvasPickerButton(
-                            llmSettings.models[node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId]?.label ??
-                              node.metadata?.chatPreferredLlmModelId ??
-                              llmSettings.defaultModelId,
+                            llmSettings.models[resolveLlmModelId(llmSettings, node.metadata?.chatPreferredLlmModelId)]?.label ??
+                              resolveLlmModelId(llmSettings, node.metadata?.chatPreferredLlmModelId),
                             Object.values(llmSettings.models)
                               .filter((model) => model.enabled)
                               .map((model) => ({
                                 id: model.id,
                                 label: model.label,
-                                active: model.id === (node.metadata?.chatPreferredLlmModelId ?? llmSettings.defaultModelId),
+                                active: model.id === resolveLlmModelId(llmSettings, node.metadata?.chatPreferredLlmModelId),
                                 onSelect: () => {
                                   patchNode(node.id, (item) => ({
                                     ...item,

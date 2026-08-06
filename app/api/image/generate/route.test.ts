@@ -5,7 +5,13 @@ import {
   persistGeneratedImageToStorage,
   persistGeneratedImageWithThumbnailToStorage,
 } from "@/lib/db/persist-generated-image";
-import { captureCreditReservation, ensureCreditAccount, releaseCreditReservation, reserveCreditsForQuote } from "@/lib/credits/accounts";
+import {
+  captureCreditReservation,
+  ensureCreditAccount,
+  markCreditReservationCapturePending,
+  releaseCreditReservation,
+  reserveCreditsForQuote,
+} from "@/lib/credits/accounts";
 import { quoteImageCredits } from "@/lib/credits/pricing";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prependGalleryRecord } from "@/lib/db/gallery-store";
@@ -40,12 +46,17 @@ vi.mock("@/lib/credits/pricing", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/credits/accounts", () => ({
-  reserveCreditsForQuote: vi.fn(),
-  captureCreditReservation: vi.fn(),
-  releaseCreditReservation: vi.fn(),
-  ensureCreditAccount: vi.fn(),
-}));
+vi.mock("@/lib/credits/accounts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/credits/accounts")>();
+  return {
+    ...actual,
+    reserveCreditsForQuote: vi.fn(),
+    captureCreditReservation: vi.fn(),
+    markCreditReservationCapturePending: vi.fn(),
+    releaseCreditReservation: vi.fn(),
+    ensureCreditAccount: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/credits/risk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/credits/risk")>();
@@ -214,6 +225,28 @@ describe("POST /api/image/generate CRUN references", () => {
       status: "captured",
       reservedCredits: 12,
       capturedCredits: 12,
+      feature: "image",
+      modelId: "nano-banana-2",
+      projectId: "project-1",
+      requestId: "request-1",
+      priceSnapshot: {},
+      costSnapshot: {},
+      estimatedMarginCredits: null,
+      estimatedMarginPercent: null,
+      metadata: {},
+      resultRef: "https://storage.example.com/generated.png",
+      failureReason: null,
+      expiresAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    vi.mocked(markCreditReservationCapturePending).mockResolvedValue({
+      id: "reservation-1",
+      accountId: "account-1",
+      userId: "user-1",
+      status: "capture_pending",
+      reservedCredits: 12,
+      capturedCredits: null,
       feature: "image",
       modelId: "nano-banana-2",
       projectId: "project-1",
@@ -524,5 +557,24 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(data.reasonCode).toBe("INVALID_PROMPT");
     expect(data.userMessage).toContain("aspect_ratio");
     expect(releaseCreditReservation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the reservation for reconciliation when capture fails after the asset is stored", async () => {
+    vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "task-1" } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/generated.png"] } }), { status: 200 }));
+    vi.mocked(captureCreditReservation).mockRejectedValueOnce(new Error("database unavailable"));
+
+    const response = await POST(jsonImageGenerateRequest() as never);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.billingPending).toBe(true);
+    expect(markCreditReservationCapturePending).toHaveBeenCalledWith(expect.objectContaining({
+      reservationId: "reservation-1",
+      resultRef: "https://storage.example.com/generated.png",
+    }));
+    expect(releaseCreditReservation).not.toHaveBeenCalled();
   });
 });

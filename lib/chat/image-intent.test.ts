@@ -58,6 +58,12 @@ describe("detectImageGenerationIntent", () => {
     expect(intent.hasReferenceImages).toBe(false);
   });
 
+  it("does not trigger paid generation for image-related nouns or advice", () => {
+    expect(detectImageGenerationIntent([userMessage("分析这张海报图")]).active).toBe(false);
+    expect(detectImageGenerationIntent([userMessage("给我一个海报图提示词")]).active).toBe(false);
+    expect(detectImageGenerationIntent([userMessage("怎么生成一张封面图")]).active).toBe(false);
+  });
+
   it("detects poster generation requests that include a reference image", () => {
     const intent = detectImageGenerationIntent([userMessage("用这张参考做一张角色海报", true)]);
 

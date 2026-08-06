@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -61,8 +62,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [dialogError, setDialogError] = useState("");
+  const loadSequenceRef = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
 
   const refreshProject = useCallback(async () => {
+    const sequence = ++loadSequenceRef.current;
+    loadControllerRef.current?.abort();
     if (!projectId) {
       setProject(null);
       setLoading(false);
@@ -70,9 +75,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setProject(null);
     setLoading(true);
     setError("");
     const controller = new AbortController();
+    loadControllerRef.current = controller;
     const timeout = window.setTimeout(() => controller.abort(), 30_000);
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
@@ -80,20 +87,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(await responseError(response, "项目无法加载"));
-      setProject((await response.json()) as Project);
+      if (sequence === loadSequenceRef.current) setProject((await response.json()) as Project);
     } catch (loadError) {
+      if (sequence !== loadSequenceRef.current) return;
       setProject(null);
       setError(loadError instanceof DOMException && loadError.name === "AbortError"
         ? "项目加载超时，请刷新后重试"
         : loadError instanceof Error ? loadError.message : "项目无法加载");
     } finally {
       window.clearTimeout(timeout);
-      setLoading(false);
+      if (sequence === loadSequenceRef.current) {
+        loadControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [projectId]);
 
   useEffect(() => {
     void refreshProject();
+    return () => {
+      loadSequenceRef.current += 1;
+      loadControllerRef.current?.abort();
+    };
   }, [refreshProject]);
 
   const closeDialog = useCallback(() => {

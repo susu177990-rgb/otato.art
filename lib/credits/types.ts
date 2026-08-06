@@ -67,7 +67,7 @@ export type CreditReservation = {
   id: string;
   accountId: string;
   userId: string;
-  status: "pending" | "captured" | "released" | "expired";
+  status: "pending" | "capture_pending" | "captured" | "released" | "expired";
   reservedCredits: number;
   capturedCredits: number | null;
   feature: CreditFeature;

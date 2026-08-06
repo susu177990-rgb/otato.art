@@ -4,12 +4,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import {
-  generateUnifiedVideo,
   VideoGenerationError,
 } from "@/lib/video-generation-service";
 import {
-  captureCreditReservation,
-  ensureCreditAccount,
+  CreditReservationConflictError,
   releaseCreditReservation,
   reserveCreditsForQuote,
 } from "@/lib/credits/accounts";
@@ -31,6 +29,11 @@ import type {
   VideoModelId,
   VideoResolution,
 } from "@/lib/video-workspace";
+import { verifyBillableVideoReference, VideoReferenceSecurityError } from "@/lib/video-reference-security";
+import { createVideoGenerationJob, getVideoGenerationJobByRequest, updateVideoJob } from "@/lib/video-jobs/repository";
+import { submitCreatedVideoJob } from "@/lib/video-jobs/lifecycle";
+import { toPublicVideoJob } from "@/lib/video-jobs/types";
+import { VIDEO_MODE_LABELS, getVideoModelDefinition } from "@/lib/video-workspace";
 
 function generationErrorJson(params: {
   message: string;
@@ -236,7 +239,18 @@ export async function POST(req: NextRequest) {
   const grokImagineMode = body.grokImagineMode === "fun" || body.grokImagineMode === "spicy" || body.grokImagineMode === "normal"
     ? body.grokImagineMode
     : undefined;
-  const references = parseReferences(body.references);
+  let references = parseReferences(body.references);
+  let verifiedReferenceDuration: number | null = null;
+  try {
+    const verified = await verifyBillableVideoReference({ userId: user.id, modeId, references });
+    references = verified.references;
+    verifiedReferenceDuration = verified.durationSeconds;
+  } catch (error) {
+    if (error instanceof VideoReferenceSecurityError) {
+      return Response.json(generationErrorJson({ message: error.message, code: error.code, status: 400 }), { status: 400 });
+    }
+    throw error;
+  }
 
   const snapshot = await getWorkspaceSnapshot(supabase);
   const parameterCapabilities = getVideoParameterCapabilities(modelId, modeId, references);
@@ -252,7 +266,8 @@ export async function POST(req: NextRequest) {
       ? duration
       : normalizeVideoDuration(snapshot.videoWorkspace.uiDefaults.defaultDurationSeconds, durationCapability)
     : 0;
-  const billableDurationSeconds = billableSecondsForVideo({ modeId, durationSeconds, references });
+  const billableDurationSeconds = verifiedReferenceDuration
+    ?? billableSecondsForVideo({ modeId, durationSeconds, references });
   const billingResolution = resolution ?? parameterCapabilities.resolutions[0];
   if (!billingResolution) {
     return Response.json(
@@ -262,6 +277,8 @@ export async function POST(req: NextRequest) {
   }
   const requestId = typeof body.requestId === "string" && body.requestId.trim() ? body.requestId.trim() : randomUUID();
   let reservation: CreditReservation | null = null;
+  let jobId: string | null = null;
+  let submissionStarted = false;
   try {
     await assertCreditGenerationAllowed(user.id);
     const quote = await quoteVideoCredits(createSupabaseAdminClient(), {
@@ -289,7 +306,7 @@ export async function POST(req: NextRequest) {
       modelId,
       modeId,
       prompt,
-      durationSeconds,
+      durationSeconds: verifiedReferenceDuration ?? durationSeconds,
       aspectRatio,
       resolution: quote.resolution,
       soundEnabled: typeof body.soundEnabled === "boolean" ? body.soundEnabled : undefined,
@@ -300,26 +317,48 @@ export async function POST(req: NextRequest) {
           ? (body.providerOptions as Record<string, string | number | boolean | null | undefined>)
           : undefined,
     };
-    const result = await generateUnifiedVideo({
-      supabase,
+    const admin = createSupabaseAdminClient();
+    const createdAt = new Date().toISOString();
+    const created = await createVideoGenerationJob({
+      admin,
       userId: user.id,
-      workspaceSnapshot: snapshot,
-      request: requestPayload,
-    });
-    const captured = await captureCreditReservation({
+      projectId,
+      requestId,
       reservationId: reservation.id,
-      resultRef: result.videoUrl,
-      metadata: { providerTaskId: result.providerTaskId },
+      snapshot: {
+        request: requestPayload,
+        galleryRecord: {
+          id: requestId,
+          createdAt,
+          modelId,
+          modelName: getVideoModelDefinition(modelId).label,
+          modeId,
+          modeName: VIDEO_MODE_LABELS[modeId],
+          finalPrompt: prompt,
+          aspectRatio,
+          durationSeconds: requestPayload.durationSeconds,
+          resolution: quote.resolution,
+          referencesSummary: references.map((reference) => ({
+            role: reference.role,
+            label: reference.label || reference.role,
+            url: reference.url,
+          })),
+          status: "success",
+        },
+      },
     });
-    const account = await ensureCreditAccount(user.id);
-    return Response.json({
-      ...result,
-      reservationId: captured.id,
-      creditsCharged: captured.capturedCredits ?? quote.credits,
-      balanceAfter: account.availableCredits,
-    });
+    jobId = created.job.id;
+    if (!created.created) {
+      return Response.json({ jobId: created.job.id, ...toPublicVideoJob(created.job) }, { status: 202 });
+    }
+    const origin = (process.env.APP_ORIGIN?.trim() || req.nextUrl.origin).replace(/\/+$/, "");
+    const callbackUrl = `${origin}/api/video/jobs/${created.job.id}/callback?token=${encodeURIComponent(created.callbackToken)}`;
+    submissionStarted = true;
+    const submitted = await submitCreatedVideoJob(admin, created.job, callbackUrl);
+    return Response.json({ jobId: submitted.id, ...toPublicVideoJob(submitted) }, { status: 202 });
   } catch (error) {
-    if (reservation?.id) {
+    const safeToRelease = !submissionStarted || (error instanceof VideoGenerationError && error.code === "provider_submit_failed");
+    if (reservation?.id && safeToRelease) {
       await releaseCreditReservation({
         reservationId: reservation.id,
         reason: error instanceof Error ? error.message : "video_generation_failed",
@@ -330,6 +369,26 @@ export async function POST(req: NextRequest) {
           releaseError,
         });
       });
+    }
+    if (jobId) {
+      await updateVideoJob(createSupabaseAdminClient(), jobId, {
+        status: safeToRelease ? "failed" : "needs_review",
+        billing_status: safeToRelease ? "released" : "needs_review",
+        error: { message: error instanceof Error ? error.message : "video_submission_failed" },
+        completed_at: safeToRelease ? new Date().toISOString() : null,
+        next_poll_at: null,
+      }).catch((jobError) => console.error("[api/video/generate] update job after submission error", { jobId, jobError }));
+    }
+    if (error instanceof CreditReservationConflictError) {
+      const existingJob = await getVideoGenerationJobByRequest(createSupabaseAdminClient(), user.id, requestId).catch(() => null);
+      if (existingJob) {
+        return Response.json({ jobId: existingJob.id, ...toPublicVideoJob(existingJob) }, { status: 202 });
+      }
+      return Response.json({
+        error: error.code,
+        code: error.code,
+        resultRef: error.reservation?.resultRef ?? null,
+      }, { status: 409 });
     }
     if (error instanceof CreditPricingError) {
       return Response.json(

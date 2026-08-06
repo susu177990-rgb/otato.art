@@ -101,8 +101,40 @@ export async function reserveCreditsForQuote(params: {
     p_metadata: params.metadata ?? {},
     p_expires_at: null,
   });
-  if (error) throw error;
+  if (error) {
+    const code = reservationConflictCode(error.message);
+    if (code) {
+      const existing = await admin
+        .from("credit_reservations")
+        .select("*")
+        .eq("account_id", account.accountId)
+        .eq("request_id", params.requestId)
+        .maybeSingle();
+      throw new CreditReservationConflictError(
+        code,
+        existing.data ? mapCreditReservation(row(existing.data)) : undefined,
+      );
+    }
+    throw error;
+  }
   return mapCreditReservation(row(data));
+}
+
+export class CreditReservationConflictError extends Error {
+  constructor(
+    public readonly code: "GENERATION_ALREADY_RUNNING" | "GENERATION_ALREADY_COMPLETED" | "IDEMPOTENCY_CONFLICT",
+    public readonly reservation?: CreditReservation,
+  ) {
+    super(code);
+    this.name = "CreditReservationConflictError";
+  }
+}
+
+function reservationConflictCode(message: string): CreditReservationConflictError["code"] | null {
+  if (message.includes("GENERATION_ALREADY_RUNNING")) return "GENERATION_ALREADY_RUNNING";
+  if (message.includes("GENERATION_ALREADY_COMPLETED")) return "GENERATION_ALREADY_COMPLETED";
+  if (message.includes("IDEMPOTENCY_CONFLICT")) return "IDEMPOTENCY_CONFLICT";
+  return null;
 }
 
 export async function captureCreditReservation(params: {
@@ -114,6 +146,21 @@ export async function captureCreditReservation(params: {
   const { data, error } = await admin.rpc("capture_credit_reservation", {
     p_reservation_id: params.reservationId,
     p_result_ref: params.resultRef ?? null,
+    p_metadata: params.metadata ?? {},
+  });
+  if (error) throw error;
+  return mapCreditReservation(row(data));
+}
+
+export async function markCreditReservationCapturePending(params: {
+  reservationId: string;
+  resultRef: string;
+  metadata?: Record<string, unknown>;
+}): Promise<CreditReservation> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc("mark_credit_reservation_capture_pending", {
+    p_reservation_id: params.reservationId,
+    p_result_ref: params.resultRef,
     p_metadata: params.metadata ?? {},
   });
   if (error) throw error;

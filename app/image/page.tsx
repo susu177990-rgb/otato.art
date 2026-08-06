@@ -106,8 +106,10 @@ function ratioPreviewStyle(value: string): CSSProperties | undefined {
   };
 }
 
-const IMAGE_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-image-generation-runtime-v1";
+const IMAGE_GENERATION_RUNTIME_STORAGE_KEY = "script-agent-image-generation-runtime-v2";
 const IMAGE_GENERATION_RUNTIME_EVENT = "script-agent-image-generation-runtime-change";
+const IMAGE_GENERATION_RUNTIME_MAX_TASKS = 24;
+const IMAGE_GENERATION_RUNTIME_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const IMAGE_REFERENCE_CACHE_STORAGE_KEY = "script-agent-image-reference-cache-v1";
 const OPEN_IMAGE_PROMPT_PRESETS_EVENT = "otato:open-image-prompt-presets";
 const FREE_MODE = { id: "free", label: "自由模式" } as const;
@@ -143,6 +145,7 @@ function isImageModelId(value: unknown): value is ImageModelId {
 }
 
 type ImageGenerationRuntimeState = {
+  projectId: string;
   taskId: string;
   status: "running" | "success" | "error";
   startedAt: string;
@@ -335,37 +338,36 @@ async function snapshotReferenceImages(slots: RefSlot[]): Promise<ImageGalleryRe
   return entries.filter((entry): entry is ImageGalleryReferenceImage => entry !== null);
 }
 
-function readGenerationRuntimeState(): ImageGenerationRuntimeState | null {
-  if (typeof window === "undefined") return null;
+type ImageGenerationRuntimeStore = { version: 2; tasks: Record<string, ImageGenerationRuntimeState> };
+
+function runtimeStorageId(projectId: string, taskId: string): string {
+  return `${projectId}:${taskId}`;
+}
+
+function readGenerationRuntimeStore(): ImageGenerationRuntimeStore {
+  if (typeof window === "undefined") return { version: 2, tasks: {} };
   try {
     const raw = window.localStorage.getItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ImageGenerationRuntimeState>;
-    if (!parsed.taskId || !parsed.status || !parsed.startedAt) return null;
-    if (parsed.status !== "running") return null;
-    if (!isImageModelId(parsed.modelId)) {
-      return null;
-    }
-    return {
-      taskId: parsed.taskId,
-      status: parsed.status,
-      startedAt: parsed.startedAt,
-      updatedAt: parsed.updatedAt || parsed.startedAt,
-      modeId: String(parsed.modeId || "free"),
-      modelId: parsed.modelId,
-      aspectRatio: parsed.aspectRatio || "4:3",
-      imageSize: parsed.imageSize || "1K",
-      gptImageQuality: parsed.gptImageQuality,
-      gptImageBackground: parsed.gptImageBackground,
-      slotInputs: Array.isArray(parsed.slotInputs) ? parsed.slotInputs.map((x) => String(x ?? "")) : [""],
-      finalPrompt: String(parsed.finalPrompt || ""),
-      referenceImages: Array.isArray(parsed.referenceImages) ? parsed.referenceImages : [],
-      imageUrl: typeof parsed.imageUrl === "string" ? parsed.imageUrl : undefined,
-      error: typeof parsed.error === "string" ? parsed.error : undefined,
-    };
+    if (!raw) return { version: 2, tasks: {} };
+    const parsed = JSON.parse(raw) as Partial<ImageGenerationRuntimeStore>;
+    return parsed.version === 2 && parsed.tasks && typeof parsed.tasks === "object"
+      ? { version: 2, tasks: parsed.tasks }
+      : { version: 2, tasks: {} };
   } catch {
-    return null;
+    return { version: 2, tasks: {} };
   }
+}
+
+function validGenerationRuntimeState(value: unknown, projectId: string): value is ImageGenerationRuntimeState {
+  const state = value as Partial<ImageGenerationRuntimeState> | null;
+  return Boolean(state && state.projectId === projectId && state.taskId && state.status === "running" && state.startedAt && isImageModelId(state.modelId));
+}
+
+function readGenerationRuntimeStates(projectId: string): ImageGenerationRuntimeState[] {
+  const cutoff = Date.now() - IMAGE_GENERATION_RUNTIME_MAX_AGE_MS;
+  return Object.values(readGenerationRuntimeStore().tasks)
+    .filter((state) => validGenerationRuntimeState(state, projectId) && Date.parse(state.updatedAt || state.startedAt) >= cutoff)
+    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
 }
 
 function writeGenerationRuntimeState(next: ImageGenerationRuntimeState) {
@@ -375,17 +377,26 @@ function writeGenerationRuntimeState(next: ImageGenerationRuntimeState) {
       next.imageUrl && next.imageUrl.startsWith("data:") && next.imageUrl.length > 200_000
         ? { ...next, imageUrl: undefined }
         : next;
-    window.localStorage.setItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify(lean));
+    const store = readGenerationRuntimeStore();
+    store.tasks[runtimeStorageId(next.projectId, next.taskId)] = lean;
+    const retained = Object.entries(store.tasks)
+      .filter(([, state]) => Date.parse(state.updatedAt || state.startedAt) >= Date.now() - IMAGE_GENERATION_RUNTIME_MAX_AGE_MS)
+      .sort(([, a], [, b]) => Date.parse(b.updatedAt || b.startedAt) - Date.parse(a.updatedAt || a.startedAt))
+      .slice(0, IMAGE_GENERATION_RUNTIME_MAX_TASKS);
+    window.localStorage.setItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify({ version: 2, tasks: Object.fromEntries(retained) }));
   } catch {
     return;
   }
   window.dispatchEvent(new CustomEvent<ImageGenerationRuntimeState>(IMAGE_GENERATION_RUNTIME_EVENT, { detail: next }));
 }
 
-function clearGenerationRuntimeState() {
+function clearGenerationRuntimeState(projectId: string, taskId: string) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY);
+    const store = readGenerationRuntimeStore();
+    delete store.tasks[runtimeStorageId(projectId, taskId)];
+    if (Object.keys(store.tasks).length === 0) window.localStorage.removeItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY);
+    else window.localStorage.setItem(IMAGE_GENERATION_RUNTIME_STORAGE_KEY, JSON.stringify(store));
   } catch {
     return;
   }
@@ -569,6 +580,9 @@ export default function ImagePage() {
   const refFileInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const refSlotsRef = useRef<RefSlot[]>(refSlots);
   const mountedRef = useRef(false);
+  const galleryLoadSequenceRef = useRef(0);
+  const activeProjectIdRef = useRef(projectId);
+  activeProjectIdRef.current = projectId;
   /** 用户已手动改过参考图槽时，勿用 localStorage 里的旧 runtime 覆盖 */
   const refSlotsUserEditedRef = useRef(false);
   const promptsRef = useRef(settings.prompts);
@@ -650,12 +664,28 @@ export default function ImagePage() {
   }, [imageWorkspace, workspaceReady]);
 
   const refreshGallery = useCallback(async () => {
+    const sequence = ++galleryLoadSequenceRef.current;
     try {
       const nextRecords = await fetchGalleryRecords(projectId);
-      if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(nextRecords)));
+      if (mountedRef.current && sequence === galleryLoadSequenceRef.current) {
+        setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(nextRecords)));
+      }
     } catch (e) {
       console.warn("[image] gallery load failed", e);
     }
+  }, [projectId]);
+
+  useEffect(() => {
+    galleryLoadSequenceRef.current += 1;
+    setRecords([]);
+    setPendingGenerations([]);
+    setResultUrl("");
+    setError("");
+    refSlotsUserEditedRef.current = false;
+    setRefSlots((prev) => {
+      for (const slot of prev) revokeRefPreview(slot);
+      return createEmptyRefSlots();
+    });
   }, [projectId]);
 
   useEffect(() => {
@@ -805,13 +835,14 @@ export default function ImagePage() {
       setResultUrl(latest.imageUrl);
       setError("");
       saveImageResultForRecord(latest.id, latest.imageUrl);
-      const runtime = readGenerationRuntimeState();
-      if (runtime && completedIds.has(runtime.taskId)) {
-        clearGenerationRuntimeState();
+      if (projectId) {
+        for (const runtime of readGenerationRuntimeStates(projectId)) {
+          if (completedIds.has(runtime.taskId)) clearGenerationRuntimeState(projectId, runtime.taskId);
+        }
       }
     }
     setPendingGenerations((prev) => prev.filter((item) => !completedIds.has(item.id)));
-  }, [pendingGenerations, records]);
+  }, [pendingGenerations, projectId, records]);
 
   useEffect(() => {
     setAspectRatio((current) => normalizeImageAspectRatioForContext(current, selectedModelId, filledRefFileCount));
@@ -1112,15 +1143,17 @@ export default function ImagePage() {
   useEffect(() => {
     if (!workspaceReady) return;
 
-    const initial = readGenerationRuntimeState();
-    if (initial?.status === "running") {
+    if (!projectId) return;
+    const activeProjectId = projectId;
+    const initialStates = readGenerationRuntimeStates(activeProjectId);
+    for (const initial of initialStates) {
       refSlotsUserEditedRef.current = false;
       applyGenerationRuntimeState(initial, { restoreReferenceImages: true });
     }
 
     function onRuntimeChange(e: Event) {
       const detail = e instanceof CustomEvent ? (e.detail as ImageGenerationRuntimeState | undefined) : undefined;
-      const next = detail ?? readGenerationRuntimeState();
+      const next = detail?.projectId === activeProjectId ? detail : undefined;
       if (!next) return;
       if (next.status === "running") {
         refSlotsUserEditedRef.current = false;
@@ -1130,10 +1163,10 @@ export default function ImagePage() {
 
     function onVisible() {
       if (document.visibilityState !== "visible") return;
-      const next = readGenerationRuntimeState();
-      if (next?.status !== "running") return;
-      refSlotsUserEditedRef.current = false;
-      applyGenerationRuntimeState(next, { restoreReferenceImages: true });
+      for (const next of readGenerationRuntimeStates(activeProjectId)) {
+        refSlotsUserEditedRef.current = false;
+        applyGenerationRuntimeState(next, { restoreReferenceImages: true });
+      }
     }
 
     window.addEventListener(IMAGE_GENERATION_RUNTIME_EVENT, onRuntimeChange);
@@ -1142,7 +1175,7 @@ export default function ImagePage() {
       window.removeEventListener(IMAGE_GENERATION_RUNTIME_EVENT, onRuntimeChange);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [workspaceReady, applyGenerationRuntimeState]);
+  }, [workspaceReady, projectId, applyGenerationRuntimeState]);
 
   async function writeRecord(
     status: "success" | "error",
@@ -1179,16 +1212,20 @@ export default function ImagePage() {
     if (imageUrl?.trim()) saveImageResultForRecord(record.id, imageUrl);
     try {
       const next = await prependGalleryRecordApi(record, projectId);
-      if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
+      if (mountedRef.current && activeProjectIdRef.current === projectId) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(next)));
     } catch (e) {
       console.warn("[image] gallery save failed", e);
-      if (mountedRef.current) setRecords((prev) => [record, ...prev].slice(0, 24));
+      if (mountedRef.current && activeProjectIdRef.current === projectId) setRecords((prev) => [record, ...prev].slice(0, 24));
     }
     return record;
   }
 
   async function handleGenerate() {
     setError("");
+    if (!projectId) {
+      setError("请先选择项目");
+      return;
+    }
 
     if (selectedModeId === "free" && !(slotInputs[0] ?? "").trim()) {
       setError("自由模式请填写完整提示词（无内置模版）。");
@@ -1247,6 +1284,7 @@ export default function ImagePage() {
       refSlotsUserEditedRef.current = false;
       pendingId = crypto.randomUUID();
       runtimeState = {
+        projectId,
         taskId: pendingId,
         status: "running",
         startedAt: new Date().toISOString(),
@@ -1317,9 +1355,10 @@ export default function ImagePage() {
       const thumbnailUrl = typeof data.thumbnailUrl === "string" ? data.thumbnailUrl.trim() : "";
       if (!imageUrl) throw new Error(formatImageGenerateFailure(data, "服务器未返回图片地址"));
       if (runtimeState) {
-        clearGenerationRuntimeState();
+        clearGenerationRuntimeState(runtimeState.projectId, runtimeState.taskId);
       }
-      if (mountedRef.current) setResultUrl(imageUrl);
+      const stillInOriginProject = mountedRef.current && activeProjectIdRef.current === runtimeState?.projectId;
+      if (stillInOriginProject) setResultUrl(imageUrl);
       if (Array.isArray(data.galleryRecords)) {
         const stableReferenceImages = data.galleryRecord?.referenceImages?.length
           ? data.galleryRecord.referenceImages
@@ -1328,7 +1367,7 @@ export default function ImagePage() {
           saveReferenceImagesForRecord(data.galleryRecord.id, stableReferenceImages);
           saveImageResultForRecord(data.galleryRecord.id, imageUrl);
         }
-        if (mountedRef.current) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(data.galleryRecords)));
+        if (stillInOriginProject) setRecords(mergeCachedImageUrls(mergeCachedReferenceImages(data.galleryRecords)));
       } else {
         try {
           void writeRecord("success", imageUrl, undefined, cleanedPrompt, referenceImages, thumbnailUrl || undefined);
@@ -1339,9 +1378,9 @@ export default function ImagePage() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "生图失败";
       if (runtimeState) {
-        clearGenerationRuntimeState();
+        clearGenerationRuntimeState(runtimeState.projectId, runtimeState.taskId);
       }
-      if (mountedRef.current) setError(message);
+      if (mountedRef.current && (!runtimeState || activeProjectIdRef.current === runtimeState.projectId)) setError(message);
       try {
         void writeRecord("error", undefined, message, cleanedPrompt, referenceImages);
       } catch (persistErr) {

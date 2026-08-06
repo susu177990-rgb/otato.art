@@ -220,10 +220,14 @@ async function webhookAlreadyProcessed(eventId: string): Promise<boolean> {
   return Boolean(data);
 }
 
+export function stripeCheckoutCanGrantCredits(session: Pick<Stripe.Checkout.Session, "payment_status">): boolean {
+  return session.payment_status === "paid";
+}
+
 export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<{ ok: true; skipped?: boolean }> {
   if (await webhookAlreadyProcessed(event.id)) return { ok: true, skipped: true };
   await recordWebhookEvent(event, "received", {});
-  if (event.type === "checkout.session.completed") {
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session.metadata?.orderId || session.client_reference_id;
     if (!orderId) throw new Error("Stripe session 缺少 orderId");
@@ -254,6 +258,15 @@ export async function handleStripeWebhookEvent(event: Stripe.Event): Promise<{ o
       })
       .eq("id", order.id);
     if (updateError) throw updateError;
+    if (!stripeCheckoutCanGrantCredits(session)) {
+      await markWebhookProcessed(event, {
+        orderId: order.id,
+        stripeSessionId: session.id,
+        paymentStatus: session.payment_status,
+        creditsGranted: false,
+      });
+      return { ok: true };
+    }
     const { error: grantError } = await admin.rpc("grant_order_credits", {
       p_order_id: order.id,
       p_idempotency_key: `stripe:event:${event.id}`,

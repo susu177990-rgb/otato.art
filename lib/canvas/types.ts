@@ -70,6 +70,8 @@ export type CanvasNodeMetadata = {
   previewImageUrl?: string;
   /** video node: inline preview URL */
   previewVideoUrl?: string;
+  /** Durable async video job currently responsible for this node. */
+  videoJobId?: string;
   /** preset node metadata fields */
   presetId?: string;
   presetKind?: "image" | "video" | "chat";

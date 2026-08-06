@@ -1,7 +1,9 @@
 import type { ChatApiConfig, ChatAttachment, ChatMessage, ChatToolCall } from "@/lib/chat/types";
 import { describeUpstreamFetchError } from "@/lib/upstream-fetch-error";
+import { ChatServiceError } from "@/lib/chat/errors";
+import { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/limits";
 
-export const CHAT_MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
+export { CHAT_MAX_ATTACHMENT_BYTES } from "@/lib/chat/limits";
 
 function dataUrlByteLength(dataUrl: string): number {
   const idx = dataUrl.indexOf(",");
@@ -248,9 +250,47 @@ export async function sendChatCompletionRaw(
   }
 
   if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`API 错误 (${response.status}): ${errBody}`);
+    const errBody = (await response.text()).slice(0, 2_000);
+    if (response.status === 429) {
+      throw new ChatServiceError(
+        "LLM_RATE_LIMITED",
+        429,
+        "当前模型通道请求过于频繁，请稍后再试或切换其他模型。",
+        errBody,
+      );
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new ChatServiceError(
+        "LLM_AUTH_FAILED",
+        502,
+        "当前模型通道鉴权失败，请联系管理员检查 API 配置。",
+        errBody,
+      );
+    }
+    if (response.status === 400 && /payload is too large|request entity too large|content too large/i.test(errBody)) {
+      throw new ChatServiceError(
+        "LLM_PAYLOAD_TOO_LARGE",
+        413,
+        "发送给模型的上下文仍然过大，请减少本轮图片数量或新建对话后重试。",
+        errBody,
+      );
+    }
+    throw new ChatServiceError(
+      "LLM_UPSTREAM_ERROR",
+      response.status >= 500 ? 502 : 400,
+      `当前模型通道请求失败（${response.status}）。`,
+      errBody,
+    );
   }
 
-  return (await response.json()) as Record<string, unknown>;
+  try {
+    return (await response.json()) as Record<string, unknown>;
+  } catch (error) {
+    throw new ChatServiceError(
+      "LLM_INVALID_RESPONSE",
+      502,
+      "当前模型通道返回了无法解析的响应。",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }

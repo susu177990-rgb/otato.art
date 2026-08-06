@@ -5,6 +5,7 @@ import {
   VIDEO_MODEL_ORDER,
   VIDEO_MODEL_REGISTRY,
   getVideoModelDefinition,
+  getVideoReferenceConstraints,
 } from "@/lib/video-model-registry";
 import type {
   UnifiedVideoReference,
@@ -21,7 +22,138 @@ import type {
 import { VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS, resolveVideoDurationCapability } from "@/lib/video-core";
 
 export * from "@/lib/video-core";
-export { VIDEO_MODEL_ORDER, VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS, getVideoModelDefinition };
+export { VIDEO_MODEL_ORDER, VIDEO_GENERATION_MODES, VIDEO_MODE_LABELS, getVideoModelDefinition, getVideoReferenceConstraints };
+
+export type VideoReferenceConstraint = {
+  image: { min: number; max: number };
+  video: { min: number; max: number };
+  audio: { min: number; max: number };
+  totalVideoDurationMax?: number;
+  totalAudioDurationMax?: number;
+};
+
+/** Media-type capacity view used by upload controls. */
+export function getVideoReferenceConstraint(
+  modelId: VideoModelId,
+  modeId: VideoGenerationModeId,
+): VideoReferenceConstraint {
+  const resolved = getVideoReferenceConstraints(modelId, modeId);
+  const imageRoles = modeId === "start_frame"
+    ? ["start_frame"] as const
+    : modeId === "start_end_frame"
+      ? ["start_frame", "end_frame"] as const
+      : modeId === "motion_control"
+        ? ["start_frame"] as const
+        : ["image_reference"] as const;
+  const videoRoles = modeId === "motion_control"
+    ? ["motion_source_video"] as const
+    : ["video_reference"] as const;
+  const sum = (roles: readonly UnifiedVideoReference["role"][]) => ({
+    min: roles.reduce((total, role) => total + resolved.roles[role].min, 0),
+    max: roles.reduce((total, role) => total + resolved.roles[role].max, 0),
+  });
+  return {
+    image: sum(imageRoles),
+    video: sum(videoRoles),
+    audio: sum(["audio_reference"]),
+    ...(resolved.maxTotalVideoDurationSeconds === undefined ? {} : { totalVideoDurationMax: resolved.maxTotalVideoDurationSeconds }),
+    ...(resolved.maxTotalAudioDurationSeconds === undefined ? {} : { totalAudioDurationMax: resolved.maxTotalAudioDurationSeconds }),
+  };
+}
+
+export type VideoReferenceValidationResult = {
+  valid: true;
+} | {
+  valid: false;
+  error: string;
+  errorKind?: "invalid_mode" | "unsupported_capability";
+};
+
+export function validateVideoReferences(
+  modelId: VideoModelId,
+  modeId: VideoGenerationModeId,
+  references: UnifiedVideoReference[],
+): VideoReferenceValidationResult {
+  const resolved = getVideoReferenceConstraints(modelId, modeId);
+  const counts = Object.fromEntries(
+    Object.keys(resolved.roles).map((role) => [role, references.filter((item) => item.role === role).length]),
+  ) as Record<UnifiedVideoReference["role"], number>;
+
+  for (const [role, limit] of Object.entries(resolved.roles) as Array<[UnifiedVideoReference["role"], { min: number; max: number }]>) {
+    const count = counts[role];
+    if (count < limit.min || count > limit.max) {
+      if (modeId === "text_to_video") {
+        return { valid: false, error: "文生视频模式不接收参考素材。" };
+      }
+      if (modeId === "start_frame") {
+        return { valid: false, error: "首帧模式需要且只需要 1 张首帧图。" };
+      }
+      if (modeId === "start_end_frame") {
+        return { valid: false, error: "首尾帧模式需要 1 张首帧图和 1 张尾帧图。" };
+      }
+      if (modelId === "kling-3.0" && modeId === "multi_image_reference") {
+        return { valid: false, error: "Kling 3.0 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。" };
+      }
+      if ((modelId === "happyhorse-1.0" || modelId === "happyhorse-1.1") && modeId === "multi_image_reference") {
+        return { valid: false, error: "HappyHorse 全能参考模式只支持 1~9 张图片参考，不支持视频或音频参考。" };
+      }
+      if ((modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite") && modeId === "multi_image_reference") {
+        return { valid: false, error: "Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。" };
+      }
+      if (modelId === "grok-imagine" && modeId === "multi_image_reference") {
+        if (role === "image_reference" && count > limit.max) {
+          return {
+            valid: false,
+            error: "当前模型最多只支持 7 张参考图。",
+            errorKind: "unsupported_capability",
+          };
+        }
+        return { valid: false, error: "Grok Imagine 全能参考只支持 1~7 张图片参考，不支持视频或音频参考。" };
+      }
+      if (modeId === "motion_control") {
+        return { valid: false, error: "动作迁移模式需要且只需要 1 张主体参考图和 1 个动作参考视频。" };
+      }
+      if (modeId === "video_edit") {
+        return { valid: false, error: "视频编辑模式需要 1 个原视频素材，且参考图数量不能超过当前模型限制。" };
+      }
+      const roleLabel: Record<UnifiedVideoReference["role"], string> = {
+        start_frame: "首帧图片",
+        end_frame: "尾帧图片",
+        image_reference: "图片参考",
+        video_reference: "视频参考",
+        audio_reference: "音频参考",
+        motion_source_video: "动作参考视频",
+      };
+      return {
+        valid: false,
+        error: `当前模型此模式的${roleLabel[role]}数量需为 ${limit.min}~${limit.max} 个。`,
+        errorKind: count > limit.max ? "unsupported_capability" : "invalid_mode",
+      };
+    }
+  }
+
+  if (resolved.requireOneOf && !resolved.requireOneOf.some((role) => counts[role] > 0)) {
+    return { valid: false, error: "当前模型此模式缺少必需的图片或视频参考素材。" };
+  }
+  if (resolved.maxImageReferencesWithVideo !== undefined && counts.video_reference > 0 && counts.image_reference > resolved.maxImageReferencesWithVideo) {
+    return {
+      valid: false,
+      error: `Gemini Omni 带视频参考时最多支持 ${resolved.maxImageReferencesWithVideo} 张参考图。`,
+      errorKind: "unsupported_capability",
+    };
+  }
+
+  const durationTotal = (role: UnifiedVideoReference["role"]) => references
+    .filter((item) => item.role === role)
+    .reduce((total, item) => total + (Number.isFinite(item.durationSeconds) && Number(item.durationSeconds) > 0 ? Number(item.durationSeconds) : 0), 0);
+  if (resolved.maxTotalVideoDurationSeconds !== undefined && durationTotal("video_reference") > resolved.maxTotalVideoDurationSeconds) {
+    return { valid: false, error: `参考视频总时长不能超过 ${resolved.maxTotalVideoDurationSeconds} 秒。` };
+  }
+  if (resolved.maxTotalAudioDurationSeconds !== undefined && durationTotal("audio_reference") > resolved.maxTotalAudioDurationSeconds) {
+    return { valid: false, error: `参考音频总时长不能超过 ${resolved.maxTotalAudioDurationSeconds} 秒。` };
+  }
+  return { valid: true };
+}
 
 export type UiVideoModeId = "start_end_frame" | "multi_image_reference" | "video_edit" | "motion_control";
 

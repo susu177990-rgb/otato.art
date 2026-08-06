@@ -101,41 +101,65 @@ export function ProjectAssetLibrary({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const assetsLoadSequenceRef = useRef(0);
+  const galleryLoadSequenceRef = useRef(0);
+  const assetsControllerRef = useRef<AbortController | null>(null);
+  const galleryControllerRef = useRef<AbortController | null>(null);
 
   const loadAssets = useCallback(async () => {
+    const sequence = ++assetsLoadSequenceRef.current;
+    assetsControllerRef.current?.abort();
+    const controller = new AbortController();
+    assetsControllerRef.current = controller;
     setLoading(true);
     setError("");
     try {
-      const assetsResponse = await fetch(`/api/projects/${projectId}/assets`, { cache: "no-store" });
+      const assetsResponse = await fetch(`/api/projects/${projectId}/assets`, { cache: "no-store", signal: controller.signal });
       const { assets: nextAssets } = await responseJson<{ assets: ProjectAsset[] }>(assetsResponse);
-      setAssets(nextAssets);
+      if (sequence === assetsLoadSequenceRef.current) setAssets(nextAssets);
     } catch (loadError) {
+      if (controller.signal.aborted || sequence !== assetsLoadSequenceRef.current) return;
       setError(loadError instanceof Error ? loadError.message : "加载素材失败");
     } finally {
-      setLoading(false);
+      if (sequence === assetsLoadSequenceRef.current) setLoading(false);
     }
   }, [projectId]);
 
   const loadGallery = useCallback(async () => {
+    const sequence = ++galleryLoadSequenceRef.current;
+    galleryControllerRef.current?.abort();
+    const controller = new AbortController();
+    galleryControllerRef.current = controller;
     setGalleryLoading(true);
     setError("");
     try {
-      const galleryResponse = await fetch(`/api/projects/${projectId}/gallery`, { cache: "no-store" });
+      const galleryResponse = await fetch(`/api/projects/${projectId}/gallery`, { cache: "no-store", signal: controller.signal });
       const { items } = await responseJson<{ items: ProjectGalleryItem[] }>(galleryResponse);
-      setGalleryItems(items);
+      if (sequence === galleryLoadSequenceRef.current) setGalleryItems(items);
     } catch (loadError) {
+      if (controller.signal.aborted || sequence !== galleryLoadSequenceRef.current) return;
       setError(loadError instanceof Error ? loadError.message : "加载生成记录失败");
     } finally {
-      setGalleryLoading(false);
+      if (sequence === galleryLoadSequenceRef.current) setGalleryLoading(false);
     }
   }, [projectId]);
 
   useEffect(() => {
+    setAssets([]);
+    setGalleryItems([]);
     void loadAssets();
+    return () => {
+      assetsLoadSequenceRef.current += 1;
+      assetsControllerRef.current?.abort();
+    };
   }, [loadAssets]);
 
   useEffect(() => {
     if (view === "gallery") void loadGallery();
+    return () => {
+      galleryLoadSequenceRef.current += 1;
+      galleryControllerRef.current?.abort();
+    };
   }, [loadGallery, view]);
 
   useEffect(() => {

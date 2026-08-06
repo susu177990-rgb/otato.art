@@ -1,6 +1,8 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { releaseCreditReservation } from "./accounts";
+import { captureCreditReservation, releaseCreditReservation } from "./accounts";
 import { getStripeClient } from "./stripe";
+import { runMediaCleanup } from "@/lib/media-cleanup";
+import { runVideoJobWorker } from "@/lib/video-jobs/worker";
 
 function row(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -15,10 +17,49 @@ export async function runCreditMaintenance() {
   const admin = createSupabaseAdminClient();
   const result = {
     releasedReservations: 0,
+    capturedPendingReservations: 0,
     paidOrdersGranted: 0,
+    mediaCleanup: { completed: 0, failed: 0 },
+    videoJobs: { claimed: 0 },
     failedWebhookEvents: 0,
     errors: [] as string[],
   };
+
+  try {
+    const videoJobs = await runVideoJobWorker(admin, { limit: 10, workerId: "credit-maintenance" });
+    result.videoJobs = { claimed: videoJobs.claimed };
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "视频任务维护失败");
+  }
+
+  try {
+    const cleanup = await runMediaCleanup(admin, 100);
+    result.mediaCleanup = { completed: cleanup.completed, failed: cleanup.failed };
+    result.errors.push(...cleanup.errors);
+  } catch (error) {
+    result.errors.push(error instanceof Error ? error.message : "媒体清理任务失败");
+  }
+
+  const capturePending = await admin
+    .from("credit_reservations")
+    .select("id,result_ref")
+    .eq("status", "capture_pending")
+    .not("result_ref", "is", null)
+    .order("updated_at", { ascending: true })
+    .limit(200);
+  if (capturePending.error) throw capturePending.error;
+  for (const item of capturePending.data ?? []) {
+    try {
+      await captureCreditReservation({
+        reservationId: String(item.id),
+        resultRef: String(item.result_ref),
+        metadata: { maintenance: true, reconciledCapture: true },
+      });
+      result.capturedPendingReservations += 1;
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : "补结算生成冻结失败");
+    }
+  }
 
   const expired = await admin
     .from("credit_reservations")
@@ -72,7 +113,7 @@ export async function runCreditMaintenance() {
         const session = await getStripeClient().checkout.sessions.retrieve(sessionId);
         const currencyMatches = String(session.currency ?? "").toLowerCase() === String(order.currency ?? "").toLowerCase();
         const amountMatches = num(session.amount_total) === num(order.amount_cents);
-        if ((session.status === "complete" || session.payment_status === "paid") && currencyMatches && amountMatches) {
+        if (session.payment_status === "paid" && currencyMatches && amountMatches) {
           const { error } = await admin.rpc("grant_order_credits", {
             p_order_id: String(order.id),
             p_idempotency_key: `stripe:maintenance:${session.id}`,

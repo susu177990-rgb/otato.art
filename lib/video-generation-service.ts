@@ -7,6 +7,7 @@ import {
   getVideoParameterCapabilities,
   getVideoModelDefinition,
   isVideoDurationSupported,
+  validateVideoReferences,
   type UnifiedVideoGenerateRequest,
   type UnifiedVideoReference,
   type VideoGenerationModeId,
@@ -19,6 +20,16 @@ type ProviderTaskResult = {
   providerTaskId: string;
   remoteVideoUrl: string;
 };
+
+export type SubmittedVideoTask = {
+  provider: "crun";
+  providerTaskId: string;
+};
+
+export type VideoTaskPollResult =
+  | { state: "pending"; providerStatus: string; raw: Record<string, unknown> }
+  | { state: "succeeded"; providerStatus: string; remoteVideoUrl: string; raw: Record<string, unknown> }
+  | { state: "failed"; providerStatus: string; message: string; raw: Record<string, unknown> };
 
 type ProviderSubmitContext = {
   modelId: VideoModelId;
@@ -135,10 +146,6 @@ function dedupeReferences(references: UnifiedVideoReference[]): UnifiedVideoRefe
   });
 }
 
-function countRole(references: UnifiedVideoReference[], role: UnifiedVideoReference["role"]): number {
-  return references.filter((item) => item.role === role).length;
-}
-
 export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest) {
   const capabilities = getVideoCapabilities(request.modelId);
   if (!capabilities.supportedModes.includes(request.modeId)) {
@@ -168,29 +175,6 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
   }
 
   const references = dedupeReferences(request.references);
-  const startFrameCount = countRole(references, "start_frame");
-  const endFrameCount = countRole(references, "end_frame");
-  const imageRefCount = countRole(references, "image_reference");
-  const videoRefCount = countRole(references, "video_reference");
-  const audioRefCount = countRole(references, "audio_reference");
-  const motionSourceCount = countRole(references, "motion_source_video");
-
-  if (startFrameCount > 1 || endFrameCount > 1 || motionSourceCount > 1) {
-    throw new VideoGenerationError("invalid_mode", "首帧、尾帧或动作参考视频只能各提供一个。");
-  }
-
-  if (request.modeId === "multi_image_reference" && isHappyHorseFamily(request.modelId) && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
-    throw new VideoGenerationError("invalid_mode", "HappyHorse 全能参考模式只支持 1~9 张图片参考，不支持视频或音频参考。");
-  }
-  if (request.modeId === "multi_image_reference" && request.modelId === "kling-3.0" && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
-    throw new VideoGenerationError("invalid_mode", "Kling 3.0 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
-  }
-  if (request.modeId === "multi_image_reference" && isVeo31Family(request.modelId) && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
-    throw new VideoGenerationError("invalid_mode", "Veo 3.1 全能参考只支持 1~3 张图片参考，不支持视频或音频参考。");
-  }
-  if (request.modeId === "multi_image_reference" && request.modelId === "grok-imagine" && (imageRefCount < 1 || videoRefCount > 0 || audioRefCount > 0)) {
-    throw new VideoGenerationError("invalid_mode", "Grok Imagine 全能参考只支持 1~7 张图片参考，不支持视频或音频参考。");
-  }
   if (request.modelId === "grok-imagine" && request.modeId === "multi_image_reference" && request.grokImagineMode === "spicy") {
     throw new VideoGenerationError("invalid_mode", "Spicy 需要选择带 task_id 的 Grok 文生图/图生图记录。");
   }
@@ -206,81 +190,10 @@ export function validateUnifiedVideoRequest(request: UnifiedVideoGenerateRequest
     if (request.prompt.length > 20_000) {
       throw new VideoGenerationError("invalid_mode", "Gemini Omni 提示词最多 20000 个字符。");
     }
-    if (videoRefCount > 0 && imageRefCount > 5) {
-      throw new VideoGenerationError("unsupported_capability", "Gemini Omni 带视频参考时最多支持 5 张参考图。");
-    }
   }
-  if (request.modeId === "multi_image_reference" && isSeedance20Family(request.modelId) && imageRefCount + videoRefCount < 1) {
-    throw new VideoGenerationError("invalid_mode", "Seedance 全能参考模式需要至少 1 个图片或视频参考素材。");
-  }
-
-  if (imageRefCount > capabilities.maxImageReferences) {
-    throw new VideoGenerationError(
-      "unsupported_capability",
-      `当前模型最多只支持 ${capabilities.maxImageReferences} 张参考图。`,
-    );
-  }
-  if (videoRefCount > capabilities.maxVideoReferences) {
-    throw new VideoGenerationError(
-      "unsupported_capability",
-      `当前模型最多只支持 ${capabilities.maxVideoReferences} 个参考视频。`,
-    );
-  }
-  if (audioRefCount > capabilities.maxAudioReferences) {
-    throw new VideoGenerationError(
-      "unsupported_capability",
-      `当前模型最多只支持 ${capabilities.maxAudioReferences} 个参考音频。`,
-    );
-  }
-
-  switch (request.modeId) {
-    case "text_to_video":
-      if (references.length > 0) {
-        throw new VideoGenerationError("invalid_mode", "文生视频模式不接收参考素材。");
-      }
-      break;
-    case "start_frame":
-      if (startFrameCount !== 1 || endFrameCount !== 0 || imageRefCount !== 0 || videoRefCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
-        throw new VideoGenerationError("invalid_mode", "首帧模式需要且只需要 1 张首帧图。");
-      }
-      break;
-    case "start_end_frame":
-      if (!capabilities.supportsFirstLastFrames) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持首尾帧模式。");
-      }
-      if (startFrameCount !== 1 || endFrameCount !== 1 || imageRefCount !== 0 || videoRefCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
-        throw new VideoGenerationError("invalid_mode", "首尾帧模式需要 1 张首帧图和 1 张尾帧图。");
-      }
-      break;
-    case "multi_image_reference":
-      if (!capabilities.supportsMultipleImageReferences) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持全能参考模式。");
-      }
-      if (imageRefCount + videoRefCount + audioRefCount < 1 || startFrameCount !== 0 || endFrameCount !== 0 || motionSourceCount !== 0) {
-        throw new VideoGenerationError("invalid_mode", "全能参考模式需要至少 1 个图片、视频或音频参考素材，且不接收动作控制视频。");
-      }
-      break;
-    case "video_edit":
-      if (!capabilities.supportedModes.includes("video_edit")) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持视频编辑模式。");
-      }
-      if (videoRefCount !== 1 || startFrameCount !== 0 || endFrameCount !== 0 || audioRefCount !== 0 || motionSourceCount !== 0) {
-        throw new VideoGenerationError("invalid_mode", "视频编辑模式需要且只需要 1 个原视频素材，可附加参考图。");
-      }
-      if (request.modelId === "happyhorse-1.0" && imageRefCount > 5) {
-        throw new VideoGenerationError("unsupported_capability", "HappyHorse 1.0 视频编辑最多支持 5 张参考图。");
-      }
-      break;
-    case "motion_control":
-      if (!capabilities.supportsMotionControl) {
-        throw new VideoGenerationError("unsupported_capability", "当前模型不支持动作迁移模式。");
-      }
-      if (motionSourceCount !== 1 || startFrameCount !== 1 || endFrameCount !== 0 || imageRefCount > 0 || videoRefCount > 0 || audioRefCount > 0) {
-        throw new VideoGenerationError("invalid_mode", "动作迁移模式需要且只需要 1 张主体参考图和 1 个动作参考视频。");
-      }
-      break;
-    default:
-      break;
+  const referenceValidation = validateVideoReferences(request.modelId, request.modeId, references);
+  if (!referenceValidation.valid) {
+    throw new VideoGenerationError(referenceValidation.errorKind ?? "invalid_mode", referenceValidation.error);
   }
 
   return { ...request, references };
@@ -339,14 +252,6 @@ function isAutoDispatchedVideoModel(modelId: VideoModelId): boolean {
 
 function isSeedance20Family(modelId: VideoModelId): boolean {
   return modelId === "seedance-2.0" || modelId === "seedance-2.0-fast" || modelId === "seedance-2.0-mini";
-}
-
-function isHappyHorseFamily(modelId: VideoModelId): boolean {
-  return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
-}
-
-function isVeo31Family(modelId: VideoModelId): boolean {
-  return modelId === "veo-3.1" || modelId === "veo-3.1-fast" || modelId === "veo-3.1-lite";
 }
 
 function resolveSeedanceGenerationMode(modeId: UnifiedVideoGenerateRequest["modeId"]): "text_to_video" | "image_to_video" | "reference_to_video" {
@@ -803,7 +708,11 @@ function parseCrunTaskId(data: Record<string, unknown>): string {
 
 function parseProviderFailureMessage(data: Record<string, unknown>, fallback = "任务失败"): string {
   const nested = data.data && typeof data.data === "object" ? data.data as Record<string, unknown> : {};
+  const result = nested.result && typeof nested.result === "object" ? nested.result as Record<string, unknown> : {};
   for (const value of [
+    result.message,
+    result.error_message,
+    result.error,
     data.errors,
     nested.errors,
     nested.error_message,
@@ -942,6 +851,75 @@ async function submitCrunVideoTask(ctx: ProviderSubmitContext, payload: Record<s
     }
     await wait(intervalMs);
   }
+}
+
+async function submitCrunVideoTaskOnce(ctx: ProviderSubmitContext, payload: Record<string, unknown>, callbackUrl?: string): Promise<SubmittedVideoTask> {
+  const { modelSettings } = ctx;
+  const submitUrl = crunCreateTaskUrl(modelSettings.baseUrl);
+  let response: Response;
+  try {
+    response = await fetch(submitUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": modelSettings.apiKey },
+      body: JSON.stringify({
+        ...buildCrunVideoTaskPayloadForTest({
+          ...payload,
+          model: String(payload.model ?? configuredApiModelName(modelSettings, ctx.request.modeId)),
+        }),
+        ...(callbackUrl ? { callback_url: callbackUrl } : {}),
+      }),
+    });
+  } catch (error) {
+    throw new VideoGenerationError("provider_submit_failed", error instanceof Error ? error.message : "提交任务失败");
+  }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new VideoGenerationError("provider_submit_failed", parseProviderFailureMessage(data), {
+      upstreamStatus: response.status, upstreamBody: data,
+    });
+  }
+  assertCrunBusinessSuccess(data, "provider_submit_failed", response.status);
+  const providerTaskId = parseCrunTaskId(data);
+  if (!providerTaskId) {
+    throw new VideoGenerationError("provider_submit_failed", parseProviderFailureMessage(data, "CRUN 已响应，但没有返回任务 ID。"), {
+      upstreamStatus: response.status, upstreamBody: data,
+    });
+  }
+  return { provider: "crun", providerTaskId };
+}
+
+export async function pollCrunVideoTask(params: {
+  baseUrl: string;
+  apiKey: string;
+  providerTaskId: string;
+}): Promise<VideoTaskPollResult> {
+  const statusUrl = crunTaskInfoUrl(crunCreateTaskUrl(params.baseUrl));
+  let response: Response;
+  try {
+    response = await fetch(`${statusUrl}?task_id=${encodeURIComponent(params.providerTaskId)}`, {
+      headers: { "X-API-KEY": params.apiKey }, cache: "no-store",
+    });
+  } catch (error) {
+    throw new VideoGenerationError("provider_poll_failed", error instanceof Error ? error.message : "查询任务失败");
+  }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new VideoGenerationError("provider_poll_failed", parseProviderFailureMessage(data), {
+      upstreamStatus: response.status, upstreamBody: data,
+    });
+  }
+  assertCrunBusinessSuccess(data, "provider_poll_failed", response.status);
+  const container = data.data && typeof data.data === "object" ? data.data as Record<string, unknown> : data;
+  const rawStatus = container.status ?? container.state ?? data.status;
+  const providerStatus = String(rawStatus ?? "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
+  const remoteVideoUrl = extractCompletedTaskVideoUrl(container) || extractCompletedTaskVideoUrl(data);
+  if (remoteVideoUrl && (!rawStatus || crunTaskSucceeded(rawStatus))) {
+    return { state: "succeeded", providerStatus, remoteVideoUrl, raw: data };
+  }
+  if (crunTaskFailed(rawStatus)) {
+    return { state: "failed", providerStatus, message: parseProviderFailureMessage(data, "CRUN 任务失败，未返回具体原因。"), raw: data };
+  }
+  return { state: "pending", providerStatus, raw: data };
 }
 
 // Legacy non-CRUN task adapter kept for historical provider configs.
@@ -1221,12 +1199,10 @@ const PROVIDER_ADAPTERS: Record<ReturnType<typeof getVideoModelDefinition>["prov
   "gemini-omni": { submit: submitGeminiOmni },
 };
 
-export async function generateUnifiedVideo(params: {
-  supabase: SupabaseClient;
-  userId: string;
+function createProviderSubmitContext(params: {
   workspaceSnapshot: WorkspaceSnapshot;
   request: UnifiedVideoGenerateRequest;
-}): Promise<UnifiedVideoGenerationSuccess> {
+}): ProviderSubmitContext {
   const request = validateUnifiedVideoRequest(params.request);
   const modelDefinition = getVideoModelDefinition(request.modelId);
   const modelSettings = resolveAutoDispatchedVideoModelSettings(
@@ -1234,6 +1210,72 @@ export async function generateUnifiedVideo(params: {
     request.modelId,
   );
   assertConfiguredModel(modelSettings, request.modelId, request.modeId);
+  return { modelId: request.modelId, modelDefinition, modelSettings, request };
+}
+
+function buildCrunPayloadForContext(ctx: ProviderSubmitContext): Record<string, unknown> {
+  const apiModel = configuredApiModelName(ctx.modelSettings, ctx.request.modeId);
+  switch (ctx.modelDefinition.provider) {
+    case "seedance": return buildCrunSeedanceCreatePayload(ctx.request, ctx.modelId, apiModel, ctx.modelSettings.providerOptions);
+    case "kling": return buildKlingCreatePayload(ctx.request, apiModel);
+    case "happyhorse": return buildHappyHorseCreatePayload(ctx.request, apiModel);
+    case "grok": return buildGrokImagineCreatePayload(ctx.request, apiModel);
+    case "veo": return buildVeoCreatePayload(ctx.request, apiModel);
+    case "gemini-omni": return buildGeminiOmniCreatePayload(ctx.request, apiModel);
+  }
+}
+
+/** Submit only. The durable job worker owns polling and finalization. */
+export async function submitUnifiedVideoTask(params: {
+  workspaceSnapshot: WorkspaceSnapshot;
+  request: UnifiedVideoGenerateRequest;
+  callbackUrl?: string;
+}): Promise<SubmittedVideoTask> {
+  const ctx = createProviderSubmitContext(params);
+  if (!isCrunBaseUrl(ctx.modelSettings.baseUrl)) {
+    throw new VideoGenerationError("contract_pending", "当前视频供应商尚未接入异步任务协议。");
+  }
+  return submitCrunVideoTaskOnce(ctx, buildCrunPayloadForContext(ctx), params.callbackUrl);
+}
+
+export function getUnifiedVideoTaskProviderConfig(params: {
+  workspaceSnapshot: WorkspaceSnapshot;
+  request: UnifiedVideoGenerateRequest;
+}): { provider: "crun"; baseUrl: string; apiKey: string } {
+  const ctx = createProviderSubmitContext(params);
+  if (!isCrunBaseUrl(ctx.modelSettings.baseUrl)) {
+    throw new VideoGenerationError("contract_pending", "当前视频供应商尚未接入异步任务协议。");
+  }
+  return { provider: "crun", baseUrl: ctx.modelSettings.baseUrl, apiKey: ctx.modelSettings.apiKey };
+}
+
+export async function finalizeUnifiedVideoTask(params: {
+  supabase: SupabaseClient;
+  userId: string;
+  providerTaskId: string;
+  remoteVideoUrl: string;
+  objectId?: string;
+}): Promise<UnifiedVideoGenerationSuccess> {
+  try {
+    const videoUrl = await persistGeneratedVideoToStorage(
+      params.supabase, params.userId, params.remoteVideoUrl, params.objectId ?? randomUUID(),
+    );
+    return { providerTaskId: params.providerTaskId, videoUrl };
+  } catch (error) {
+    throw new VideoGenerationError("storage_persist_failed", error instanceof Error ? error.message : "视频云存储失败");
+  }
+}
+
+export async function generateUnifiedVideo(params: {
+  supabase: SupabaseClient;
+  userId: string;
+  workspaceSnapshot: WorkspaceSnapshot;
+  request: UnifiedVideoGenerateRequest;
+}): Promise<UnifiedVideoGenerationSuccess> {
+  const { request, modelDefinition, modelSettings } = createProviderSubmitContext({
+    workspaceSnapshot: params.workspaceSnapshot,
+    request: params.request,
+  });
 
   const adapter = PROVIDER_ADAPTERS[modelDefinition.provider];
   const result = await adapter.submit({
@@ -1243,21 +1285,5 @@ export async function generateUnifiedVideo(params: {
     request,
   });
 
-  try {
-    const videoUrl = await persistGeneratedVideoToStorage(
-      params.supabase,
-      params.userId,
-      result.remoteVideoUrl,
-      randomUUID(),
-    );
-    return {
-      providerTaskId: result.providerTaskId,
-      videoUrl,
-    };
-  } catch (error) {
-    throw new VideoGenerationError(
-      "storage_persist_failed",
-      error instanceof Error ? error.message : "视频云存储失败",
-    );
-  }
+  return finalizeUnifiedVideoTask({ ...params, ...result });
 }

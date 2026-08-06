@@ -38,9 +38,11 @@ import {
   getVideoCapabilities,
   getVideoModelDefinition,
   getVideoParameterCapabilities,
+  getVideoReferenceConstraint,
   isVideoDurationSupported,
   modelSupportsUiMode,
   normalizeVideoDuration,
+  validateVideoReferences,
   placeholderInnerHint,
   videoModelsForUiMode,
   type UnifiedVideoReference,
@@ -56,6 +58,7 @@ import {
   inferEffectiveVideoMode,
   VideoWorkspaceSettings,
 } from "@/lib/video-workspace";
+import { fetchActiveVideoJobs, fetchVideoJob, videoJobResultUrl, videoJobStatusLabel, type VideoGenerationJob } from "@/lib/video-jobs-client";
 
 const OPEN_VIDEO_PROMPT_PRESETS_EVENT = "otato:open-video-prompt-presets";
 
@@ -112,6 +115,8 @@ type ReferenceSlot = {
 type ReferenceCollections = Record<ReferenceKind, NonNullable<ReferenceSlot>[]>;
 type PendingVideoGeneration = {
   id: string;
+  jobId?: string;
+  status?: VideoGenerationJob["status"];
   createdAt: string;
   modelId: VideoModelId;
   modelName: string;
@@ -125,6 +130,25 @@ type PendingVideoGeneration = {
 type VideoSidebarHistoryItem =
   | { kind: "pending"; pending: PendingVideoGeneration }
   | { kind: "record"; record: VideoGalleryRecord };
+
+function pendingFromJob(job: VideoGenerationJob): PendingVideoGeneration {
+  const modelId = job.modelId as VideoModelId;
+  const modeId = job.modeId as VideoGenerationModeId;
+  return {
+    id: job.requestId || job.id,
+    jobId: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    modelId,
+    modelName: getVideoModelDefinition(modelId).label,
+    modeId,
+    modeName: VIDEO_MODE_LABELS[modeId] ?? modeId,
+    finalPrompt: "",
+    durationSeconds: job.durationSeconds ?? 0,
+    resolution: "1080p",
+    previewUrl: job.previewUrl ?? undefined,
+  };
+}
 
 function isHappyHorseVideoModel(modelId: VideoModelId): boolean {
   return modelId === "happyhorse-1.1" || modelId === "happyhorse-1.0";
@@ -335,7 +359,7 @@ function referenceRoleForKind(kind: ReferenceKind): UnifiedVideoReference["role"
 function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): UnifiedVideoReference[] {
   if (uiModeId === "motion_control") {
     return [
-      ...references.allPurpose.image.slice(0, 1).map((slot) => ({
+      ...references.allPurpose.image.map((slot) => ({
         role: "start_frame" as const,
         url: slot.url,
         label: "主体图",
@@ -345,7 +369,7 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
         sourceTaskModel: slot.sourceTaskModel,
         sourceTaskOutputIndex: slot.sourceTaskOutputIndex,
       })),
-      ...references.allPurpose.video.slice(0, 1).map((slot) => ({
+      ...references.allPurpose.video.map((slot) => ({
         role: "motion_source_video" as const,
         url: slot.url,
         label: "动作视频",
@@ -356,7 +380,7 @@ function buildReferences(uiModeId: UiVideoModeId, references: ReferenceState): U
   }
   if (uiModeId === "video_edit") {
     return [
-      ...references.allPurpose.video.slice(0, 1).map((slot, index) => ({
+      ...references.allPurpose.video.map((slot, index) => ({
         role: "video_reference" as const,
         url: slot.url,
         label: index === 0 ? "原视频" : kindSlotLabel("video", index),
@@ -521,6 +545,13 @@ export default function VideoPage() {
     () => effectiveModeFromUi(selectedUiModeId, references),
     [selectedUiModeId, references],
   );
+  const referenceConstraintModeId: VideoGenerationModeId = selectedUiModeId === "start_end_frame"
+    ? "start_end_frame"
+    : selectedUiModeId;
+  const referenceConstraint = useMemo(
+    () => getVideoReferenceConstraint(safeModelId, referenceConstraintModeId),
+    [referenceConstraintModeId, safeModelId],
+  );
   const currentParameterReferences = useMemo(
     () => buildReferences(selectedUiModeId, references),
     [references, selectedUiModeId],
@@ -592,21 +623,104 @@ export default function VideoPage() {
       ...pendingGenerations.map((pending) => ({ kind: "pending" as const, pending })),
     ];
   }, [pendingGenerations, records]);
+  const activeJobIdsKey = useMemo(
+    () => pendingGenerations.flatMap((item) => item.jobId ? [item.jobId] : []).join("|"),
+    [pendingGenerations],
+  );
   const presetRailVisibleCount = Math.min(Math.max(presetRailItems.length, 1), 5);
   const historyRailVisibleCount = Math.min(Math.max(sidebarHistoryRecords.length, 1), 5);
   const presetRailStyle = { "--rail-visible-count": presetRailVisibleCount } as CSSProperties;
   const historyRailStyle = { "--rail-visible-count": historyRailVisibleCount } as CSSProperties;
+  const galleryLoadSequenceRef = useRef(0);
+
+  const remainingReferenceCapacity = useCallback((kind: ReferenceKind, index = 0) => {
+    if (selectedUiModeId === "start_end_frame") return Math.max(0, referenceConstraint.image.max - index);
+    return Math.max(0, referenceConstraint[kind].max - index);
+  }, [referenceConstraint, selectedUiModeId]);
 
   useEffect(() => {
     if (!workspaceReady) return;
+    const sequence = ++galleryLoadSequenceRef.current;
+    setRecords([]);
     void fetchVideoGalleryRecords(projectId)
-      .then((rows) => setRecords(rows))
+      .then((rows) => {
+        if (sequence === galleryLoadSequenceRef.current) setRecords(rows);
+      })
       .catch((e) => console.warn("[video] gallery load failed", e));
+    return () => {
+      galleryLoadSequenceRef.current += 1;
+    };
   }, [workspaceReady, projectId]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    const controller = new AbortController();
+    void fetchActiveVideoJobs(projectId, controller.signal)
+      .then((jobs) => setPendingGenerations(jobs.map(pendingFromJob)))
+      .catch((loadError) => {
+        if (!controller.signal.aborted) console.warn("[video] active job recovery failed", loadError);
+      });
+    return () => controller.abort();
+  }, [projectId, workspaceReady]);
+
+  useEffect(() => {
+    if (!activeJobIdsKey) return;
+    const activeJobIds = activeJobIdsKey.split("|");
+    let cancelled = false;
+    const poll = async () => {
+      const settled = await Promise.allSettled(activeJobIds.map((jobId) => fetchVideoJob(jobId)));
+      if (cancelled) return;
+      let refreshGallery = false;
+      for (const outcome of settled) {
+        if (outcome.status !== "fulfilled") continue;
+        const job = outcome.value;
+        if (job.status === "succeeded") {
+          const url = videoJobResultUrl(job);
+          if (url) setResultUrl(url);
+          refreshGallery = true;
+          setPendingGenerations((current) => current.filter((item) => item.jobId !== job.id));
+        } else if (job.status === "failed") {
+          const message = typeof job.error === "string" ? job.error : job.error?.message;
+          setError(message || "CRUN 明确返回生成失败。");
+          setPendingGenerations((current) => current.filter((item) => item.jobId !== job.id));
+        } else {
+          setPendingGenerations((current) => current.map((item) => item.jobId === job.id ? pendingFromJob(job) : item));
+        }
+      }
+      if (refreshGallery) {
+        void fetchVideoGalleryRecords(projectId).then(setRecords).catch((error) => console.warn("[video] gallery refresh failed", error));
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 15_000);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeJobIdsKey, projectId]);
 
   useEffect(() => {
     setPortalMounted(true);
   }, []);
+
+  useEffect(() => {
+    setReferences((current) => {
+      const next = createEmptyReferences();
+      next.frames = current.frames.map((slot, index) => index < referenceConstraint.image.max ? slot : null) as [ReferenceSlot, ReferenceSlot];
+      for (const kind of REFERENCE_KINDS) {
+        next.allPurpose[kind] = current.allPurpose[kind].slice(0, referenceConstraint[kind].max);
+      }
+      const removed = current.frames.filter(Boolean).length - next.frames.filter(Boolean).length
+        + REFERENCE_KINDS.reduce((total, kind) => total + current.allPurpose[kind].length - next.allPurpose[kind].length, 0);
+      if (removed === 0) return current;
+      current.frames.forEach((slot, index) => {
+        if (slot && !next.frames[index]) revokeLocalPreviewUrl(slot.previewUrl);
+      });
+      REFERENCE_KINDS.forEach((kind) => current.allPurpose[kind].slice(referenceConstraint[kind].max).forEach((slot) => revokeLocalPreviewUrl(slot.previewUrl)));
+      setError(`已按当前模型和模式的素材限制移除 ${removed} 个超额素材。`);
+      return next;
+    });
+  }, [referenceConstraint, safeModelId, selectedUiModeId]);
 
   useEffect(() => {
     const localPreviewUrls = localPreviewUrlsRef.current;
@@ -902,10 +1016,15 @@ export default function VideoPage() {
 
   async function uploadReferenceFiles(kind: ReferenceKind, index: number, files: FileList | File[] | null | undefined) {
     if (!files) return;
-    const accepted = Array.from(files).filter((file) => fileMatchesKind(file, kind));
+    const matching = Array.from(files).filter((file) => fileMatchesKind(file, kind));
+    const capacity = remainingReferenceCapacity(kind, index);
+    const accepted = matching.slice(0, capacity);
     if (accepted.length === 0) {
       setError(`请选择${kindGroupLabel(kind)}素材。`);
       return;
+    }
+    if (matching.length > capacity) {
+      setError(`当前模型此模式最多支持 ${selectedUiModeId === "start_end_frame" ? referenceConstraint.image.max : referenceConstraint[kind].max} 个${kindGroupLabel(kind)}素材，已只接受前 ${capacity} 个。`);
     }
     try {
       const staged = await Promise.all(accepted.map((file) => localReferenceSlotFromFile(kind, file)));
@@ -995,7 +1114,10 @@ export default function VideoPage() {
   }
 
   async function applyProjectAssetsAsReferences(kind: Extract<ReferenceKind, "image" | "video">, index: number, assets: ProjectAsset[]) {
-    const slots = await Promise.all(assets.map(async (asset) => {
+    const capacity = remainingReferenceCapacity(kind, index);
+    const acceptedAssets = assets.slice(0, capacity);
+    if (assets.length > capacity) setError(`当前模型此模式最多支持 ${referenceConstraint[kind].max} 个${kindGroupLabel(kind)}素材。`);
+    const slots = await Promise.all(acceptedAssets.map(async (asset) => {
       const durationSeconds = kind === "video" ? await readVideoDuration(asset.primaryImageUrl) : undefined;
       return {
         kind,
@@ -1039,7 +1161,10 @@ export default function VideoPage() {
     index: number,
     selections: ProjectGenerationRecordSelection[],
   ) {
-    const kindSelections = selections.filter((selection) => selection.kind === kind);
+    const matchingSelections = selections.filter((selection) => selection.kind === kind);
+    const capacity = remainingReferenceCapacity(kind, index);
+    const kindSelections = matchingSelections.slice(0, capacity);
+    if (matchingSelections.length > capacity) setError(`当前模型此模式最多支持 ${referenceConstraint[kind].max} 个${kindGroupLabel(kind)}素材。`);
     if (kindSelections.length === 0) return;
     const slots: Array<NonNullable<ReferenceSlot> | null> = await Promise.all(kindSelections.map(async (selection) => {
       const url = selection.kind === "image" ? selection.record.imageUrl?.trim() : selection.record.videoUrl?.trim();
@@ -1277,6 +1402,11 @@ export default function VideoPage() {
       setError(`模型「${getVideoModelDefinition(safeModelId).label}」当前不支持动作迁移模式。`);
       return;
     }
+    const referenceValidation = validateVideoReferences(safeModelId, finalEffectiveModeId, allReferences);
+    if (!referenceValidation.valid) {
+      setError(referenceValidation.error);
+      return;
+    }
     const finalParameterCapabilities = getVideoParameterCapabilities(safeModelId, finalEffectiveModeId, allReferences);
     const finalDurationCapability = finalParameterCapabilities.durationCapability;
     const requestDuration = finalParameterCapabilities.supportsDuration && finalDurationCapability
@@ -1350,6 +1480,9 @@ export default function VideoPage() {
         userMessage?: string;
         providerTaskId?: string;
         videoUrl?: string;
+        jobId?: string;
+        requestId?: string;
+        status?: VideoGenerationJob["status"];
       };
       if (!res.ok) {
         throw new Error(formatGenerationErrorForDisplay({
@@ -1359,6 +1492,14 @@ export default function VideoPage() {
           fallbackCode: `HTTP_${res.status}`,
         }));
       }
+      if (res.status === 202 && data.jobId) {
+        setPendingGenerations((current) => current.map((item) => item.id === requestId ? {
+          ...item,
+          jobId: data.jobId,
+          status: data.status ?? "submitted",
+        } : item));
+        return;
+      }
       const videoUrl = typeof data.videoUrl === "string" ? data.videoUrl.trim() : "";
       if (!videoUrl) throw new Error("服务器未返回视频地址");
       setResultUrl(videoUrl);
@@ -1366,7 +1507,6 @@ export default function VideoPage() {
     } catch (generationError) {
       const message = generationError instanceof Error ? generationError.message : "生视频失败";
       setError(message);
-    } finally {
       setPendingGenerations((prev) => prev.filter((item) => item.id !== requestId));
     }
   }
@@ -1597,7 +1737,7 @@ export default function VideoPage() {
                             {!item.pending.previewUrl ? <span className={styles.historyPendingBlank} aria-hidden /> : null}
                             <span className={styles.historyPendingSpinner} aria-hidden />
                             <span className={styles.historyMeta}>
-                              {item.pending.modeName} · {item.pending.durationSeconds}s
+                              {item.pending.modeName} · {item.pending.status ? videoJobStatusLabel(item.pending.status) : "提交中"}
                             </span>
                           </div>
                         ) : (
@@ -1680,9 +1820,12 @@ export default function VideoPage() {
                   </div>
                 ))
               ) : (
-                referenceKindsForUiMode(selectedUiModeId, safeModelId).map((kind) => (
+                referenceKindsForUiMode(selectedUiModeId, safeModelId).filter((kind) => referenceConstraint[kind].max > 0).map((kind) => (
                   <div key={kind} className={styles.refGroup} aria-label={`${kindGroupLabel(kind)}素材`}>
-                    {[...references.allPurpose[kind], null].map((slot, index) => (
+                    {[
+                      ...references.allPurpose[kind],
+                      ...(references.allPurpose[kind].length < referenceConstraint[kind].max ? [null] : []),
+                    ].map((slot, index) => (
                       <div
                         key={`${kind}-${index}`}
                         className={[styles.refSlot, slot ? styles.refSlotFilled : styles.refSlotEmpty].join(" ")}
@@ -1699,7 +1842,7 @@ export default function VideoPage() {
                           className={styles.hiddenInput}
                           type="file"
                           accept={kindAccept(kind)}
-                          multiple
+                          multiple={remainingReferenceCapacity(kind, index) > 1}
                           onChange={(e) => {
                             void uploadReferenceFiles(kind, index, e.target.files);
                           }}
@@ -2119,6 +2262,7 @@ export default function VideoPage() {
             <ProjectAssetPickerDialog
               projectId={projectId}
               allowedKinds={[projectAssetPicker.kind]}
+              maxSelection={remainingReferenceCapacity(projectAssetPicker.kind, projectAssetPicker.index)}
               onClose={() => setProjectAssetPicker(null)}
               onSelect={(assets) => void applyProjectAssetsAsReferences(projectAssetPicker.kind, projectAssetPicker.index, assets)}
             />,
@@ -2130,6 +2274,7 @@ export default function VideoPage() {
             <ProjectGenerationRecordPickerDialog
               projectId={projectId}
               allowedKinds={[generationRecordPicker.kind]}
+              maxSelection={remainingReferenceCapacity(generationRecordPicker.kind, generationRecordPicker.index)}
               onClose={() => setGenerationRecordPicker(null)}
               onSelect={(selections) => void applyGenerationRecordsAsReferences(generationRecordPicker.kind, generationRecordPicker.index, selections)}
             />,

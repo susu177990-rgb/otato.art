@@ -2,7 +2,7 @@
 
 import type { ChatConversationSummary } from "@/lib/chat/types";
 import imageStyles from "@/app/image/image-page.module.css";
-import type { CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import railStyles from "./chat-side-rail.module.css";
 import styles from "./chat-session-rail.module.css";
 
@@ -31,6 +31,7 @@ export function ChatSessionRail({
   onNew,
   onStartRename,
   onCommitRename,
+  onCancelRename,
   onDelete,
 }: {
   summaries: ChatConversationSummary[];
@@ -42,8 +43,10 @@ export function ChatSessionRail({
   onNew: () => void;
   onStartRename: (id: string, title: string) => void;
   onCommitRename: () => void;
+  onCancelRename: () => void;
   onDelete: (id: string) => void;
 }) {
+  const cancelRenameRef = useRef(false);
   const items = [{ kind: "new" as const, id: "__new__" }, ...summaries.map((s) => ({ kind: "session" as const, session: s }))];
   const faded = items.length > 5;
   const visibleCount = Math.min(Math.max(items.length, 1), 5);
@@ -92,10 +95,24 @@ export function ChatSessionRail({
                             className={[imageStyles.modeButton, railStyles.railCard, styles.renameInput].join(" ")}
                             value={renameDraft}
                             onChange={(e) => onRenameDraftChange(e.target.value)}
-                            onBlur={() => onCommitRename()}
+                            onBlur={() => {
+                              if (cancelRenameRef.current) {
+                                cancelRenameRef.current = false;
+                                return;
+                              }
+                              onCommitRename();
+                            }}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") onCommitRename();
-                              if (e.key === "Escape") onCommitRename();
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                cancelRenameRef.current = true;
+                                onCommitRename();
+                              }
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                cancelRenameRef.current = true;
+                                onCancelRename();
+                              }
                             }}
                             autoFocus
                             aria-label="重命名会话"

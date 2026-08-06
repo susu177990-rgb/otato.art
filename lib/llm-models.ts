@@ -101,7 +101,7 @@ export function normalizeLlmSettings(value: unknown): Settings {
     models[DEFAULT_LLM_MODEL_ID] = DEFAULT_SETTINGS.models[DEFAULT_LLM_MODEL_ID];
   }
 
-  const normalizedDefaultModelId = normalizeModelId(
+  let normalizedDefaultModelId = normalizeModelId(
     row.defaultModelId,
     Object.keys(models)[0] ?? DEFAULT_LLM_MODEL_ID,
   );
@@ -117,6 +117,10 @@ export function normalizeLlmSettings(value: unknown): Settings {
     };
   }
 
+  if (!models[normalizedDefaultModelId]?.enabled) {
+    normalizedDefaultModelId = Object.values(models).find((model) => model.enabled)?.id ?? normalizedDefaultModelId;
+  }
+
   const resolvedDefault = models[normalizedDefaultModelId];
 
   return {
@@ -129,8 +133,32 @@ export function normalizeLlmSettings(value: unknown): Settings {
 }
 
 export function resolveLlmModel(settings: Settings, preferredModelId?: string | null): LlmModelConfig {
+  return settings.models[resolveLlmModelId(settings, preferredModelId)]
+    ?? DEFAULT_SETTINGS.models[DEFAULT_LLM_MODEL_ID];
+}
+
+export function resolveLlmModelId(settings: Settings, preferredModelId?: string | null): string {
   const requestedId = text(preferredModelId);
   const requested = requestedId ? settings.models[requestedId] : undefined;
-  const fallback = settings.models[settings.defaultModelId] ?? Object.values(settings.models)[0] ?? DEFAULT_SETTINGS.models[DEFAULT_LLM_MODEL_ID];
-  return requested && requested.enabled ? requested : fallback;
+  if (requested?.enabled) return requested.id;
+  const configuredDefault = settings.models[settings.defaultModelId];
+  if (configuredDefault?.enabled) return configuredDefault.id;
+  return Object.values(settings.models).find((model) => model.enabled)?.id
+    ?? configuredDefault?.id
+    ?? Object.values(settings.models)[0]?.id
+    ?? DEFAULT_LLM_MODEL_ID;
+}
+
+export function setDefaultLlmModel(settings: Settings, modelId: string): Settings {
+  const model = settings.models[modelId];
+  if (!model) return settings;
+
+  return {
+    ...settings,
+    defaultModelId: modelId,
+    models: {
+      ...settings.models,
+      [modelId]: { ...model, enabled: true },
+    },
+  };
 }

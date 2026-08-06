@@ -8,7 +8,7 @@ import { deriveConversationTitleFromFirstMessage } from "@/lib/chat/conversation
 import type { ChatConversation, ChatMessage, SkillPackRecord } from "@/lib/chat/types";
 import { getCanvasBoard } from "@/lib/canvas/board-store";
 import type { CanvasNode } from "@/lib/canvas/types";
-import { createChatConversation, getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
+import { appendChatConversationTurn, createChatConversation, getChatConversation } from "@/lib/db/chat-store";
 import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
@@ -16,6 +16,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ImageModelId } from "@/lib/image-workspace";
 import { projectIdFromRequest, type ProjectScope } from "@/lib/db/project-scope";
 import { classifyGenerationError } from "@/lib/generation-error-classifier";
+import { ChatServiceError, normalizeChatError } from "@/lib/chat/errors";
+import {
+  claimChatTurn,
+  markChatTurnCompleted,
+  markChatTurnFailed,
+  markChatTurnFinalizing,
+} from "@/lib/db/chat-turn-store";
 
 export const maxDuration = 300;
 
@@ -139,59 +146,83 @@ export async function POST(req: NextRequest) {
     const boardId = typeof body.boardId === "string" ? body.boardId.trim() : "";
     const nodeId = typeof body.nodeId === "string" ? body.nodeId.trim() : "";
     const projectId = projectIdFromRequest(req, body.projectId);
-    const scope = projectId === undefined ? {} : { projectId };
+    const requestedScope = projectId === undefined ? {} : { projectId };
     const userMessage = parseUserMessage(body.userMessage);
     if (!boardId || !nodeId || !userMessage || userMessage.parts.length === 0) {
       return Response.json(generationErrorJson("缺少 boardId、nodeId 或有效 userMessage", "canvas_chat_missing_input", 400), { status: 400 });
     }
 
-    const board = await getCanvasBoard(supabase, boardId, scope);
+    const board = await getCanvasBoard(supabase, boardId, requestedScope);
     if (!board) {
       return Response.json(generationErrorJson("画布不存在", "canvas_chat_board_not_found", 404), { status: 404 });
     }
+    const scope: ProjectScope = { projectId: board.projectId ?? null };
     const sourceNode = mustBeTextNode(board.nodes.find((node) => node.id === nodeId));
 
     const conv = await resolveConversation({ supabase, userId: user.id, sourceNode, userMessage, scope });
+    const turnClaim = await claimChatTurn(supabase, user.id, conv.id, userMessage.id);
     const snapshot = await getWorkspaceSnapshot(supabase);
     const preferredLlmModelId = typeof body.preferredLlmModelId === "string" && body.preferredLlmModelId.trim()
       ? body.preferredLlmModelId.trim()
       : conv.preferredLlmModelId || null;
     const chatApiConfig = llmToChatApiConfig(snapshot.llm, preferredLlmModelId);
-    const skillPacks = await listSiteSkillPacks(supabase);
-    const chatPromptPresets = await listSitePromptPresetsByKind(supabase, "chat");
-
-    const skillBlocks = conv.chatMode === "skill" ? getSkillMarkdownBlocks(conv.selectedSkillPackId, skillPacks) : [];
-    const chatPromptPresetBlock =
-      conv.chatMode === "prompt" ? getChatPromptPresetBlock(conv.selectedChatPresetId, chatPromptPresets) : null;
+    const skillBlocks = conv.chatMode === "skill" && conv.selectedSkillPackId
+      ? getSkillMarkdownBlocks(conv.selectedSkillPackId, await listSiteSkillPacks(supabase))
+      : [];
+    const chatPromptPresetBlock = conv.chatMode === "prompt" && conv.selectedChatPresetId
+      ? getChatPromptPresetBlock(conv.selectedChatPresetId, await listSitePromptPresetsByKind(supabase, "chat"))
+      : null;
     const preferredImageModelId = effectiveAgentImageModelId(body.preferredImageModelId, conv.preferredImageModelId);
     const messagesForApi: ChatMessage[] = [...conv.messages, userMessage];
 
-    const newMessages = await runAgentChatTurn({
-      chatApiConfig,
-      imageWorkspace: snapshot.imageWorkspace,
-      defaultImageModelId: preferredImageModelId,
-      conversationMessages: messagesForApi,
-      skillMarkdownBlocks: skillBlocks,
-      chatPromptPresetBlock,
-      conversationAttachments: conv.attachments ?? [],
-      supabase,
-      userId: user.id,
-    });
-
-    const updatedConversation: ChatConversation = {
-      ...conv,
-      messages: [...messagesForApi, ...newMessages],
-      preferredImageModelId,
-      preferredLlmModelId,
-      updatedAt: Date.now(),
-    };
-
-    if (conv.messages.length === 0) {
-      const title = deriveConversationTitleFromFirstMessage(textFromMessage(userMessage));
-      if (title) updatedConversation.title = title;
+    let newMessages: ChatMessage[];
+    if (!turnClaim.claimed) {
+      if ((turnClaim.turn.status === "finalizing" || turnClaim.turn.status === "completed") && turnClaim.turn.resultMessages) {
+        newMessages = turnClaim.turn.resultMessages;
+      } else if (turnClaim.turn.status === "pending") {
+        throw new ChatServiceError("CHAT_TURN_RUNNING", 409, "这个画布对话任务正在运行，请勿重复提交。");
+      } else {
+        throw new ChatServiceError("CHAT_TURN_FAILED", 409, "这个画布对话任务已失败，请重新运行。");
+      }
+    } else {
+      try {
+        newMessages = await runAgentChatTurn({
+          chatApiConfig,
+          imageWorkspace: snapshot.imageWorkspace,
+          defaultImageModelId: preferredImageModelId,
+          conversationMessages: messagesForApi,
+          skillMarkdownBlocks: skillBlocks,
+          chatPromptPresetBlock,
+          conversationAttachments: conv.attachments ?? [],
+          supabase,
+          userId: user.id,
+          projectId: board.projectId ?? null,
+        });
+        await markChatTurnFinalizing(supabase, turnClaim.turn.id, newMessages);
+      } catch (runError) {
+        await markChatTurnFailed(
+          supabase,
+          turnClaim.turn.id,
+          runError instanceof Error ? runError.message : String(runError),
+        );
+        throw runError;
+      }
     }
 
-    await saveChatConversation(supabase, user.id, updatedConversation, scope);
+    const title = conv.messages.length === 0
+      ? deriveConversationTitleFromFirstMessage(textFromMessage(userMessage))
+      : null;
+    await appendChatConversationTurn(supabase, {
+      conversationId: conv.id,
+      userMessage,
+      responseMessages: newMessages,
+      title,
+      preferredImageModelId,
+      preferredLlmModelId,
+    });
+    await markChatTurnCompleted(supabase, turnClaim.turn.id);
+    const updatedConversation = await getChatConversation(supabase, user.id, conv.id, scope);
+    if (!updatedConversation) throw new Error("conversation_missing_after_append");
     const previewMarkdown = latestAssistantMarkdown(updatedConversation.messages);
 
     const sourceNodeNext: CanvasNode = {
@@ -215,8 +246,11 @@ export async function POST(req: NextRequest) {
       conversation: updatedConversation,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "无线画布对话失败";
-    console.error("[canvas/chat-run POST]", error);
-    return Response.json(generationErrorJson(message, "canvas_chat_run_failed", 500), { status: 500 });
+    const normalized = normalizeChatError(error);
+    console.error("[canvas/chat-run POST]", normalized.code, normalized.detail || normalized.message);
+    return Response.json(
+      generationErrorJson(normalized.message, normalized.code, normalized.status),
+      { status: normalized.status },
+    );
   }
 }

@@ -17,6 +17,24 @@ interface ChatRequestBody {
   preferredLlmModelId?: string;
 }
 
+function boundedLegacyMessages(value: unknown): Message[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized = value.filter((message): message is Message => {
+    if (!message || typeof message !== "object" || Array.isArray(message)) return false;
+    const row = message as Partial<Message>;
+    return (row.role === "user" || row.role === "assistant") && typeof row.content === "string";
+  });
+  const selected: Message[] = [];
+  let chars = 0;
+  for (let index = normalized.length - 1; index >= 0 && selected.length < 40; index -= 1) {
+    const message = normalized[index];
+    if (selected.length > 0 && chars + message.content.length > 80_000) break;
+    selected.push(message);
+    chars += message.content.length;
+  }
+  return selected.reverse();
+}
+
 export async function POST(req: NextRequest) {
   let body: ChatRequestBody;
   try {
@@ -25,7 +43,11 @@ export async function POST(req: NextRequest) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const { messages, creativeDirectionId, projectContext } = body;
+  const messages = boundedLegacyMessages(body.messages);
+  const { creativeDirectionId, projectContext } = body;
+  if (!messages?.length) {
+    return Response.json({ error: "消息格式无效或为空", code: "INVALID_CHAT_MESSAGES" }, { status: 400 });
+  }
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -72,12 +94,16 @@ export async function POST(req: NextRequest) {
         messages: apiMessages,
         stream: true,
       }),
-    });
+    }, { maxAttempts: 1 });
 
     if (!upstream.ok) {
-      const errText = await upstream.text();
+      const errText = (await upstream.text()).slice(0, 2_000);
+      console.error("[legacy chat upstream]", upstream.status, errText);
+      const error = upstream.status === 429
+        ? "当前模型通道请求过于频繁，请稍后再试或切换其他模型。"
+        : `当前模型通道请求失败（${upstream.status}）。`;
       return new Response(
-        JSON.stringify({ error: `API 错误 (${upstream.status}): ${errText}` }),
+        JSON.stringify({ error, code: upstream.status === 429 ? "LLM_RATE_LIMITED" : "LLM_UPSTREAM_ERROR" }),
         { status: upstream.status, headers: { "Content-Type": "application/json" } }
       );
     }

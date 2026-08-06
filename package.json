@@ -36,7 +36,9 @@
     "report:script-agent-migration": "npx tsx scripts/report-script-agent-migration-readiness.ts",
     "credits:crun-prices": "npx tsx scripts/generate-crun-credit-prices.ts",
     "migrate:supabase": "npx tsx scripts/migrate-local-data-to-supabase.ts",
-    "db:push": "npx tsx scripts/push-supabase-migrations.ts"
+    "db:push": "npx tsx scripts/push-supabase-migrations.ts",
+    "audit:media-cleanup": "npx tsx scripts/audit-media-cleanup.ts",
+    "audit:integrity": "npx tsx scripts/audit-integrity.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
@@ -53,6 +55,7 @@
     "jszip": "^3.10.1",
     "lexical": "^0.45.0",
     "mammoth": "^1.12.0",
+    "music-metadata": "^11.13.0",
     "nanoid": "^5.1.7",
     "next": "16.2.9",
     "pdf-parse": "^1.1.1",

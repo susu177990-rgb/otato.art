@@ -165,6 +165,21 @@ export async function deleteMediaPrefix(prefix: string): Promise<number> {
   return deleted;
 }
 
+export async function listMediaObjectKeys(prefix = ""): Promise<string[]> {
+  let continuationToken: string | undefined;
+  const keys: string[] = [];
+  do {
+    const listed = await r2Client().send(new ListObjectsV2Command({
+      Bucket: config().bucket,
+      Prefix: prefix.replace(/^\/+/, ""),
+      ContinuationToken: continuationToken,
+    }));
+    keys.push(...(listed.Contents ?? []).map((item) => item.Key).filter((key): key is string => Boolean(key)));
+    continuationToken = listed.NextContinuationToken;
+  } while (continuationToken);
+  return keys;
+}
+
 export async function copyRemoteMediaToStorage(input: {
   sourceUrl: string;
   key: string;

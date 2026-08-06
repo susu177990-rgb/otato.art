@@ -39,7 +39,15 @@ export async function saveChatConversation(conv: ChatConversation, projectId?: s
   const res = await fetch(`/api/chat/conversations/${conv.id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...conv, projectId }),
+    body: JSON.stringify({
+      title: conv.title,
+      chatMode: conv.chatMode,
+      selectedSkillPackId: conv.selectedSkillPackId,
+      selectedChatPresetId: conv.selectedChatPresetId,
+      preferredLlmModelId: conv.preferredLlmModelId,
+      preferredImageModelId: conv.preferredImageModelId,
+      projectId,
+    }),
   });
   if (!res.ok) throw new Error("无法保存会话");
   const data = (await res.json()) as { conversation: ChatConversation };
@@ -59,7 +67,7 @@ export async function sendChatAgentTurn(
   preferredImageModelId?: ImageModelId,
   preferredLlmModelId?: string,
   projectId?: string,
-): Promise<ChatConversation> {
+): Promise<{ conversation: ChatConversation; newMessages: ChatMessage[] }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHAT_AGENT_TIMEOUT_MS);
 
@@ -80,8 +88,7 @@ export async function sendChatAgentTurn(
       const err = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(err.error || "发送失败");
     }
-    const data = (await res.json()) as { conversation: ChatConversation };
-    return data.conversation;
+    return (await res.json()) as { conversation: ChatConversation; newMessages: ChatMessage[] };
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
       throw new Error("请求超时（超过 5 分钟）。若挂载了 Skill 生图或多轮工具，请稍后重试或换更短消息。");

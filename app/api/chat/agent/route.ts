@@ -4,9 +4,17 @@ import { effectiveAgentImageModelId } from "@/lib/chat/image-model-catalog";
 import { llmToChatApiConfig } from "@/lib/chat-settings";
 import type { ImageModelId } from "@/lib/image-workspace";
 import { runAgentChatTurn } from "@/lib/chat/agent";
+import { normalizeChatError, ChatServiceError } from "@/lib/chat/errors";
+import { parseChatUserMessage } from "@/lib/chat/request-validation";
 import { deriveConversationTitleFromFirstMessage } from "@/lib/chat/conversation-title";
-import type { ChatAttachment, ChatMessage, ChatMessagePart, SkillPackRecord } from "@/lib/chat/types";
-import { getChatConversation, saveChatConversation } from "@/lib/db/chat-store";
+import type { ChatAttachment, ChatMessagePart, SkillPackRecord } from "@/lib/chat/types";
+import { appendChatConversationTurn, getChatConversation } from "@/lib/db/chat-store";
+import {
+  claimChatTurn,
+  markChatTurnCompleted,
+  markChatTurnFailed,
+  markChatTurnFinalizing,
+} from "@/lib/db/chat-turn-store";
 import { listSitePromptPresetsByKind } from "@/lib/db/prompt-preset-store";
 import { listSiteSkillPacks } from "@/lib/db/site-skill-store";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
@@ -42,13 +50,16 @@ function getChatPromptPresetBlock(
 
 type AgentBody = {
   conversationId: string;
-  userMessage: ChatMessage;
+  userMessage: unknown;
   preferredImageModelId?: ImageModelId;
   preferredLlmModelId?: string;
   projectId?: string | null;
 };
 
 export async function POST(req: Request) {
+  let claimedTurn: { id: string } | null = null;
+  let ownsClaim = false;
+  let resultPersisted = false;
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -56,50 +67,92 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
-    const body = (await req.json()) as AgentBody;
-    if (!body.conversationId || !body.userMessage) {
+    const body = (await req.json().catch(() => null)) as AgentBody | null;
+    if (!body?.conversationId || !body.userMessage) {
       return NextResponse.json({ error: "conversationId 与 userMessage 必填" }, { status: 400 });
     }
+    const userMessage = parseChatUserMessage(body.userMessage);
 
     const projectId = projectIdFromRequest(req, body.projectId);
     const scope = projectId === undefined ? {} : { projectId };
     const conv = await getChatConversation(supabase, user.id, body.conversationId, scope);
     if (!conv) return NextResponse.json({ error: "会话不存在" }, { status: 404 });
 
-    const snapshot = await getWorkspaceSnapshot(supabase);
-    const preferredLlmModelId = body.preferredLlmModelId?.trim() || conv.preferredLlmModelId || null;
-    const chatApiConfig = llmToChatApiConfig(snapshot.llm, preferredLlmModelId);
-    const skillPacks = await listSiteSkillPacks(supabase);
-    const chatPromptPresets = await listSitePromptPresetsByKind(supabase, "chat");
-    const skillBlocks =
-      conv.chatMode === "skill" ? getSkillMarkdownBlocks(conv.selectedSkillPackId, skillPacks) : [];
-    const chatPromptPresetBlock =
-      conv.chatMode === "prompt"
-        ? getChatPromptPresetBlock(conv.selectedChatPresetId, chatPromptPresets)
-        : null;
+    const claim = await claimChatTurn(supabase, user.id, conv.id, userMessage.id);
+    claimedTurn = claim.turn;
+    ownsClaim = claim.claimed;
 
-    const registryEntries = body.userMessage.parts
-      .filter((p): p is Extract<ChatMessagePart, { type: "attachment" }> => p.type === "attachment")
-      .map((p) => {
-        const att: ChatAttachment = p.attachment;
+    const registryEntries = userMessage.parts
+      .filter((part): part is Extract<ChatMessagePart, { type: "attachment" }> => part.type === "attachment")
+      .map((part) => {
+        const attachment: ChatAttachment = part.attachment;
         return {
-          id: att.registryId || `att-${Date.now()}`,
-          messageId: body.userMessage.id,
-          name: att.name,
-          mime: att.mime,
-          kind: att.kind,
+          id: attachment.registryId!,
+          messageId: userMessage.id,
+          name: attachment.name,
+          mime: attachment.mime,
+          kind: attachment.kind,
           createdAt: Date.now(),
-          dataUrl: att.dataUrl,
+          dataUrl: attachment.dataUrl,
         };
       });
 
-    const messagesForApi: ChatMessage[] = [...conv.messages, body.userMessage];
-    const mergedAttachments = [...(conv.attachments || []), ...registryEntries];
-
+    const preferredLlmModelId = body.preferredLlmModelId?.trim() || conv.preferredLlmModelId || null;
     const preferredImageModelId = effectiveAgentImageModelId(
       body.preferredImageModelId,
       conv.preferredImageModelId,
     );
+    const title = conv.messages.length === 0
+      ? deriveConversationTitleFromFirstMessage(
+        userMessage.parts
+          .filter((part): part is { type: "text"; text: string } => part.type === "text")
+          .map((part) => part.text)
+          .join("")
+          .trim(),
+      )
+      : null;
+
+    const finalize = async (resultMessages: NonNullable<typeof claim.turn.resultMessages>) => {
+      await appendChatConversationTurn(supabase, {
+        conversationId: conv.id,
+        userMessage,
+        responseMessages: resultMessages,
+        newAttachments: registryEntries,
+        title,
+        preferredLlmModelId,
+        preferredImageModelId,
+      });
+      await markChatTurnCompleted(supabase, claim.turn.id);
+      const conversation = await getChatConversation(supabase, user.id, conv.id, scope);
+      if (!conversation) throw new Error("conversation_missing_after_append");
+      return NextResponse.json({ conversation, newMessages: resultMessages });
+    };
+
+    if (!claim.claimed) {
+      if ((claim.turn.status === "finalizing" || claim.turn.status === "completed") && claim.turn.resultMessages) {
+        return await finalize(claim.turn.resultMessages);
+      }
+      if (claim.turn.status === "pending") {
+        throw new ChatServiceError("CHAT_TURN_RUNNING", 409, "这条消息正在生成中，请勿重复发送。");
+      }
+      throw new ChatServiceError("CHAT_TURN_FAILED", 409, "这条消息已失败，请重新发送一条新消息。");
+    }
+
+    const snapshot = await getWorkspaceSnapshot(supabase);
+    const chatApiConfig = llmToChatApiConfig(snapshot.llm, preferredLlmModelId);
+    let skillBlocks: string[] = [];
+    let chatPromptPresetBlock: string | null = null;
+    if (conv.chatMode === "skill" && conv.selectedSkillPackId) {
+      skillBlocks = getSkillMarkdownBlocks(conv.selectedSkillPackId, await listSiteSkillPacks(supabase));
+    } else if (conv.chatMode === "prompt" && conv.selectedChatPresetId) {
+      chatPromptPresetBlock = getChatPromptPresetBlock(
+        conv.selectedChatPresetId,
+        await listSitePromptPresetsByKind(supabase, "chat"),
+      );
+    }
+
+    const messagesForApi = [...conv.messages, userMessage];
+    const mergedAttachments = [...(conv.attachments || []), ...registryEntries];
 
     const newMsgs = await runAgentChatTurn({
       chatApiConfig,
@@ -114,34 +167,20 @@ export async function POST(req: Request) {
       projectId,
     });
 
-    const updated: typeof conv = {
-      ...conv,
-      messages: [...messagesForApi, ...newMsgs],
-      attachments: mergedAttachments,
-      preferredImageModelId,
-      preferredLlmModelId,
-      updatedAt: Date.now(),
-    };
-
-    if (conv.messages.length === 0) {
-      const text = body.userMessage.parts
-        .filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("")
-        .trim();
-      const title = deriveConversationTitleFromFirstMessage(text);
-      if (title) updated.title = title;
-    }
-
-    await saveChatConversation(supabase, user.id, updated, scope);
-
-    return NextResponse.json({
-      conversation: updated,
-      newMessages: newMsgs,
-    });
+    await markChatTurnFinalizing(supabase, claim.turn.id, newMsgs);
+    resultPersisted = true;
+    return await finalize(newMsgs);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "agent_failed";
-    console.error("[chat/agent POST]", e);
-    return NextResponse.json({ error: message || "agent_failed" }, { status: 500 });
+    const error = normalizeChatError(e);
+    if (claimedTurn && ownsClaim && !resultPersisted) {
+      try {
+        const supabase = await createSupabaseServerClient();
+        await markChatTurnFailed(supabase, claimedTurn.id, error.detail || error.message);
+      } catch (markError) {
+        console.error("[chat/agent mark failed]", markError);
+      }
+    }
+    console.error("[chat/agent POST]", error.code, error.detail || error.message);
+    return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
   }
 }
