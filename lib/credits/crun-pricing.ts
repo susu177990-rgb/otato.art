@@ -1,4 +1,4 @@
-import type { GptImageQuality, ImageModelId, ImageSizeTier } from "@/lib/image-workspace";
+import { SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES, type GptImageQuality, type ImageModelId, type ImageSizeTier } from "@/lib/image-workspace";
 import type { VideoModelId, VideoResolution } from "@/lib/video-workspace";
 
 export const CRUN_PRICING_SOURCE = "crun_pricing";
@@ -7,6 +7,7 @@ export const CRUN_CREDITS_PER_USD = 200;
 export const CRUN_USD_CNY_RATE = 6.8;
 export const CREDIT_CNY_FEN_VALUE = 1;
 export const MINIMUM_SALE_COST_MULTIPLIER = 2;
+export const SEEDREAM_5_PRO_REFERENCE_IMAGE_CRUN_CREDITS = 0.5;
 
 export type CrunPriceMetadata = {
   source: typeof CRUN_PRICING_SOURCE;
@@ -51,6 +52,26 @@ export function crunMetadata(crunCredits: number): CrunPriceMetadata {
     crunCreditsPerUsd: CRUN_CREDITS_PER_USD,
     usdCny: CRUN_USD_CNY_RATE,
     crunCredits,
+  };
+}
+
+export function seedream5ProReferenceSurcharge(referenceImageCount: number): {
+  referenceImageCount: number;
+  crunCredits: number;
+  costFen: number;
+  saleCredits: number;
+} {
+  const normalizedCount = Math.min(
+    SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES,
+    Math.max(0, Math.floor(Number.isFinite(referenceImageCount) ? referenceImageCount : 0)),
+  );
+  const crunCredits = normalizedCount * SEEDREAM_5_PRO_REFERENCE_IMAGE_CRUN_CREDITS;
+  const costFen = crunCreditsToCnyFen(crunCredits);
+  return {
+    referenceImageCount: normalizedCount,
+    crunCredits,
+    costFen,
+    saleCredits: saleCreditsForCnyCost(costFen),
   };
 }
 
@@ -114,6 +135,8 @@ export const CRUN_IMAGE_COST_SEEDS: CrunImageCostSeed[] = [
   imageSeed("grok-imagine-i2i", "1K", null, 4),
   imageSeed("grok-imagine-i2i", "2K", null, 4),
   imageSeed("grok-imagine-i2i", "4K", null, 4),
+  imageSeed("seedream-5-pro", "1K", null, 7),
+  imageSeed("seedream-5-pro", "2K", null, 14),
   imageSeed("gpt-image-2", "1K", "low", 6),
   imageSeed("gpt-image-2", "2K", "low", 6.6),
   imageSeed("gpt-image-2", "4K", "low", 7.8),

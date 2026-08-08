@@ -4,6 +4,10 @@ import {
   GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER,
   GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
   GPT_IMAGE_2_PROMPT_MAX_LENGTH,
+  SEEDREAM_5_PRO_ASPECT_RATIO_ORDER,
+  SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES,
+  SEEDREAM_5_PRO_PROMPT_MAX_LENGTH,
+  SEEDREAM_5_PRO_SIZE_ORDER,
   Z_IMAGE_PROMPT_MAX_LENGTH,
   type ImageGalleryReferenceImage,
 } from "@/lib/image-workspace";
@@ -505,6 +509,8 @@ async function readCrunBody(response: Response): Promise<Record<string, unknown>
 const GROK_IMAGINE_ASPECT_RATIOS = new Set<ImageAspectRatio>(["1:1", "2:3", "3:2", "16:9", "9:16"]);
 const Z_IMAGE_ASPECT_RATIOS = new Set<ImageAspectRatio>(["16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "1:1"]);
 const GPT_IMAGE_2_PREMIUM_ASPECT_RATIOS = new Set<ImageAspectRatio>(GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER);
+const SEEDREAM_5_PRO_ASPECT_RATIOS = new Set<ImageAspectRatio>(SEEDREAM_5_PRO_ASPECT_RATIO_ORDER);
+const SEEDREAM_5_PRO_SIZES = new Set<ImageSizeTier>(SEEDREAM_5_PRO_SIZE_ORDER);
 
 function isCrunGrokImagine(modelName: string): boolean {
   return /^grok-imagine(?:\/(?:i2i|t2i))?$/i.test(modelName.trim());
@@ -512,6 +518,10 @@ function isCrunGrokImagine(modelName: string): boolean {
 
 function isCrunZImage(modelName: string): boolean {
   return /^z-image$/i.test(modelName.trim());
+}
+
+function isCrunSeedream5Pro(modelName: string): boolean {
+  return /^bytedance\/seedream-5-pro$/i.test(modelName.trim());
 }
 
 function resolveCrunSubmitModelName(modelName: string, refImages: string[]): string {
@@ -555,6 +565,15 @@ function buildCrunImageInput(
       prompt,
       ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
       aspect_ratio: aspectRatio,
+    };
+  }
+  if (isCrunSeedream5Pro(modelName)) {
+    return {
+      prompt,
+      ...(imageUrls.length > 0 ? { img_urls: imageUrls } : {}),
+      aspect_ratio: aspectRatio,
+      resolution: imageSize,
+      output_format: "jpeg",
     };
   }
   if (isCrunGrokImagine(modelName) && imageUrls.length > 0) {
@@ -635,6 +654,32 @@ async function generateViaCrunTask(
     }
     if (imageUrls.length === 0 && !GROK_IMAGINE_ASPECT_RATIOS.has(aspectRatio)) {
       throw new ImageGenerationError("Grok Imagine 文生图只支持 1:1、2:3、3:2、16:9、9:16 比例。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+  }
+  if (isCrunSeedream5Pro(modelName)) {
+    if (prompt.length > SEEDREAM_5_PRO_PROMPT_MAX_LENGTH) {
+      throw new ImageGenerationError(`Seedream 5.0 Pro 提示词最多支持 ${SEEDREAM_5_PRO_PROMPT_MAX_LENGTH} 个字符。`, {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (imageUrls.length > SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES) {
+      throw new ImageGenerationError(`Seedream 5.0 Pro 最多支持 ${SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES} 张参考图。`, {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (!SEEDREAM_5_PRO_ASPECT_RATIOS.has(aspectRatio)) {
+      throw new ImageGenerationError("Seedream 5.0 Pro 不支持该图片比例。", {
+        ...diagnosticBase,
+        stage: "request_parse",
+      });
+    }
+    if (!SEEDREAM_5_PRO_SIZES.has(imageSize)) {
+      throw new ImageGenerationError("Seedream 5.0 Pro 只支持 1K、2K 分辨率。", {
         ...diagnosticBase,
         stage: "request_parse",
       });

@@ -8,10 +8,10 @@ export type ImageModeId =
 export const IMAGE_MODES: ReadonlyArray<{ id: ImageModeId; label: string }> = [
   { id: "free", label: "自由模式" },
 ];
-export type ImageModelId = "gpt-image-2" | "nano-banana-2" | "nano-banana-pro" | "grok-imagine-i2i" | "z-image";
+export type ImageModelId = "gpt-image-2" | "nano-banana-2" | "nano-banana-pro" | "grok-imagine-i2i" | "seedream-5-pro" | "z-image";
 export type ImageAspectRatio = "auto" | "1:1" | "2:3" | "3:2" | "5:4" | "4:5" | "3:4" | "4:3" | "9:16" | "16:9" | "21:9" | "9:21";
 export type ImageSizeTier = "1K" | "2K" | "4K";
-export type ImageModelProvider = "gpt-image" | "nano-banana" | "grok-imagine" | "z-image";
+export type ImageModelProvider = "gpt-image" | "nano-banana" | "grok-imagine" | "seedream" | "z-image";
 /** OpenAI gpt-image-* `quality`：仅 GPT Image 路由使用 */
 export type GptImageQuality = "low" | "medium" | "high";
 export type GptImageBackground = "auto" | "transparent" | "opaque";
@@ -29,6 +29,10 @@ export const GROK_IMAGINE_I2I_ASPECT_RATIO_ORDER: ImageAspectRatio[] = [];
 export const GROK_IMAGINE_T2I_DEFAULT_ASPECT_RATIO: ImageAspectRatio = "1:1";
 export const GROK_IMAGINE_T2I_PROMPT_MAX_LENGTH = 5000;
 export const GROK_IMAGINE_I2I_PROMPT_MAX_LENGTH = 30000;
+export const SEEDREAM_5_PRO_ASPECT_RATIO_ORDER: ImageAspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"];
+export const SEEDREAM_5_PRO_SIZE_ORDER: ImageSizeTier[] = ["1K", "2K"];
+export const SEEDREAM_5_PRO_PROMPT_MAX_LENGTH = 5000;
+export const SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES = 10;
 export const Z_IMAGE_PROMPT_MAX_LENGTH = 800;
 export const GPT_IMAGE_2_PROMPT_MAX_LENGTH = 10000;
 export const NANO_BANANA_PROMPT_MAX_LENGTH = 20000;
@@ -154,6 +158,7 @@ export const IMAGE_MODEL_ORDER: ImageModelId[] = [
   "nano-banana-2",
   "nano-banana-pro",
   "grok-imagine-i2i",
+  "seedream-5-pro",
   "z-image",
 ];
 
@@ -163,10 +168,21 @@ export function isGrokImagineImageModel(modelId: ImageModelId): boolean {
 
 export function imageAspectRatiosForContext(modelId: ImageModelId, refImageCount: number): ImageAspectRatio[] {
   if (modelId === "gpt-image-2") return GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER;
+  if (modelId === "seedream-5-pro") return SEEDREAM_5_PRO_ASPECT_RATIO_ORDER;
   if (isGrokImagineImageModel(modelId)) {
     return refImageCount > 0 ? GROK_IMAGINE_I2I_ASPECT_RATIO_ORDER : GROK_IMAGINE_T2I_ASPECT_RATIO_ORDER;
   }
   return IMAGE_ASPECT_RATIO_ORDER;
+}
+
+export function imageSizesForContext(modelId: ImageModelId): ImageSizeTier[] {
+  if (modelId === "seedream-5-pro") return SEEDREAM_5_PRO_SIZE_ORDER;
+  return ["1K", "2K", "4K"];
+}
+
+export function normalizeImageSizeForContext(size: ImageSizeTier, modelId: ImageModelId): ImageSizeTier {
+  const supported = imageSizesForContext(modelId);
+  return supported.includes(size) ? size : supported[0] ?? "1K";
 }
 
 export function imageSupportsAspectRatioForContext(modelId: ImageModelId, refImageCount: number): boolean {
@@ -185,6 +201,7 @@ export function normalizeImageAspectRatioForContext(
 export function imagePromptMaxLengthForContext(modelId: ImageModelId, refImageCount: number): number | undefined {
   if (modelId === "gpt-image-2") return GPT_IMAGE_2_PROMPT_MAX_LENGTH;
   if (modelId === "nano-banana-2" || modelId === "nano-banana-pro") return NANO_BANANA_PROMPT_MAX_LENGTH;
+  if (modelId === "seedream-5-pro") return SEEDREAM_5_PRO_PROMPT_MAX_LENGTH;
   if (modelId === "z-image") return Z_IMAGE_PROMPT_MAX_LENGTH;
   if (!isGrokImagineImageModel(modelId)) return undefined;
   return refImageCount > 0 ? GROK_IMAGINE_I2I_PROMPT_MAX_LENGTH : GROK_IMAGINE_T2I_PROMPT_MAX_LENGTH;
@@ -193,6 +210,7 @@ export function imagePromptMaxLengthForContext(modelId: ImageModelId, refImageCo
 export function imageReferenceLimitForContext(modelId: ImageModelId): number {
   if (modelId === "gpt-image-2") return GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES;
   if (isGrokImagineImageModel(modelId)) return 5;
+  if (modelId === "seedream-5-pro") return SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES;
   if (modelId === "z-image") return 0;
   return 10;
 }
@@ -200,6 +218,7 @@ export function imageReferenceLimitForContext(modelId: ImageModelId): number {
 function imageModelProvider(id: ImageModelId): ImageModelProvider {
   if (id === "gpt-image-2") return "gpt-image";
   if (id === "grok-imagine-i2i") return "grok-imagine";
+  if (id === "seedream-5-pro") return "seedream";
   if (id === "z-image") return "z-image";
   return "nano-banana";
 }
@@ -208,7 +227,7 @@ function imageModelFromBaked(id: ImageModelId): ImageModelSettings {
   const row = BAKED_IMAGE_MODEL_DEFAULTS[id];
   return {
     id,
-    label: id === "grok-imagine-i2i" ? "Grok Imagine" : id,
+    label: id === "grok-imagine-i2i" ? "Grok Imagine" : id === "seedream-5-pro" ? "Seedream 5.0 Pro" : id,
     modelName: row.modelName,
     endpointUrl: row.endpointUrl,
     apiKey: pickNonEmptyTrimmed(row.apiKey, BAKED_LLM_SETTINGS.apiKey),
@@ -248,6 +267,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageWorkspaceSettings = {
     "nano-banana-2": imageModelFromBaked("nano-banana-2"),
     "nano-banana-pro": imageModelFromBaked("nano-banana-pro"),
     "grok-imagine-i2i": imageModelFromBaked("grok-imagine-i2i"),
+    "seedream-5-pro": imageModelFromBaked("seedream-5-pro"),
     "z-image": imageModelFromBaked("z-image"),
   },
 };
@@ -322,7 +342,7 @@ function coercePromptModelProvidersByMode(raw: unknown): Record<string, ImageMod
     const list = Array.isArray(val) ? val : [val];
     const providers = list.filter(
       (item): item is ImageModelSettings["provider"] =>
-        item === "gpt-image" || item === "nano-banana" || item === "grok-imagine" || item === "z-image",
+        item === "gpt-image" || item === "nano-banana" || item === "grok-imagine" || item === "seedream" || item === "z-image",
     );
     if (providers.length > 0) out[modeId] = Array.from(new Set(providers));
   }
@@ -461,7 +481,7 @@ export function normalizeIncomingImageModel(
   const modelName = normalizeImageModelName(modelId, o.modelName, "");
   const label = typeof o.label === "string" && o.label.trim() ? o.label.trim() : base.label;
   const provider: ImageModelSettings["provider"] =
-    o.provider === "gpt-image" || o.provider === "nano-banana" || o.provider === "grok-imagine" || o.provider === "z-image"
+    o.provider === "gpt-image" || o.provider === "nano-banana" || o.provider === "grok-imagine" || o.provider === "seedream" || o.provider === "z-image"
       ? o.provider
       : base.provider;
 

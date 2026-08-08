@@ -9,10 +9,11 @@ import {
 } from "@/lib/image-generate";
 import { getWorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import {
-  GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER,
-  GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
   IMAGE_MODEL_ORDER,
+  imageAspectRatiosForContext,
   imagePromptMaxLengthForContext,
+  imageReferenceLimitForContext,
+  imageSizesForContext,
   type GptImageBackground,
   type GptImageQuality,
   type ImageGalleryRecord,
@@ -130,7 +131,7 @@ function isCrunImageModel(model: { endpointUrl?: string; modelName?: string }): 
   const modelName = model.modelName?.trim() ?? "";
   return /crun\.ai/i.test(endpoint) ||
     /\/api\/v1\/client\/job\/createtask(?:[?#]|$)/i.test(endpoint) ||
-    /^(google\/nano-banana-|openai\/gpt-image-2|grok-imagine\/(?:i2i|t2i)|z-image)/i.test(modelName);
+    /^(google\/nano-banana-|openai\/gpt-image-2|grok-imagine\/(?:i2i|t2i)|bytedance\/seedream-5-pro|z-image)/i.test(modelName);
 }
 
 function isImageSizeTier(value: unknown): value is ImageSizeTier {
@@ -356,7 +357,7 @@ export async function POST(req: NextRequest) {
   if (!isImageSizeTier(imageSize)) {
     return Response.json(
       generationErrorJson({
-        message: "GPT Image 2 Premium 只支持 1K、2K、4K 分辨率。",
+        message: "图片分辨率无效。",
         code: "INVALID_PROMPT",
         status: 400,
         traceId,
@@ -366,52 +367,59 @@ export async function POST(req: NextRequest) {
           imageSize: String(body.imageSize ?? ""),
         },
         fallbackReasonCode: "INVALID_PROMPT",
-        userMessage: "GPT Image 2 Premium 只支持 1K、2K、4K 分辨率。",
+        userMessage: "图片分辨率无效。",
       }),
       { status: 400 },
     );
   }
-  if (imageModelId === "gpt-image-2") {
-    const refImageCount = modelRefImageCount;
-    const aspectRatio = body.aspectRatio ?? "4:3";
-    if (refImageCount > GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES) {
-      return Response.json(
-        generationErrorJson({
-          message: `GPT Image 2 Premium 最多支持 ${GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES} 张参考图。`,
-          code: "INVALID_PROMPT",
-          status: 400,
-          traceId,
-          details: {
-            stage: "request_parse",
-            modelId: imageModelId,
-            refImageCount,
-            maxReferenceImages: GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
-          },
-          fallbackReasonCode: "INVALID_PROMPT",
-          userMessage: `GPT Image 2 Premium 最多支持 ${GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES} 张参考图。`,
-        }),
-        { status: 400 },
-      );
-    }
-    if (!GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER.includes(aspectRatio)) {
-      return Response.json(
-        generationErrorJson({
-          message: `GPT Image 2 Premium 不支持 ${aspectRatio} 比例。`,
-          code: "INVALID_PROMPT",
-          status: 400,
-          traceId,
-          details: {
-            stage: "request_parse",
-            modelId: imageModelId,
-            aspectRatio,
-            supportedAspectRatios: GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER,
-          },
-          fallbackReasonCode: "INVALID_PROMPT",
-          userMessage: `GPT Image 2 Premium 不支持 ${aspectRatio} 比例。`,
-        }),
-        { status: 400 },
-      );
-    }
+  const supportedSizes = imageSizesForContext(imageModelId);
+  if (!supportedSizes.includes(imageSize)) {
+    const message = `${model.label} 只支持 ${supportedSizes.join("、")} 分辨率。`;
+    return Response.json(
+      generationErrorJson({
+        message,
+        code: "INVALID_PROMPT",
+        status: 400,
+        traceId,
+        details: { stage: "request_parse", modelId: imageModelId, imageSize, supportedSizes },
+        fallbackReasonCode: "INVALID_PROMPT",
+        userMessage: message,
+      }),
+      { status: 400 },
+    );
+  }
+  const maxReferenceImages = imageReferenceLimitForContext(imageModelId);
+  if (modelRefImageCount > maxReferenceImages) {
+    const message = `${model.label} 最多支持 ${maxReferenceImages} 张参考图。`;
+    return Response.json(
+      generationErrorJson({
+        message,
+        code: "INVALID_PROMPT",
+        status: 400,
+        traceId,
+        details: { stage: "request_parse", modelId: imageModelId, refImageCount: modelRefImageCount, maxReferenceImages },
+        fallbackReasonCode: "INVALID_PROMPT",
+        userMessage: message,
+      }),
+      { status: 400 },
+    );
+  }
+  const aspectRatio = body.aspectRatio ?? "4:3";
+  const supportedAspectRatios = imageAspectRatiosForContext(imageModelId, modelRefImageCount);
+  if (supportedAspectRatios.length > 0 && !supportedAspectRatios.includes(aspectRatio)) {
+    const message = `${model.label} 不支持 ${aspectRatio} 比例。`;
+    return Response.json(
+      generationErrorJson({
+        message,
+        code: "INVALID_PROMPT",
+        status: 400,
+        traceId,
+        details: { stage: "request_parse", modelId: imageModelId, aspectRatio, supportedAspectRatios },
+        fallbackReasonCode: "INVALID_PROMPT",
+        userMessage: message,
+      }),
+      { status: 400 },
+    );
   }
   const rawBackground = body.gptImageBackground;
   const gptImageBackground: GptImageBackground | undefined =
@@ -427,6 +435,7 @@ export async function POST(req: NextRequest) {
       modelId: imageModelId,
       imageSize,
       gptImageQuality,
+      referenceImageCount: modelRefImageCount,
     });
     reservation = await reserveCreditsForQuote({
       userId: user.id,

@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         modelId: body.modelId as ImageModelId,
         imageSize: imageSize(body.imageSize),
         gptImageQuality: gptQuality(body.gptImageQuality),
+        referenceImageCount: Number(body.referenceImageCount ?? 0),
       });
     } else {
       const modeId = videoMode(body.modeId);

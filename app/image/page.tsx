@@ -17,7 +17,9 @@ import {
   imageReferenceLimitForContext,
   imageAspectRatiosForContext,
   imagePromptMaxLengthForContext,
+  imageSizesForContext,
   normalizeImageAspectRatioForContext,
+  normalizeImageSizeForContext,
   imageSupportsAspectRatioForContext,
   placeholderInnerHint,
   type GptImageBackground,
@@ -54,7 +56,6 @@ import { formatGenerationErrorForDisplay } from "@/lib/generation-error-classifi
 import shellStyles from "../shared/shell.module.css";
 import styles from "./image-page.module.css";
 
-const IMAGE_SIZES: ImageSizeTier[] = ["1K", "2K", "4K"];
 const RESULT_ASPECT_RATIO_BY_VALUE: Partial<Record<ImageAspectRatio, string>> = {
   "1:1": "1 / 1",
   "2:3": "2 / 3",
@@ -798,6 +799,7 @@ export default function ImagePage() {
     () => imageAspectRatiosForContext(selectedModelId, filledRefFileCount),
     [filledRefFileCount, selectedModelId],
   );
+  const availableImageSizes = useMemo(() => imageSizesForContext(selectedModelId), [selectedModelId]);
   const supportsAspectRatio = imageSupportsAspectRatioForContext(selectedModelId, filledRefFileCount);
   const promptMaxLength = imagePromptMaxLengthForContext(selectedModelId, filledRefFileCount);
   const promptCharCount = finalPrompt.length;
@@ -849,6 +851,10 @@ export default function ImagePage() {
   }, [filledRefFileCount, selectedModelId]);
 
   useEffect(() => {
+    setImageSize((current) => normalizeImageSizeForContext(current, selectedModelId));
+  }, [selectedModelId]);
+
+  useEffect(() => {
     if (supportsAspectRatio) return;
     setToolbarPickerMenu((current) => current?.kind === "ratio" ? null : current);
   }, [supportsAspectRatio]);
@@ -874,8 +880,9 @@ export default function ImagePage() {
       body: JSON.stringify({
         kind: "image",
         modelId: selectedModelId,
-        imageSize,
+        imageSize: normalizeImageSizeForContext(imageSize, selectedModelId),
         gptImageQuality: selectedModel.provider === "gpt-image" ? settings.gptImageQuality : undefined,
+        referenceImageCount: filledRefFileCount,
       }),
       signal: controller.signal,
     })
@@ -902,7 +909,7 @@ export default function ImagePage() {
         });
       });
     return () => controller.abort();
-  }, [imageSize, selectedModel.provider, selectedModelId, settings.gptImageQuality, workspaceReady]);
+  }, [filledRefFileCount, imageSize, selectedModel.provider, selectedModelId, settings.gptImageQuality, workspaceReady]);
 
   function persistGptImageQuality(q: GptImageQuality) {
     setSettings((prev) => {
@@ -1415,7 +1422,7 @@ export default function ImagePage() {
             onSelect: () => setAspectRatio(ratio),
           }))
         : toolbarPickerMenu.kind === "size"
-          ? IMAGE_SIZES.map((size) => ({
+          ? availableImageSizes.map((size) => ({
               id: size,
               label: size,
               active: imageSize === size,

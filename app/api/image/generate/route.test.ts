@@ -176,6 +176,7 @@ describe("POST /api/image/generate CRUN references", () => {
           "nano-banana-2": crunModel,
           "nano-banana-pro": { ...crunModel, id: "nano-banana-pro", modelName: "google/nano-banana-pro" },
           "grok-imagine-i2i": grokCrunModel,
+          "seedream-5-pro": { ...crunModel, id: "seedream-5-pro", label: "Seedream 5.0 Pro", modelName: "bytedance/seedream-5-pro", provider: "seedream" },
           "z-image": { ...crunModel, id: "z-image", modelName: "z-image", provider: "z-image" },
         },
       },
@@ -532,6 +533,21 @@ describe("POST /api/image/generate CRUN references", () => {
     expect(response.status).toBe(400);
     expect(data.reasonCode).toBe("INVALID_PROMPT");
     expect(data.userMessage).toContain("最多支持 14 张参考图");
+    expect(quoteImageCredits).not.toHaveBeenCalled();
+    expect(reserveCreditsForQuote).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported Seedream 5.0 Pro sizes before reserving credits", async () => {
+    const response = await POST(jsonImageGenerateRequest({
+      modelId: "seedream-5-pro",
+      aspectRatio: "16:9",
+      imageSize: "4K",
+    }) as never);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.reasonCode).toBe("INVALID_PROMPT");
+    expect(data.userMessage).toContain("只支持 1K、2K 分辨率");
     expect(quoteImageCredits).not.toHaveBeenCalled();
     expect(reserveCreditsForQuote).not.toHaveBeenCalled();
   });

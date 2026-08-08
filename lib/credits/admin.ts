@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AdminActor } from "@/lib/admin/types";
 import { writeAuditLog } from "@/lib/admin/user-management";
-import { IMAGE_MODEL_ORDER, type GptImageQuality, type ImageModelId, type ImageSizeTier } from "@/lib/image-workspace";
+import { IMAGE_MODEL_ORDER, imageSizesForContext, type GptImageQuality, type ImageModelId, type ImageSizeTier } from "@/lib/image-workspace";
 import {
   DISABLED_VIDEO_MODEL_IDS,
   VIDEO_GENERATION_MODES,
@@ -106,16 +106,16 @@ function cleanCostSource(value: unknown): "manual" | "invoice" | "estimated" {
 function imageProvider(modelId: ImageModelId): string {
   if (modelId === "gpt-image-2") return "openai";
   if (modelId === "grok-imagine-i2i") return "grok";
+  if (modelId === "seedream-5-pro") return "seedream";
   if (modelId === "z-image") return "z-image";
   return "nano-banana";
 }
 
 export function imagePriceCombos(): Array<Omit<ImageCreditPriceRow, "credits" | "enabled" | "costPerUnitMinor" | "costCurrency" | "costSource" | "marginPercent" | "marginStatus">> {
-  const sizes: ImageSizeTier[] = ["1K", "2K", "4K"];
   const qualities: GptImageQuality[] = ["low", "medium", "high"];
   const out: Array<Omit<ImageCreditPriceRow, "credits" | "enabled" | "costPerUnitMinor" | "costCurrency" | "costSource" | "marginPercent" | "marginStatus">> = [];
   for (const modelId of IMAGE_MODEL_ORDER) {
-    for (const sizeTier of sizes) {
+    for (const sizeTier of imageSizesForContext(modelId)) {
       if (modelId === "gpt-image-2") {
         for (const gptQuality of qualities) out.push({ modelId, sizeTier, gptQuality });
       } else {
@@ -277,7 +277,7 @@ export async function listCreditPricing(): Promise<{
 
 function validateImagePrice(input: ImageCreditPriceRow): ImageCreditPriceRow {
   if (!IMAGE_MODEL_ORDER.includes(input.modelId)) throw new Error("图片模型无效");
-  if (!["1K", "2K", "4K"].includes(input.sizeTier)) throw new Error("图片尺寸无效");
+  if (!imageSizesForContext(input.modelId).includes(input.sizeTier)) throw new Error("图片尺寸无效");
   if (input.modelId === "gpt-image-2" && !(input.gptQuality === "low" || input.gptQuality === "medium" || input.gptQuality === "high")) {
     throw new Error("GPT Image 2 必须配置 low / medium / high 质量价格");
   }

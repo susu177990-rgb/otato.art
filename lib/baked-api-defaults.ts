@@ -71,6 +71,11 @@ export const BAKED_IMAGE_MODEL_DEFAULTS = {
     apiKey: CRUN_IMAGE_API_KEY,
     modelName: "grok-imagine/i2i",
   },
+  "seedream-5-pro": {
+    endpointUrl: CRUN_CREATE_TASK,
+    apiKey: CRUN_IMAGE_API_KEY,
+    modelName: "bytedance/seedream-5-pro",
+  },
   "z-image": {
     endpointUrl: CRUN_CREATE_TASK,
     apiKey: CRUN_IMAGE_API_KEY,

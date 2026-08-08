@@ -18,6 +18,7 @@ import type {
   ImageSizeTier,
   ImageWorkspaceSettings,
 } from "@/lib/image-workspace";
+import { normalizeImageAspectRatioForContext, normalizeImageSizeForContext } from "@/lib/image-workspace";
 
 export interface AgentToolContext {
   attachmentsById: Record<string, ConversationAttachmentEntry>;
@@ -167,15 +168,17 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
   const gptQ = args.image_quality;
   const gptImageQuality: GptImageQuality | undefined =
     gptQ === "low" || gptQ === "medium" || gptQ === "high" ? gptQ : undefined;
-  const imageSize = resolveImageSizeFromUserRequest({
+  const requestedImageSize = resolveImageSizeFromUserRequest({
     explicit: args.image_size,
     texts: [ctx.latestUserText, prompt],
   });
+  const imageSize = normalizeImageSizeForContext(requestedImageSize, presetId);
+  const aspectRatio = normalizeImageAspectRatioForContext(args.aspect_ratio || "auto", presetId, refImages.length);
 
   const { imageUrl } = await generateImage({
     model,
     prompt,
-    aspectRatio: args.aspect_ratio || "auto",
+    aspectRatio,
     imageSize,
     gptImageQuality,
     refImages,
@@ -201,7 +204,7 @@ async function toolGenerateImage(argsJson: string, ctx: AgentToolContext): Promi
       modelName: model.modelName,
       finalPrompt: prompt,
       userInput: prompt,
-      aspectRatio: args.aspect_ratio || "auto",
+      aspectRatio,
       imageSize,
       gptImageQuality,
       imageUrl: mediaUrl,

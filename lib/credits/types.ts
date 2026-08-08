@@ -93,6 +93,7 @@ export type ImageCreditQuoteInput = {
   modelId: ImageModelId;
   imageSize: ImageSizeTier;
   gptImageQuality?: GptImageQuality;
+  referenceImageCount?: number;
 };
 
 export type ImageCreditQuote = {

@@ -1,7 +1,13 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanvasBoard, CanvasNode } from "@/lib/canvas/types";
-import type { ImageAspectRatio, ImageGalleryRecord, ImageModelSettings } from "@/lib/image-workspace";
+import {
+  normalizeImageAspectRatioForContext,
+  normalizeImageSizeForContext,
+  type ImageAspectRatio,
+  type ImageGalleryRecord,
+  type ImageModelSettings,
+} from "@/lib/image-workspace";
 import type { WorkspaceSnapshot } from "@/lib/db/workspace-settings-store";
 import { generateImage } from "@/lib/image-generate";
 import { persistGeneratedImageWithThumbnailToStorage } from "@/lib/db/persist-generated-image";
@@ -246,13 +252,16 @@ export async function executeCanvasImageGeneration(params: {
   const { prompt } = promptInfo;
   const mentionedRefImages = collectMentionedReferenceImages(promptInfo);
   const refImages = mentionedRefImages.length > 0 ? mentionedRefImages : collectReferenceImages(params.board, sourceNode);
+  const aspectRatio = normalizeImageAspectRatioForContext(sourceNode.metadata?.aspectRatio ?? "4:3", modelId, refImages.length);
+  const imageSize = normalizeImageSizeForContext(sourceNode.metadata?.imageSize ?? "1K", modelId);
 
   await assertCreditGenerationAllowed(params.userId);
   const quote = await quoteImageCredits(createSupabaseAdminClient(), {
     feature: "canvas_image",
     modelId,
-    imageSize: sourceNode.metadata?.imageSize ?? "1K",
+    imageSize,
     gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
+    referenceImageCount: refImages.length,
   });
   const reservation = await reserveCreditsForQuote({
     userId: params.userId,
@@ -271,8 +280,8 @@ export async function executeCanvasImageGeneration(params: {
     const result = await generateImage({
       model,
       prompt,
-      aspectRatio: sourceNode.metadata?.aspectRatio ?? "4:3",
-      imageSize: sourceNode.metadata?.imageSize ?? "1K",
+      aspectRatio,
+      imageSize,
       gptImageQuality: model.provider === "gpt-image" ? sourceNode.metadata?.gptImageQuality : undefined,
       refImages,
     });
@@ -285,7 +294,7 @@ export async function executeCanvasImageGeneration(params: {
     );
     const imageUrl = storedImage.imageUrl;
 
-    const size = estimateOutputSize(sourceNode.metadata?.aspectRatio);
+    const size = estimateOutputSize(aspectRatio);
 
     // Update the source node directly — no separate output node
     const nextSourceNode: CanvasNode = {
@@ -297,6 +306,8 @@ export async function executeCanvasImageGeneration(params: {
         imageUrl,
         previewImageUrl: imageUrl,
         imageGenerationRequestId: params.requestId,
+        aspectRatio,
+        imageSize,
         status: "success",
         lastRunAt: new Date().toISOString(),
         lastError: undefined,

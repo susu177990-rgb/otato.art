@@ -56,6 +56,15 @@ const zImageModel: ImageModelSettings = {
   provider: "z-image",
 };
 
+const seedream5ProModel: ImageModelSettings = {
+  id: "seedream-5-pro",
+  label: "Seedream 5.0 Pro",
+  modelName: "bytedance/seedream-5-pro",
+  endpointUrl: "https://api.crun.ai/api/v1/client/job/CreateTask",
+  apiKey: "crun-key",
+  provider: "seedream",
+};
+
 describe("generateImage CRUN task adapter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -405,6 +414,77 @@ describe("generateImage CRUN task adapter", () => {
         refImages: [],
       })).rejects.toThrow("Grok Imagine 文生图只支持 1:1");
     }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends Seedream 5.0 Pro prompt, references, ratio, resolution, and jpeg output", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { task_id: "task-1" } }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: { status: "SUCCESS", media_urls: ["https://cdn.example.com/generated.jpeg"] } }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await generateImage({
+      model: seedream5ProModel,
+      prompt: "a polished product campaign image",
+      aspectRatio: "21:9",
+      imageSize: "2K",
+      refImages: ["https://cdn.example.com/ref.png"],
+    });
+
+    expect(result.sourceTaskModel).toBe("bytedance/seedream-5-pro");
+    const submitInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(submitInit.body))).toEqual({
+      model: "bytedance/seedream-5-pro",
+      input: {
+        prompt: "a polished product campaign image",
+        img_urls: ["https://cdn.example.com/ref.png"],
+        aspect_ratio: "21:9",
+        resolution: "2K",
+        output_format: "jpeg",
+      },
+    });
+  });
+
+  it("rejects unsupported Seedream 5.0 Pro request shapes before submitting", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(generateImage({
+      model: seedream5ProModel,
+      prompt: "a".repeat(5001),
+      aspectRatio: "16:9",
+      imageSize: "2K",
+      refImages: [],
+    })).rejects.toThrow("提示词最多支持 5000 个字符");
+
+    await expect(generateImage({
+      model: seedream5ProModel,
+      prompt: "a product shot",
+      aspectRatio: "9:21",
+      imageSize: "2K",
+      refImages: [],
+    })).rejects.toThrow("不支持该图片比例");
+
+    await expect(generateImage({
+      model: seedream5ProModel,
+      prompt: "a product shot",
+      aspectRatio: "16:9",
+      imageSize: "4K",
+      refImages: [],
+    })).rejects.toThrow("只支持 1K、2K 分辨率");
+
+    await expect(generateImage({
+      model: seedream5ProModel,
+      prompt: "a product shot",
+      aspectRatio: "16:9",
+      imageSize: "2K",
+      refImages: Array.from({ length: 11 }, (_, index) => `https://cdn.example.com/ref-${index}.png`),
+    })).rejects.toThrow("最多支持 10 张参考图");
 
     expect(fetchMock).not.toHaveBeenCalled();
   });

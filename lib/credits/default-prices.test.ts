@@ -7,7 +7,7 @@ import {
   defaultVideoCreditPrices,
   roundCreditsToFive,
 } from "./default-prices";
-import { crunCreditsToCnyFen, saleCreditsForCnyCost } from "./crun-pricing";
+import { crunCreditsToCnyFen, saleCreditsForCnyCost, seedream5ProReferenceSurcharge } from "./crun-pricing";
 import { estimateMarginFromCost, marginStatus } from "./margins";
 
 describe("default credit prices", () => {
@@ -35,6 +35,10 @@ describe("default credit prices", () => {
       "high:4K",
     ]));
     expect(prices.find((item) => item.modelId === "nano-banana-2" && item.sizeTier === "1K")?.credits).toBe(34);
+    expect(prices.filter((item) => item.modelId === "seedream-5-pro").map((item) => [item.sizeTier, item.credits])).toEqual([
+      ["1K", 48],
+      ["2K", 96],
+    ]);
     expect(prices.find((item) => item.modelId === "gpt-image-2" && item.gptQuality === "high" && item.sizeTier === "4K")?.credits).toBe(670);
   });
 
@@ -76,6 +80,8 @@ describe("default credit prices", () => {
     expect(crunCreditsToCnyFen(5)).toBe(17);
     expect(crunCreditsToCnyFen(98.4)).toBe(335);
     expect(saleCreditsForCnyCost(335)).toBe(670);
+    expect(seedream5ProReferenceSurcharge(1)).toMatchObject({ costFen: 2, saleCredits: 4 });
+    expect(seedream5ProReferenceSurcharge(10)).toMatchObject({ costFen: 17, saleCredits: 34 });
   });
 
   it("converts Veo per-video prices into per-second prices", () => {

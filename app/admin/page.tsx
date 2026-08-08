@@ -1670,6 +1670,7 @@ function ImagePromptsPanel({
 function imageProviderLabel(provider: ImageWorkspaceSettings["models"][ImageModelId]["provider"]): string {
   if (provider === "gpt-image") return "GPT Image 请求格式";
   if (provider === "grok-imagine") return "Grok Imagine 请求格式";
+  if (provider === "seedream") return "Seedream 请求格式";
   if (provider === "z-image") return "Z Image 请求格式";
   return "Nano Banana 请求格式";
 }

@@ -7,6 +7,7 @@ import {
   DEFAULT_IMAGE_SETTINGS,
   GPT_IMAGE_QUALITY_LABELS,
   IMAGE_MODEL_ORDER,
+  imageSizesForContext,
   type GptImageQuality,
   type ImageModelId,
   type ImageSizeTier,
@@ -138,7 +139,7 @@ function imageModelLabel(modelId: ImageModelId): string {
 function imageCombos(): ImagePrice[] {
   const out: ImagePrice[] = [];
   for (const modelId of IMAGE_MODEL_ORDER) {
-    for (const sizeTier of imageSizes) {
+    for (const sizeTier of imageSizesForContext(modelId)) {
       if (modelId === "gpt-image-2") {
         for (const gptQuality of gptQualities) out.push(emptyImagePrice(modelId, sizeTier, gptQuality));
       } else {

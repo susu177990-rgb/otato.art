@@ -61,6 +61,52 @@ describe("credit pricing", () => {
     });
   });
 
+  it("rejects image sizes outside the selected model capabilities", async () => {
+    await expect(quoteImageCredits(mockSupabase({ image_credit_prices: [] }), {
+      feature: "image",
+      modelId: "seedream-5-pro",
+      imageSize: "4K",
+    })).rejects.toMatchObject({
+      code: "image_size_not_supported",
+      status: 422,
+    });
+  });
+
+  it("adds Seedream reference-image surcharge to price and provider cost", async () => {
+    const quote = await quoteImageCredits(mockSupabase({
+      image_credit_prices: [
+        { model_id: "seedream-5-pro", size_tier: "1K", gpt_quality: null, credits: 48, enabled: true },
+      ],
+      provider_cost_prices: [
+        {
+          id: "seedream-cost",
+          feature: "image",
+          model_id: "seedream-5-pro",
+          size_tier: "1K",
+          gpt_quality: null,
+          unit: "image",
+          enabled: true,
+          provider: "crun",
+          cost_currency: "cny",
+          cost_per_unit_minor: 24,
+          source: "estimated",
+          effective_from: null,
+          effective_to: null,
+          metadata: { source: "crun_pricing" },
+        },
+      ],
+    }), {
+      feature: "image",
+      modelId: "seedream-5-pro",
+      imageSize: "1K",
+      referenceImageCount: 2,
+    });
+
+    expect(quote.credits).toBe(56);
+    expect(quote.priceSnapshot).toMatchObject({ baseCredits: 48, referenceImageCount: 2, referenceImageCredits: 8 });
+    expect(quote.costSnapshot).toMatchObject({ costPerUnitMinor: 28 });
+  });
+
   it("includes CNY provider cost metadata in image quotes", async () => {
     const quote = await quoteImageCredits(mockSupabase({
       image_credit_prices: [

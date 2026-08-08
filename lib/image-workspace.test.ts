@@ -8,14 +8,20 @@ import {
   GPT_IMAGE_2_PREMIUM_ASPECT_RATIO_ORDER,
   GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES,
   NANO_BANANA_PROMPT_MAX_LENGTH,
+  SEEDREAM_5_PRO_ASPECT_RATIO_ORDER,
+  SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES,
+  SEEDREAM_5_PRO_PROMPT_MAX_LENGTH,
+  SEEDREAM_5_PRO_SIZE_ORDER,
   Z_IMAGE_PROMPT_MAX_LENGTH,
   imageAspectRatiosForContext,
   imagePromptMaxLengthForContext,
   imageReferenceLimitForContext,
+  imageSizesForContext,
   imageSupportsAspectRatioForContext,
   isKnownImageModeId,
   mergeImageSettings,
   normalizeImageAspectRatioForContext,
+  normalizeImageSizeForContext,
 } from "@/lib/image-workspace";
 
 describe("image workspace model capabilities", () => {
@@ -53,6 +59,19 @@ describe("image workspace model capabilities", () => {
     expect(imageAspectRatiosForContext("gpt-image-2", 0)).toContain("4:5");
     expect(imageAspectRatiosForContext("gpt-image-2", 0)).toContain("9:21");
     expect(imageReferenceLimitForContext("gpt-image-2")).toBe(GPT_IMAGE_2_PREMIUM_MAX_REFERENCE_IMAGES);
+  });
+
+  it("uses Seedream 5.0 Pro API capabilities", () => {
+    expect(mergeImageSettings({}).models["seedream-5-pro"]).toMatchObject({
+      label: "Seedream 5.0 Pro",
+      modelName: "bytedance/seedream-5-pro",
+      provider: "seedream",
+    });
+    expect(imageAspectRatiosForContext("seedream-5-pro", 0)).toEqual(SEEDREAM_5_PRO_ASPECT_RATIO_ORDER);
+    expect(imageSizesForContext("seedream-5-pro")).toEqual(SEEDREAM_5_PRO_SIZE_ORDER);
+    expect(normalizeImageSizeForContext("4K", "seedream-5-pro")).toBe("1K");
+    expect(imagePromptMaxLengthForContext("seedream-5-pro", 0)).toBe(SEEDREAM_5_PRO_PROMPT_MAX_LENGTH);
+    expect(imageReferenceLimitForContext("seedream-5-pro")).toBe(SEEDREAM_5_PRO_MAX_REFERENCE_IMAGES);
   });
 
   it("normalizes missing or legacy auto GPT Image quality to low", () => {

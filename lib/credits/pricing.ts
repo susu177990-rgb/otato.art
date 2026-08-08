@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { IMAGE_MODEL_ORDER, type GptImageQuality, type ImageModelId, type ImageSizeTier } from "@/lib/image-workspace";
+import { IMAGE_MODEL_ORDER, imageSizesForContext, type GptImageQuality, type ImageModelId, type ImageSizeTier } from "@/lib/image-workspace";
 import {
   getVideoModelDefinition,
   getVideoParameterCapabilities,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/video-workspace";
 import { estimateMarginFromCost } from "./margins";
 import type { ImageCreditQuote, ImageCreditQuoteInput, VideoCreditQuote, VideoCreditQuoteInput } from "./types";
+import { seedream5ProReferenceSurcharge } from "./crun-pricing";
 
 export class CreditPricingError extends Error {
   readonly code: string;
@@ -47,6 +48,7 @@ type ProviderCostRow = {
 function imageProvider(modelId: ImageModelId): string {
   if (modelId === "gpt-image-2") return "openai";
   if (modelId === "grok-imagine-i2i") return "grok";
+  if (modelId === "seedream-5-pro") return "seedream";
   if (modelId === "z-image") return "z-image";
   return "nano-banana";
 }
@@ -113,6 +115,9 @@ export async function quoteImageCredits(
     throw new CreditPricingError("image_model_not_supported", "图片模型无效。", 422);
   }
   const imageSize = normalizeImageSize(input.imageSize);
+  if (!imageSizesForContext(input.modelId).includes(imageSize)) {
+    throw new CreditPricingError("image_size_not_supported", "当前图片模型不支持该分辨率。", 422);
+  }
   const gptQuality = input.modelId === "gpt-image-2"
     ? normalizeGptImageBillingQuality(input.gptImageQuality)
     : undefined;
@@ -133,11 +138,27 @@ export async function quoteImageCredits(
       400,
     );
   }
-  const credits = Number((data as { credits: unknown }).credits);
-  if (!Number.isFinite(credits) || credits <= 0) {
+  const baseCredits = Number((data as { credits: unknown }).credits);
+  if (!Number.isFinite(baseCredits) || baseCredits <= 0) {
     throw new CreditPricingError("image_price_invalid", "当前图片模型价格无效，请联系管理员。", 400);
   }
-  const cost = await findImageProviderCost(supabase, { modelId: input.modelId, sizeTier: imageSize, gptQuality });
+  const referenceSurcharge = input.modelId === "seedream-5-pro"
+    ? seedream5ProReferenceSurcharge(input.referenceImageCount ?? 0)
+    : seedream5ProReferenceSurcharge(0);
+  const credits = baseCredits + referenceSurcharge.saleCredits;
+  const baseCost = await findImageProviderCost(supabase, { modelId: input.modelId, sizeTier: imageSize, gptQuality });
+  const cost = baseCost && referenceSurcharge.costFen > 0
+    ? {
+        ...baseCost,
+        cost_per_unit_minor: Number(baseCost.cost_per_unit_minor ?? 0) + referenceSurcharge.costFen,
+        metadata: {
+          ...(baseCost.metadata ?? {}),
+          referenceImageCount: referenceSurcharge.referenceImageCount,
+          referenceImageCrunCredits: referenceSurcharge.crunCredits,
+          referenceImageCostFen: referenceSurcharge.costFen,
+        },
+      }
+    : baseCost;
   const margin = estimateMarginFromCost({
     credits,
     currency: cost?.cost_currency,
@@ -162,6 +183,9 @@ export async function quoteImageCredits(
       imageSize,
       gptImageQuality: input.modelId === "gpt-image-2" ? input.gptImageQuality ?? "low" : undefined,
       normalizedQuality: gptQuality,
+      baseCredits,
+      referenceImageCount: referenceSurcharge.referenceImageCount,
+      referenceImageCredits: referenceSurcharge.saleCredits,
       credits,
     },
     costSnapshot: margin.costSnapshot,

@@ -16,6 +16,10 @@ import {
   GPT_IMAGE_QUALITY_LABELS,
   GPT_IMAGE_QUALITY_ORDER,
   IMAGE_MODEL_ORDER,
+  imageAspectRatiosForContext,
+  imageSizesForContext,
+  normalizeImageAspectRatioForContext,
+  normalizeImageSizeForContext,
   type GptImageQuality,
   type ImageAspectRatio,
   type ImageGalleryRecord,
@@ -2746,6 +2750,8 @@ export default function CanvasBoardPage() {
                                   onSelect: () =>
                                     updateImageGenNodeSettings(node.id, {
                                       imageModelId: id,
+                                      aspectRatio: normalizeImageAspectRatioForContext(node.metadata?.aspectRatio ?? "4:3", id, 0),
+                                      imageSize: normalizeImageSizeForContext(node.metadata?.imageSize ?? "1K", id),
                                       gptImageQuality:
                                         id === "gpt-image-2" ? (node.metadata?.gptImageQuality ?? imageSettings.gptImageQuality) : undefined,
                                     }),
@@ -2754,7 +2760,7 @@ export default function CanvasBoardPage() {
                               )}
                               {renderCanvasPickerButton(
                                 (node.metadata?.aspectRatio ?? "4:3") === "auto" ? "自适应" : (node.metadata?.aspectRatio ?? "4:3"),
-                                (["auto", "1:1", "2:3", "3:2", "5:4", "4:5", "3:4", "4:3", "9:16", "16:9", "21:9", "9:21"] as ImageAspectRatio[]).map((ratio) => ({
+                                imageAspectRatiosForContext(node.metadata?.imageModelId ?? "gpt-image-2", 0).map((ratio) => ({
                                   id: ratio,
                                   label: ratio === "auto" ? "自适应" : ratio,
                                   active: ratio === (node.metadata?.aspectRatio ?? "4:3"),
@@ -2764,7 +2770,7 @@ export default function CanvasBoardPage() {
                               )}
                               {renderCanvasPickerButton(
                                 node.metadata?.imageSize ?? "1K",
-                                (["1K", "2K", "4K"] as ImageSizeTier[]).map((size) => ({
+                                imageSizesForContext(node.metadata?.imageModelId ?? "gpt-image-2").map((size) => ({
                                   id: size,
                                   label: size,
                                   active: size === (node.metadata?.imageSize ?? "1K"),
